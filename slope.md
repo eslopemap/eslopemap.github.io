@@ -17,7 +17,8 @@
 - **OpenSkiMap** — independent checkbox overlay (ski areas, runs, lifts, spots) on top of any basemap
 
 ## Track Editor
-- **Drag & drop import** — GPX and GeoJSON files, with visual drop overlay
+- **Drag & drop import** — GPX (tracks, segments, routes with names) and GeoJSON files, with visual drop overlay
+- **Elevation profile** — bottom panel showing elevation (m) + slope (%) vs distance (km) for active track, dual Y-axes
 - **Draw mode** — pen button, click-to-add-vertex, double-click or Escape to finish
 - **Desktop vertex editing** — drag vertices to reposition
 - **Mobile vertex editing** — tap vertex then pan map to move it
@@ -26,6 +27,7 @@
 - **Export** — GPX and GeoJSON with elevation, exports active track only
 
 ## UI
+- **Compass** — indicates map rotation, click to reset bearing & pitch to north/flat
 - **Search** — Nominatim geocoding with collapsible search box
 - **Legend** — dynamic color ramp for current mode (slope/aspect)
 - **Cursor elevation** — live readout from DEM
