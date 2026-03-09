@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <!-- https://gist.github.com/eddy-geek/ff8c4f3d74e1be6747baf3c91b41a50c -->
+  <!-- .../gh api --method PATCH /gists/ff8c4f3d74e1be6747baf3c91b41a50c -F "files[slope.html][content]=@slope.html" -F "files[slope.md][content]=@slope.md" --jq '.html_url' -->
   <meta charset="utf-8" />
   <title>Hybrid DEM Slope/Aspect with Border Backfill — MapLibre GL JS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
@@ -869,12 +870,16 @@
         const eU = sampleElevationFromDEMData(tile.dem, fx, Math.min(dim - 1, (py + dx)) / dim);
         let slopeDeg = null;
         if (eL != null && eR != null && eD != null && eU != null) {
-          // Ground distance per pixel: Mercator tile is 40075km/2^z wide;
-          // ground distance = mercator distance × cos(lat) for both axes
+          // Ground distance per pixel (Mercator):
+          // X: earth_circ * cos(lat) / 2^z / dim  (longitude shrinks with latitude)
+          // Y: earth_circ / 2^z / dim  (Mercator Y pixel spacing, no cos correction)
+          // This matches the GPU shader's approach (Horn/GDAL convention).
           const latRad = lat * Math.PI / 180;
-          const cellMeters = (40075016.7 / n / dim) * Math.cos(latRad);
-          const dzx = (eR - eL) / (2 * cellMeters);
-          const dzy = (eU - eD) / (2 * cellMeters);
+          const baseCellMeters = 40075016.7 / n / dim;
+          const cellX = baseCellMeters * Math.cos(latRad);
+          const cellY = baseCellMeters;
+          const dzx = (eR - eL) / (2 * cellX);
+          const dzy = (eU - eD) / (2 * cellY);
           slopeDeg = Math.atan(Math.sqrt(dzx * dzx + dzy * dzy)) * 180 / Math.PI;
         }
 
@@ -2131,7 +2136,7 @@
         id: trackPtsLayerId(t), type: 'circle', source: trackSourceId(t),
         filter: ['==', '$type', 'Point'],
         paint: {
-          'circle-radius': 3,
+          'circle-radius': 0,
           'circle-color': t.color,
           'circle-stroke-color': '#fff',
           'circle-stroke-width': 1.5
