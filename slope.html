@@ -2145,6 +2145,7 @@
     }
 
     function addTrackToMap(t) {
+      const isActive = ['==', ['get', 'id'], ['global-state', 'activeTrackId']];
       map.addSource(trackSourceId(t), { type: 'geojson', data: trackGeoJSON(t) });
       map.addLayer({
         id: trackLineLayerId(t), type: 'line', source: trackSourceId(t),
@@ -2153,12 +2154,18 @@
       });
       map.addLayer({
         id: trackPtsLayerId(t), type: 'circle', source: trackSourceId(t),
-        filter: ['==', '$type', 'Point'],
+        filter: ['all', ['==', '$type', 'Point'],
+          ['case', isActive, true,
+            ['match', ['get', 'role'], ['start', 'end'], true, false]]],
         paint: {
-          'circle-radius': 0,
-          'circle-color': t.color,
+          'circle-radius': ['case', isActive,
+            ['match', ['get', 'role'], 'insert', 3, 4], 0],
+          'circle-color': ['match', ['get', 'role'],
+            'start', '#22c55e', 'end', '#ef4444',
+            'insert', 'rgba(128,128,128,0.5)', t.color],
           'circle-stroke-color': '#fff',
-          'circle-stroke-width': 0
+          'circle-stroke-width': ['case', isActive,
+            ['match', ['get', 'role'], 'insert', 0.5, 1.5], 0]
         }
       });
     }
@@ -2179,26 +2186,7 @@
     }
 
     function updateVertexHighlight() {
-      for (const t of tracks) {
-        const layerId = trackPtsLayerId(t);
-        if (!map.getLayer(layerId)) continue;
-        const isActive = t.id === activeTrackId;
-        map.setFilter(layerId, isActive
-          ? ['==', '$type', 'Point']
-          : ['all', ['==', '$type', 'Point'],
-             ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']]]);
-        map.setPaintProperty(layerId, 'circle-radius',
-          isActive ? ['match', ['get', 'role'], 'insert', 3, 4] : 0);
-        map.setPaintProperty(layerId, 'circle-color', [
-          'match', ['get', 'role'],
-          'start', '#22c55e',
-          'end', '#ef4444',
-          'insert', 'rgba(128,128,128,0.5)',
-          t.color
-        ]);
-        map.setPaintProperty(layerId, 'circle-stroke-width',
-          isActive ? ['match', ['get', 'role'], 'insert', 0.5, 1.5] : 0);
-      }
+      map.setGlobalStateProperty('activeTrackId', activeTrackId);
     }
 
     // --- Track panel UI ---
