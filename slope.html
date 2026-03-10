@@ -870,16 +870,12 @@
         const eU = sampleElevationFromDEMData(tile.dem, fx, Math.min(dim - 1, (py + dx)) / dim);
         let slopeDeg = null;
         if (eL != null && eR != null && eD != null && eU != null) {
-          // Ground distance per pixel (Mercator):
-          // X: earth_circ * cos(lat) / 2^z / dim  (longitude shrinks with latitude)
-          // Y: earth_circ / 2^z / dim  (Mercator Y pixel spacing, no cos correction)
-          // This matches the GPU shader's approach (Horn/GDAL convention).
+          // Mercator is conformal: ground distance per pixel is the same for both axes
+          // cellMeters = earth_circ * cos(lat) / 2^z / dim
           const latRad = lat * Math.PI / 180;
-          const baseCellMeters = 40075016.7 / n / dim;
-          const cellX = baseCellMeters * Math.cos(latRad);
-          const cellY = baseCellMeters;
-          const dzx = (eR - eL) / (2 * cellX);
-          const dzy = (eU - eD) / (2 * cellY);
+          const cellMeters = (40075016.7 / n / dim) * Math.cos(latRad);
+          const dzx = (eR - eL) / (2 * cellMeters);
+          const dzy = (eU - eD) / (2 * cellMeters);
           slopeDeg = Math.atan(Math.sqrt(dzx * dzx + dzy * dzy)) * 180 / Math.PI;
         }
 
@@ -2139,7 +2135,7 @@
           'circle-radius': 0,
           'circle-color': t.color,
           'circle-stroke-color': '#fff',
-          'circle-stroke-width': 1.5
+          'circle-stroke-width': 0
         }
       });
     }
@@ -2169,7 +2165,7 @@
           : ['all', ['==', '$type', 'Point'],
              ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']]]);
         map.setPaintProperty(layerId, 'circle-radius',
-          isActive ? ['match', ['get', 'role'], 'insert', 3, 4] : 3);
+          isActive ? ['match', ['get', 'role'], 'insert', 3, 4] : 0);
         map.setPaintProperty(layerId, 'circle-color', [
           'match', ['get', 'role'],
           'start', '#22c55e',
@@ -2178,7 +2174,7 @@
           t.color
         ]);
         map.setPaintProperty(layerId, 'circle-stroke-width',
-          isActive ? ['match', ['get', 'role'], 'insert', 0.5, 1.5] : 1.5);
+          isActive ? ['match', ['get', 'role'], 'insert', 0.5, 1.5] : 0);
       }
     }
 
