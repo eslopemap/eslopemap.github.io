@@ -162,9 +162,15 @@
     .tb-btn:hover { background: rgba(240,240,240,0.97); }
     .tb-btn.active { background: #4a90d9; color: #fff; box-shadow: 0 1px 6px rgba(74,144,217,0.5); }
 
-    #track-panel {
+    #tracks-btn {
       position: absolute;
       top: 10px;
+      right: 10px;
+      z-index: 11;
+    }
+    #track-panel {
+      position: absolute;
+      top: 48px;
       right: 10px;
       z-index: 10;
       background: rgba(255,255,255,0.94);
@@ -248,8 +254,8 @@
     /* Compass */
     #compass {
       position: absolute;
-      top: 10px;
-      right: 50px;
+      bottom: 30px;
+      right: 10px;
       z-index: 10;
       width: 36px;
       height: 36px;
@@ -309,7 +315,6 @@
       <div id="search-results"></div>
     </div>
     <button id="draw-btn" class="tb-btn" title="Draw track (click to add points, double-click to finish)">&#9998;</button>
-    <button id="tracks-btn" class="tb-btn" title="Track list">&#9776;</button>
   </div>
   <div id="controls">
     <div class="row">
@@ -386,6 +391,7 @@
   </div>
   </div>
 
+  <button id="tracks-btn" class="tb-btn" title="Track list">&#9776;</button>
   <div id="track-panel">
     <h3>Tracks</h3>
     <div id="track-list"></div>
@@ -1896,6 +1902,21 @@
         map.triggerRepaint();
       }
     });
+
+    // Allow Cmd+drag (Mac) to act like Ctrl+drag for rotate/pitch
+    map.getCanvas().addEventListener('mousedown', (e) => {
+      if (e.metaKey && !e.ctrlKey && e.button === 0) {
+        const synth = new MouseEvent('mousedown', {
+          bubbles: true, cancelable: true,
+          clientX: e.clientX, clientY: e.clientY,
+          button: e.button, buttons: e.buttons,
+          ctrlKey: true, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: false
+        });
+        e.target.dispatchEvent(synth);
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, {capture: true});
 
     updateLegend();
     updateStatus();

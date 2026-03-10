@@ -21,16 +21,18 @@
 - **Elevation profile** — bottom panel showing elevation (m) + signed slope (°) vs distance (km) for active track, dual Y-axes, zero-line, closeable
 - **Draw mode** — pen button, click-to-add-vertex, double-click or Escape to finish
 - **Ctrl+click delete** — remove individual track vertices
-- **Track markers** — green start / red end dots always visible; mid-points shown only for the selected track
+- **Track markers** — green start / red end dots; mid-points and insert-point handles shown only for the active track
+- **Insert vertex** — click a midpoint handle between two vertices to insert a new point
 - **Desktop vertex editing** — drag vertices to reposition (requires track selection)
 - **Mobile vertex editing** — tap vertex then pan map to move it (requires track selection)
 - **Elevation enrichment** — all track points (imported and drawn) enriched from the same DEM source; re-enriched when new tiles load
 - **Track stats** — total distance (km), elevation gain (↑) and loss (↓) per track in the list
-- **Multi-track management** — track list panel with color coding, point counts, delete per track
+- **Multi-track management** — track list panel (top-right hamburger) with color coding, point counts, delete per track
 - **Export** — active track as GPX or GeoJSON; all tracks as single GPX with multiple segments
 
 ## UI
-- **Compass** — indicates map rotation, click to reset bearing & pitch to north/flat
+- **Compass** — bottom-right, indicates map rotation, click to reset bearing & pitch to north/flat
+- **Ctrl/Cmd+drag** — tilt and rotate the map (same as right-click drag)
 - **Search** — Nominatim geocoding with collapsible search box
 - **Legend** — dynamic color ramp for current mode (slope/aspect) with tick marks at stops, tooltip title on hover
 - **Cursor elevation & slope** — live readout from DEM (elevation in m, slope in ° via central differences)
