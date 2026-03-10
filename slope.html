@@ -1163,7 +1163,7 @@
 
               vec2 deriv = vec2(dzdx, dzdy) * u_tile_size / pow(2.0, 28.2562 - u_zoom);
               float lat = (u_latrange.x - u_latrange.y) * (1.0 - uvCore.y) + u_latrange.y;
-              deriv.x = deriv.x / max(cos(radians(lat)), 0.0001);
+              deriv /= max(cos(radians(lat)), 0.0001);
               return deriv;
             }
 
