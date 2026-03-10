@@ -142,7 +142,7 @@
     }
     .labels { display: flex; justify-content: space-between; opacity: 0.85; position: relative; }
     .legend-ticks { position: absolute; top: -5px; left: 0; right: 0; height: 5px; display: flex; justify-content: space-between; pointer-events: none; }
-    .legend-ticks span { width: 1px; height: 5px; background: rgba(0,0,0,0.5); }
+    .legend-ticks span { width: 1px; height: 5px; background: rgba(0,0,0,0.35); }
     #cursor-info { margin-top: 6px; font-size: 11px; opacity: 0.85; }
     #cursor-info code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; }
     #status { font-size: 12px; opacity: 0.85; }
@@ -254,7 +254,7 @@
     /* Compass */
     #compass {
       position: absolute;
-      bottom: 30px;
+      bottom: 40px;
       right: 10px;
       z-index: 10;
       width: 36px;
@@ -899,7 +899,9 @@
       if (state.mode === 'slope') {
         ramp.title = 'Slope (degrees)';
         ramp.style.background = rampToLegendCss('slope');
-        labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
+        // semi-opaque legend-ticks are superposed at 15º (6+1 spans) and 15º (18+1 spans) intervals
+        labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
+         '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
           '<span>0°</span><span>15°</span><span>30°</span><span>45°</span><span>60°</span><span>75°</span><span>90°</span>';
       } else {
         ramp.title = 'Aspect (compass direction)';
