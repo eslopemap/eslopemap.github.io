@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+
+  <title>Track Circle Bug — Minimal Repro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.js"></script>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    #panel {
+      position: absolute; top: 10px; left: 10px; z-index: 10;
+      background: rgba(255,255,255,0.95); border-radius: 8px;
+      padding: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+      font-size: 13px; max-width: 260px;
+    }
+    #panel h3 { margin: 0 0 8px; font-size: 14px; }
+    #panel label { display: block; margin: 4px 0; cursor: pointer; }
+    #panel hr { margin: 8px 0; border: none; border-top: 1px solid #ddd; }
+    .legend { font-size: 11px; color: #666; margin-top: 6px; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h3>Active track</h3>
+  <label><input type="radio" name="active" value="none" checked> None</label>
+  <label><input type="radio" name="active" value="A"> Track A — global-state (paint only)</label>
+  <label><input type="radio" name="active" value="A2"> Track A2 — global-state (paint+filter) ⚠️ BROKEN</label>
+  <label><input type="radio" name="active" value="B"> Track B — setFilter/setPaint</label>
+  <label><input type="radio" name="active" value="C"> Track C — two layers</label>
+  <hr>
+  <div class="legend">
+    <b>Active:</b> all points (green start, red end, grey insert, blue mid, r=4/3)<br>
+    <b>Inactive:</b> start (green, r=3) + end (red, r=3) only
+  </div>
+</div>
+
+<script>
+const map = new maplibregl.Map({
+  container: 'map',
+  center: [10, 20],
+  zoom: 2,
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '© OpenStreetMap'
+      }
+    },
+    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+  }
+});
+
+// --- Data: 4 tracks, each with 4 points + 3 insert midpoints ---
+const TRACKS = {
+  A:  { color: '#3b82f6', coords: [[-30,35],[-10,35],[10,35],[30,35]] },
+  A2: { color: '#06b6d4', coords: [[-30,20],[-10,20],[10,20],[30,20]] },
+  B:  { color: '#f59e0b', coords: [[-30,5],[-10,5],[10,5],[30,5]] },
+  C:  { color: '#8b5cf6', coords: [[-30,-10],[-10,-10],[10,-10],[30,-10]] },
+};
+
+function makeGeoJSON(id, coords) {
+  const features = [];
+  // Line
+  features.push({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: coords },
+    properties: { id }
+  });
+  // Vertices + insert midpoints
+  const last = coords.length - 1;
+  for (let i = 0; i <= last; i++) {
+    const role = i === 0 ? 'start' : i === last ? 'end' : 'mid';
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: coords[i] },
+      properties: { id, idx: i, role }
+    });
+    if (i < last) {
+      const a = coords[i], b = coords[i + 1];
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [(a[0]+b[0])/2, (a[1]+b[1])/2] },
+        properties: { id, insertAfter: i, role: 'insert' }
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+// Shared paint helpers
+const COLOR_EXPR = ['match', ['get', 'role'],
+  'start', '#22c55e', 'end', '#ef4444',
+  'insert', 'rgba(128,128,128,0.5)', '#3b82f6' // fallback = track color placeholder
+];
+function colorExpr(trackColor) {
+  return ['match', ['get', 'role'],
+    'start', '#22c55e', 'end', '#ef4444',
+    'insert', 'rgba(128,128,128,0.5)', trackColor];
+}
+const ACTIVE_RADIUS = ['match', ['get', 'role'], 'insert', 3, 4];
+const ACTIVE_STROKE = ['match', ['get', 'role'], 'insert', 0.5, 1.5];
+
+// =====================================================
+// APPROACH A: global-state in PAINT only (no filter)
+// Show all points always; use radius=0 to hide non-start/end when inactive
+// =====================================================
+function setupA() {
+  const t = TRACKS.A;
+  const isActive = ['==', ['get', 'id'], ['global-state', 'activeTrackId']];
+  const isStartOrEnd = ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']];
+
+  map.addSource('src-A', { type: 'geojson', data: makeGeoJSON('A', t.coords) });
+  map.addLayer({
+    id: 'line-A', type: 'line', source: 'src-A',
+    filter: ['==', '$type', 'LineString'],
+    paint: { 'line-color': t.color, 'line-width': 3 }
+  });
+  map.addLayer({
+    id: 'pts-A', type: 'circle', source: 'src-A',
+    filter: ['==', '$type', 'Point'],
+    paint: {
+      'circle-radius': ['case',
+        isActive, ['match', ['get', 'role'], 'insert', 3, 4],
+        isStartOrEnd, 3,
+        0],
+      'circle-color': colorExpr(t.color),
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': ['case',
+        isActive, ['match', ['get', 'role'], 'insert', 0.5, 1.5],
+        isStartOrEnd, 1,
+        0]
+    }
+  });
+}
+
+// =====================================================
+// APPROACH A2: global-state in BOTH filter + paint
+// =====================================================
+function setupA2() {
+  const t = TRACKS.A2;
+  const isActive = ['==', ['get', 'id'], ['global-state', 'activeTrackId']];
+
+  map.addSource('src-A2', { type: 'geojson', data: makeGeoJSON('A2', t.coords) });
+  map.addLayer({
+    id: 'line-A2', type: 'line', source: 'src-A2',
+    filter: ['==', '$type', 'LineString'],
+    paint: { 'line-color': t.color, 'line-width': 3 }
+  });
+  map.addLayer({
+    id: 'pts-A2', type: 'circle', source: 'src-A2',
+    filter: ['all', ['==', '$type', 'Point'],
+      ['case', isActive, true,
+        ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']]]],
+    paint: {
+      'circle-radius': ['case', isActive,
+        ['match', ['get', 'role'], 'insert', 3, 4], 3],
+      'circle-color': colorExpr(t.color),
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': ['case', isActive,
+        ['match', ['get', 'role'], 'insert', 0.5, 1.5], 1]
+    }
+  });
+}
+
+// =====================================================
+// APPROACH B: imperative setFilter + setPaintProperty
+// =====================================================
+const INACTIVE_RADIUS = ['case',
+  ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']], 3, 0];
+const INACTIVE_STROKE = ['case',
+  ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']], 1, 0];
+
+function setupB() {
+  const t = TRACKS.B;
+  map.addSource('src-B', { type: 'geojson', data: makeGeoJSON('B', t.coords) });
+  map.addLayer({
+    id: 'line-B', type: 'line', source: 'src-B',
+    filter: ['==', '$type', 'LineString'],
+    paint: { 'line-color': t.color, 'line-width': 3 }
+  });
+  map.addLayer({
+    id: 'pts-B', type: 'circle', source: 'src-B',
+    filter: ['==', '$type', 'Point'],
+    paint: {
+      'circle-radius': INACTIVE_RADIUS,
+      'circle-color': colorExpr(t.color),
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': INACTIVE_STROKE
+    }
+  });
+}
+
+function updateB(isActive) {
+  if (!map.getLayer('pts-B')) return;
+  // No filter change — just paint properties
+  map.setPaintProperty('pts-B', 'circle-radius', isActive ? ACTIVE_RADIUS : INACTIVE_RADIUS);
+  map.setPaintProperty('pts-B', 'circle-stroke-width', isActive ? ACTIVE_STROKE : INACTIVE_STROKE);
+}
+
+// =====================================================
+// APPROACH C: two layers (always-on start/end + toggled all-points)
+// =====================================================
+function setupC() {
+  const t = TRACKS.C;
+  map.addSource('src-C', { type: 'geojson', data: makeGeoJSON('C', t.coords) });
+  map.addLayer({
+    id: 'line-C', type: 'line', source: 'src-C',
+    filter: ['==', '$type', 'LineString'],
+    paint: { 'line-color': t.color, 'line-width': 3 }
+  });
+  // Layer 1: all points but only start/end visible via radius, always on
+  map.addLayer({
+    id: 'pts-C-ends', type: 'circle', source: 'src-C',
+    filter: ['==', '$type', 'Point'],
+    paint: {
+      'circle-radius': ['case',
+        ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']], 3, 0],
+      'circle-color': colorExpr(t.color),
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': ['case',
+        ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']], 1, 0]
+    }
+  });
+  // Layer 2: all points when active (hidden by default)
+  map.addLayer({
+    id: 'pts-C-all', type: 'circle', source: 'src-C',
+    filter: ['==', '$type', 'Point'],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': ACTIVE_RADIUS,
+      'circle-color': colorExpr(t.color),
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': ACTIVE_STROKE
+    }
+  });
+}
+
+function updateC(isActive) {
+  if (map.getLayer('pts-C-all'))
+    map.setLayoutProperty('pts-C-all', 'visibility', isActive ? 'visible' : 'none');
+  if (map.getLayer('pts-C-ends'))
+    map.setLayoutProperty('pts-C-ends', 'visibility', isActive ? 'none' : 'visible');
+}
+
+// --- Wiring ---
+let activeId = 'none';
+
+function setActive(id) {
+  activeId = id;
+  // A + A2: global-state (automatic — one call drives both)
+  map.setGlobalStateProperty('activeTrackId', id);
+  // B: imperative
+  updateB(id === 'B');
+  // C: two-layer toggle
+  updateC(id === 'C');
+}
+
+map.on('load', () => {
+  setupA();
+  setupA2();
+  setupB();
+  setupC();
+  setActive('none');
+});
+
+document.querySelectorAll('input[name="active"]').forEach(r => {
+  r.addEventListener('change', () => setActive(r.value));
+});
+</script>
+</body>
+</html>
