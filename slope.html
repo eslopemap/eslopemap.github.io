@@ -2146,6 +2146,7 @@
 
     function addTrackToMap(t) {
       const isActive = ['==', ['get', 'id'], ['global-state', 'activeTrackId']];
+      const isStartOrEnd = ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']];
       map.addSource(trackSourceId(t), { type: 'geojson', data: trackGeoJSON(t) });
       map.addLayer({
         id: trackLineLayerId(t), type: 'line', source: trackSourceId(t),
@@ -2154,18 +2155,20 @@
       });
       map.addLayer({
         id: trackPtsLayerId(t), type: 'circle', source: trackSourceId(t),
-        filter: ['all', ['==', '$type', 'Point'],
-          ['case', isActive, true,
-            ['match', ['get', 'role'], ['start', 'end'], true, false]]],
+        filter: ['==', '$type', 'Point'],
         paint: {
-          'circle-radius': ['case', isActive,
-            ['match', ['get', 'role'], 'insert', 3, 4], 0],
+          'circle-radius': ['case',
+            isActive, ['match', ['get', 'role'], 'insert', 3, 4],
+            isStartOrEnd, 3,
+            0],
           'circle-color': ['match', ['get', 'role'],
             'start', '#22c55e', 'end', '#ef4444',
             'insert', 'rgba(128,128,128,0.5)', t.color],
           'circle-stroke-color': '#fff',
-          'circle-stroke-width': ['case', isActive,
-            ['match', ['get', 'role'], 'insert', 0.5, 1.5], 0]
+          'circle-stroke-width': ['case',
+            isActive, ['match', ['get', 'role'], 'insert', 0.5, 1.5],
+            isStartOrEnd, 1,
+            0]
         }
       });
     }
