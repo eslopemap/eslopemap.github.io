@@ -18,19 +18,23 @@
 
 ## Track Editor
 - **Drag & drop import** — GPX (tracks, segments, routes with names) and GeoJSON files, with visual drop overlay
-- **Elevation profile** — bottom panel showing elevation (m) + signed slope (°) vs distance (km) for active track, dual Y-axes, zero-line, closeable
-- **Draw mode** — pen button, click-to-add-vertex, double-click or Escape to finish
+- **Elevation profile** — bottom panel showing elevation (m), track slope (°), and terrain slope (°) vs distance (km) for the active track, with dual Y-axes, a zero-line, close button, and reopen control from the track panel
+- **Profile-to-map hover linkage** — hovering the elevation profile highlights the corresponding track vertex on the map and pans it into view when needed
+- **Draw mode** — pen button in the top-right track tool row; click-to-add-vertex, double-click or Escape to finish
 - **Ctrl+click delete** — remove individual track vertices
 - **Track markers** — green start / red end dots; mid-points and insert-point handles shown only for the active track
 - **Insert vertex** — click a midpoint handle between two vertices to insert a new point
 - **Desktop vertex editing** — drag vertices to reposition (requires track selection)
 - **Mobile vertex editing** — tap vertex then pan map to move it (requires track selection)
 - **Elevation enrichment** — all track points (imported and drawn) enriched from the same DEM source; re-enriched when new tiles load
-- **Track stats** — total distance (km), elevation gain (↑) and loss (↓) per track in the list
-- **Multi-track management** — track list panel (top-right hamburger) with color coding, point counts, delete per track
+- **Track stats** — total distance (km), elevation gain (↑), loss (↓), average slope, and max terrain slope along track for the active track
+- **Multi-track management** — top-right track panel with color coding, point counts, delete per track, export actions, and a shell that wraps the draw and track buttons while open
 - **Export** — active track as GPX or GeoJSON; all tracks as single GPX with multiple segments
 
 ## UI
+- **Settings toggle** — top-left `🌍 Settings` button with auto-collapse when you start dragging the map
+- **Track tool row** — top-right draw and track buttons; the `🛤` button becomes a close button while the track panel is open
+- **Bottom-right controls** — compass, geolocate, zoom, and scale/ruler grouped into a translucent floating stack
 - **Compass** — bottom-right, indicates map rotation, click to reset bearing & pitch to north/flat
 - **Ctrl/Cmd+drag** — tilt and rotate the map (same as right-click drag)
 - **Search** — Nominatim geocoding with collapsible search box

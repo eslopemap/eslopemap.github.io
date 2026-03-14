@@ -4,17 +4,18 @@
   <!-- https://gist.github.com/eddy-geek/ff8c4f3d74e1be6747baf3c91b41a50c -->
   <!-- .../gh api --method PATCH /gists/ff8c4f3d74e1be6747baf3c91b41a50c -F "files[slope.html][content]=@slope.html" -F "files[slope.md][content]=@slope.md" --jq '.html_url' -->
   <meta charset="utf-8" />
-  <title>Hybrid DEM Slope/Aspect with Border Backfill — MapLibre GL JS</title>
+  <title>Hybrid DEM Slope/Aspect/Color Relief with Border Backfill — MapLibre GL JS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
 
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css" />
-  <script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.20.0/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@5.20.0/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
 
   <style>
-    html, body, #map { margin: 0; width: 100%; height: 100%; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    #map { position: relative; width: 100%; height: 100%; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
 
     #controls-wrapper {
@@ -161,30 +162,88 @@
     }
     .tb-btn:hover { background: rgba(240,240,240,0.97); }
     .tb-btn.active { background: #4a90d9; color: #fff; box-shadow: 0 1px 6px rgba(74,144,217,0.5); }
+    .tb-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+      color: rgba(0,0,0,0.45);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .tb-btn:disabled:hover { background: rgba(255,255,255,0.94); }
 
-    #tracks-btn {
+    #track-panel-shell {
       position: absolute;
       top: 10px;
       right: 10px;
       z-index: 11;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    #track-panel-shell.visible {
+      background: rgba(255,255,255,0.5);
+      backdrop-filter: blur(2px);
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      padding: 8px 10px 10px;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    #track-tool-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    #draw-btn,
+    #tracks-btn {
+      position: static;
+      z-index: auto;
     }
     #track-panel {
-      position: absolute;
-      top: 48px;
-      right: 10px;
-      z-index: 10;
-      background: rgba(255,255,255,0.94);
-      border-radius: 8px;
-      padding: 8px 10px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      position: static;
+      z-index: auto;
+      background: transparent;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
       font-size: 12px;
       min-width: 180px;
       max-height: 50vh;
       overflow-y: auto;
       display: none;
     }
+    #track-panel-shell.visible #track-panel {
+      order: 1;
+      min-width: 0;
+    }
+    #track-panel-shell.visible #track-tool-row {
+      order: 2;
+      flex-shrink: 0;
+    }
     #track-panel.visible { display: block; }
-    #track-panel h3 { margin: 0 0 6px; font-size: 13px; }
+    .track-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    #track-panel h3 { margin: 0 auto 0 0; font-size: 13px; }
+    #profile-toggle-btn {
+      background: rgba(74,144,217,0.12);
+      color: #245480;
+      border: none;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #profile-toggle-btn:hover { background: rgba(74,144,217,0.18); }
+    #profile-toggle-btn.active { background: #4a90d9; color: #fff; }
+    #profile-toggle-btn:disabled { opacity: 0.45; cursor: default; }
     .track-item {
       display: flex;
       align-items: center;
@@ -251,27 +310,61 @@
     }
     #mobile-move-hint.visible { display: block; }
 
-    /* Compass */
-    #compass {
-      position: absolute;
-      bottom: 40px;
-      right: 10px;
-      z-index: 10;
-      width: 36px;
-      height: 36px;
-      background: rgba(255,255,255,0.94);
-      border: none;
-      border-radius: 50%;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      transition: opacity 0.2s;
+    :root {
+      --bottom-right-controls-bottom: 12px;
+      --bottom-right-surface: rgba(255,255,255,0.28);
+      --bottom-right-surface-hover: rgba(255,255,255,0.62);
     }
-    #compass:hover { background: rgba(240,240,240,0.97); }
-    #compass svg { width: 22px; height: 22px; transition: transform 0.15s ease; }
+    body.profile-open {
+      --bottom-right-controls-bottom: 148px;
+    }
+    .maplibregl-ctrl-bottom-right {
+      right: 10px;
+      bottom: var(--bottom-right-controls-bottom);
+    }
+    .maplibregl-ctrl-bottom-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group,
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+      margin: 0;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+      background: var(--bottom-right-surface);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      width: fit-content;
+      max-width: none;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group > button,
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl button {
+      background: transparent;
+      width: 40px;
+      height: 40px;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group > button:hover,
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl button:hover {
+      background: rgba(255,255,255,0.14);
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group + .maplibregl-ctrl-group {
+      margin-top: 0;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-geolocate {
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-scale {
+      align-self: flex-end;
+      background: var(--bottom-right-surface);
+      border-radius: 8px;
+      padding: 3px 8px;
+      min-width: 0;
+      text-align: center;
+      color: rgba(0,0,0,0.8);
+      box-sizing: border-box;
+    }
 
     /* Elevation profile */
     #profile-panel {
@@ -286,7 +379,7 @@
       display: none;
     }
     #profile-panel.visible { display: block; }
-    #profile-panel canvas { width: 100% !important; height: 130px !important; }
+    #profile-panel canvas { width: 100% !important; }
     #profile-close {
       position: absolute;
       top: 2px;
@@ -308,13 +401,12 @@
 
   <div id="controls-wrapper">
   <div id="toolbar">
-    <button id="controls-toggle">Settings &#9660;</button>
+    <button id="controls-toggle">🌍 Settings ▾</button>
     <div id="search-box">
       <button id="search-icon">&#128269;</button>
       <input id="search-input" type="text" placeholder="Search location..." autocomplete="off" />
       <div id="search-results"></div>
     </div>
-    <button id="draw-btn" class="tb-btn" title="Draw track (click to add points, double-click to finish)">&#9998;</button>
   </div>
   <div id="controls">
     <div class="row">
@@ -322,6 +414,7 @@
       <select id="mode">
         <option value="slope" selected>Slope</option>
         <option value="aspect">Aspect</option>
+        <option value="color-relief">Color relief</option>
       </select>
     </div>
 
@@ -358,7 +451,7 @@
     </div>
 
     <div class="row">
-      <label for="slopeOpacity"><strong>Slope opacity</strong>: <span id="slopeOpacityValue">0.45</span></label><br />
+      <label for="slopeOpacity"><strong>Analysis opacity</strong>: <span id="slopeOpacityValue">0.45</span></label><br />
       <input id="slopeOpacity" type="range" min="0" max="1" step="0.01" value="0.45" />
     </div>
 
@@ -391,26 +484,27 @@
   </div>
   </div>
 
-  <button id="tracks-btn" class="tb-btn" title="Track list">&#9776;</button>
-  <div id="track-panel">
-    <h3>Tracks</h3>
-    <div id="track-list"></div>
-    <div class="track-export-bar">
-      <button id="export-gpx-btn">Export GPX</button>
-      <button id="export-geojson-btn">Export GeoJSON</button>
-      <button id="export-all-gpx-btn">Export All GPX</button>
+  <div id="track-panel-shell">
+    <div id="track-tool-row">
+      <button id="draw-btn" class="tb-btn" title="Draw track (click to add points, double-click to finish)">&#9998;</button>
+      <button id="tracks-btn" class="tb-btn" title="Track list" disabled>📍</button>
+    </div>
+    <div id="track-panel">
+      <div class="track-panel-header">
+        <h3>Tracks</h3>
+        <button id="profile-toggle-btn" type="button">Profile</button>
+      </div>
+      <div id="track-list"></div>
+      <div class="track-export-bar">
+        <button id="export-gpx-btn">Export GPX</button>
+        <button id="export-geojson-btn">Export GeoJSON</button>
+        <button id="export-all-gpx-btn">Export All GPX</button>
+      </div>
     </div>
   </div>
 
   <div id="drop-overlay">Drop GPX / GeoJSON file here</div>
   <div id="mobile-move-hint">Pan map to move point &bull; tap elsewhere to deselect</div>
-
-  <button id="compass" title="Reset bearing &amp; pitch">
-    <svg viewBox="0 0 24 24">
-      <polygon points="12,2 15,14 12,12 9,14" fill="#e53935"/>
-      <polygon points="12,22 9,14 12,12 15,14" fill="#999"/>
-    </svg>
-  </button>
 
   <div id="profile-panel">
     <button id="profile-close" title="Close">&times;</button>
@@ -450,12 +544,34 @@
         135, '#00ff00',
         225, '#00ffff',
         315, '#0000ff'
+      ],
+      'color-relief': [
+        'interpolate', ['linear'], ['elevation'],
+        -250, '#315C8D',
+        -0.1, '#A9D4E8',
+        0, '#A9D4E8',
+        0.1, '#A9D4E8',
+        50, '#809E47',
+        100, '#B3C57D',
+        250, '#D1D98C',
+        500, '#C8B75F',
+        750, '#A38766',
+        1000, '#836A4E',
+        1500, '#705B43',
+        2000, '#604E39',
+        2500, '#C2AB94',
+        3000, '#D9CCBF',
+        4000, '#ECE6DF',
+        5000, '#F6F2EF',
+        6000, '#FFFFFF',
+        8000, '#F5FDFF'
       ]
     };
 
     const ANALYSIS_RANGE = {
       slope: [0, 90],
-      aspect: [0, 360]
+      aspect: [0, 360],
+      'color-relief': [-250, 8000]
     };
 
     const colorCanvas = document.createElement('canvas');
@@ -514,10 +630,32 @@
       return {stepCount, values, colors};
     }
 
+    function parseInterpolateStops(expression, expectedInput) {
+      if (!Array.isArray(expression) || expression[0] !== 'interpolate') {
+        throw new Error('Color expression must be an interpolate expression');
+      }
+
+      const input = expression[2];
+      if (!Array.isArray(input) || input[0] !== expectedInput) {
+        throw new Error(`Interpolate input must be ["${expectedInput}"]`);
+      }
+
+      const stops = [];
+      for (let i = 3; i < expression.length; i += 2) {
+        stops.push({
+          value: Number(expression[i]),
+          color: String(expression[i + 1])
+        });
+      }
+      return stops;
+    }
+
     const PARSED_RAMPS = {
       slope: parseStepRamp(ANALYSIS_COLOR.slope, 'slope'),
       aspect: parseStepRamp(ANALYSIS_COLOR.aspect, 'aspect')
     };
+
+    const COLOR_RELIEF_STOPS = parseInterpolateStops(ANALYSIS_COLOR['color-relief'], 'elevation');
 
     function rampToLegendCss(mode) {
       const ramp = PARSED_RAMPS[mode];
@@ -543,6 +681,14 @@
         parts.push(`${rgb(i)} ${startPct.toFixed(2)}% ${endPct.toFixed(2)}%`);
       }
 
+      return `linear-gradient(to right, ${parts.join(', ')})`;
+    }
+
+    function interpolateStopsToLegendCss(stops) {
+      const parts = stops.map(({value, color}, index) => {
+        const position = Math.max(0, Math.min(100, ((value - stops[0].value) / (stops[stops.length - 1].value - stops[0].value)) * 100));
+        return `${color} ${position.toFixed(2)}%`;
+      });
       return `linear-gradient(to right, ${parts.join(', ')})`;
     }
 
@@ -584,7 +730,7 @@
 
     // Default views for region-specific basemaps (fly here when selected from far away)
     const BASEMAP_DEFAULT_VIEW = {
-      'kartverket': {center: [8.0, 61.5], zoom: 6, bounds: [3, 57, 32, 72]},
+      'kartverket': {center: [13.0, 67], zoom: 6, bounds: [3, 57, 32, 72]},
       'ign-plan': {center: [2.35, 46.8], zoom: 6, bounds: [-5.5, 41, 10, 51.5]},
       'swisstopo-vector': {center: [8.23, 46.82], zoom: 8, bounds: [5.9, 45.8, 10.5, 47.8]}
     };
@@ -641,7 +787,8 @@
         }
       }
 
-      // Auto show contours only for OSM (other basemaps have their own)
+      // Auto show contours only for OSM (other basemaps have their own),
+      // unless the user or URL explicitly selected a contour visibility.
       const shouldShowContours = (state.basemap === 'osm');
       state.showContours = shouldShowContours;
       const contourCb = document.getElementById('showContours');
@@ -668,24 +815,64 @@
       }
     }
 
+    function parseBooleanParam(value) {
+      if (value == null || value === '') return null;
+      const normalized = String(value).trim().toLowerCase();
+      if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+      if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+      return null;
+    }
+
     function parseHashParams() {
-      // Format: #lng,lat,zoom[,basemap]
       const hash = window.location.hash.replace(/^#/, '');
-      const parts = hash.split(',');
-      const lngRaw = Number(parts[0]);
-      const latRaw = Number(parts[1]);
-      const zoomRaw = Number(parts[2]);
-      const basemapRaw = (parts[3] || '').trim();
-
-      const hasLng = Number.isFinite(lngRaw) && lngRaw >= -180 && lngRaw <= 180;
-      const hasLat = Number.isFinite(latRaw) && latRaw >= -85.051129 && latRaw <= 85.051129;
-      const hasZoom = Number.isFinite(zoomRaw) && zoomRaw >= 0 && zoomRaw <= 24;
-
-      return {
-        center: (hasLng && hasLat) ? [lngRaw, latRaw] : [6.8652, 45.8326],
-        zoom: hasZoom ? zoomRaw : 12,
-        basemap: (basemapRaw && BASEMAP_LAYER_GROUPS[basemapRaw]) ? basemapRaw : null
+      const fallback = {
+        center: [6.8652, 45.8326],
+        zoom: 12,
+        basemap: null,
+        mode: 'slope',
+        slopeOpacity: 0.45,
+        terrain3d: false,
+        terrainExaggeration: 1.4,
+        bearing: 0,
+        pitch: 0
       };
+
+      if (hash.includes('=')) {
+        const params = new URLSearchParams(hash);
+        const lngRaw = Number(params.get('lng'));
+        const latRaw = Number(params.get('lat'));
+        const zoomRaw = Number(params.get('zoom'));
+        const basemapRaw = (params.get('basemap') || '').trim();
+        const modeRaw = (params.get('mode') || '').trim();
+        const opacityRaw = Number(params.get('opacity'));
+        const terrain3dRaw = parseBooleanParam(params.get('terrain'));
+        const terrainExaggerationRaw = Number(params.get('exaggeration'));
+        const bearingRaw = Number(params.get('bearing'));
+        const pitchRaw = Number(params.get('pitch'));
+
+        const hasLng = Number.isFinite(lngRaw) && lngRaw >= -180 && lngRaw <= 180;
+        const hasLat = Number.isFinite(latRaw) && latRaw >= -85.051129 && latRaw <= 85.051129;
+        const hasZoom = Number.isFinite(zoomRaw) && zoomRaw >= 0 && zoomRaw <= 24;
+        const hasOpacity = Number.isFinite(opacityRaw) && opacityRaw >= 0 && opacityRaw <= 1;
+        const hasTerrainExaggeration = Number.isFinite(terrainExaggerationRaw) && terrainExaggerationRaw >= 1 && terrainExaggerationRaw <= 3;
+        const hasBearing = Number.isFinite(bearingRaw);
+        const hasPitch = Number.isFinite(pitchRaw) && pitchRaw >= 0 && pitchRaw <= 85;
+        const validModes = new Set(['slope', 'aspect', 'color-relief']);
+
+        return {
+          center: (hasLng && hasLat) ? [lngRaw, latRaw] : fallback.center,
+          zoom: hasZoom ? zoomRaw : fallback.zoom,
+          basemap: (basemapRaw && BASEMAP_LAYER_GROUPS[basemapRaw]) ? basemapRaw : null,
+          mode: validModes.has(modeRaw) ? modeRaw : fallback.mode,
+          slopeOpacity: hasOpacity ? opacityRaw : fallback.slopeOpacity,
+          terrain3d: terrain3dRaw == null ? fallback.terrain3d : terrain3dRaw,
+          terrainExaggeration: hasTerrainExaggeration ? terrainExaggerationRaw : fallback.terrainExaggeration,
+          bearing: hasBearing ? bearingRaw : fallback.bearing,
+          pitch: hasPitch ? pitchRaw : fallback.pitch
+        };
+      }
+
+      return fallback;
     }
 
     function getVisibleTriplesForMap(map) {
@@ -792,7 +979,20 @@
     function syncViewToUrl(map) {
       const center = map.getCenter();
       const zoom = map.getZoom();
-      const hash = `#${center.lng.toFixed(6)},${center.lat.toFixed(6)},${zoom.toFixed(2)},${state.basemap}`;
+      const bearing = map.getBearing();
+      const pitch = map.getPitch();
+      const params = new URLSearchParams();
+      params.set('lng', center.lng.toFixed(6));
+      params.set('lat', center.lat.toFixed(6));
+      params.set('zoom', zoom.toFixed(2));
+      params.set('basemap', state.basemap);
+      params.set('mode', state.mode);
+      params.set('opacity', state.slopeOpacity.toFixed(2));
+      params.set('terrain', state.terrain3d ? '1' : '0');
+      params.set('exaggeration', state.terrainExaggeration.toFixed(2));
+      params.set('bearing', bearing.toFixed(2));
+      params.set('pitch', pitch.toFixed(2));
+      const hash = `#${params.toString()}`;
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`);
     }
 
@@ -903,11 +1103,23 @@
         labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
          '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
           '<span>0°</span><span>15°</span><span>30°</span><span>45°</span><span>60°</span><span>75°</span><span>90°</span>';
-      } else {
+      } else if (state.mode === 'aspect') {
         ramp.title = 'Aspect (compass direction)';
         ramp.style.background = rampToLegendCss('aspect');
         labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span></div>' +
           '<span>N</span><span>E</span><span>S</span><span>W</span><span>N</span>';
+      } else {
+        ramp.title = 'Elevation color relief (meters)';
+        ramp.style.background = interpolateStopsToLegendCss(COLOR_RELIEF_STOPS);
+        labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
+          '<span>-250 m</span><span>0 m</span><span>500 m</span><span>1500 m</span><span>3000 m</span><span>8000 m</span>';
+      }
+    }
+
+    function applyModeState(map) {
+      if (map.getLayer('dem-color-relief')) {
+        map.setLayoutProperty('dem-color-relief', 'visibility', state.mode === 'color-relief' ? 'visible' : 'none');
+        map.setPaintProperty('dem-color-relief', 'color-relief-opacity', state.slopeOpacity);
       }
     }
 
@@ -1342,6 +1554,13 @@
         },
 
         render(gl, args) {
+          if (state.mode === 'color-relief') {
+            state.internalCount = 0;
+            state.fallbackCount = 0;
+            updateStatus();
+            return;
+          }
+
           state.internalCount = 0;
           state.fallbackCount = 0;
 
@@ -1458,6 +1677,17 @@
       state.basemap = initialView.basemap;
       document.getElementById('basemap').value = state.basemap;
     }
+    state.mode = initialView.mode;
+    state.slopeOpacity = initialView.slopeOpacity;
+    state.terrain3d = initialView.terrain3d;
+    state.terrainExaggeration = initialView.terrainExaggeration;
+    document.getElementById('mode').value = state.mode;
+    document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
+    document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
+    document.getElementById('terrain3d').checked = state.terrain3d;
+    document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
+    document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
+    document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
 
     // Contour line source from DEM tiles
     const demContourSource = new mlcontour.DemSource({
@@ -1472,6 +1702,9 @@
       container: 'map',
       center: initialView.center,
       zoom: initialView.zoom,
+      bearing: initialView.bearing,
+      pitch: initialView.pitch,
+      maxTileCacheZoomLevels: 20,
       style: {
         version: 8,
         glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -1711,12 +1944,46 @@
       },
       canvasContextAttributes: {antialias: true}
     });
+    const navigationControl = new maplibregl.NavigationControl({
+      visualizePitch: true,
+      visualizeRoll: true,
+      showZoom: true,
+      showCompass: true
+    });
+    const geolocateControl = new maplibregl.GeolocateControl({
+      positionOptions: {
+        enableHighAccuracy: true
+      },
+      trackUserLocation: false,
+      showUserLocation: true,
+      showAccuracyCircle: false
+    });
+    const scaleControl = new maplibregl.ScaleControl({
+      unit: 'metric',
+      maxWidth: 120
+    });
+    map.addControl(scaleControl, 'bottom-right');
+    map.addControl(navigationControl, 'bottom-right');
+    map.addControl(geolocateControl, 'bottom-right');
 
-    document.getElementById('controls-toggle').addEventListener('click', () => {
-      const panel = document.getElementById('controls');
-      const btn = document.getElementById('controls-toggle');
-      panel.classList.toggle('collapsed');
-      btn.innerHTML = panel.classList.contains('collapsed') ? 'Settings &#9654;' : 'Settings &#9660;';
+    const controlsPanel = document.getElementById('controls');
+    const controlsToggleBtn = document.getElementById('controls-toggle');
+
+    function syncControlsToggleLabel() {
+      controlsToggleBtn.textContent = controlsPanel.classList.contains('collapsed') ? '🌍 Settings ▸' : '🌍 Settings ▾';
+    }
+
+    function setControlsCollapsed(collapsed) {
+      controlsPanel.classList.toggle('collapsed', collapsed);
+      syncControlsToggleLabel();
+    }
+
+    controlsToggleBtn.addEventListener('click', () => {
+      setControlsCollapsed(!controlsPanel.classList.contains('collapsed'));
+    });
+    syncControlsToggleLabel();
+    map.on('dragstart', () => {
+      setControlsCollapsed(true);
     });
 
     // <search start>
@@ -1825,6 +2092,8 @@
     document.getElementById('mode').addEventListener('change', (e) => {
       state.mode = e.target.value;
       updateLegend();
+      applyModeState(map);
+      syncViewToUrl(map);
       map.triggerRepaint();
     });
 
@@ -1860,6 +2129,8 @@
     document.getElementById('slopeOpacity').addEventListener('input', (e) => {
       state.slopeOpacity = Number(e.target.value);
       document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
+      applyModeState(map);
+      syncViewToUrl(map);
       map.triggerRepaint();
     });
 
@@ -1893,6 +2164,7 @@
       state.terrain3d = Boolean(e.target.checked);
       document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
       applyTerrainState(map);
+      syncViewToUrl(map);
       map.triggerRepaint();
     });
 
@@ -1901,8 +2173,9 @@
       document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
       if (state.terrain3d) {
         applyTerrainState(map);
-        map.triggerRepaint();
       }
+      syncViewToUrl(map);
+      map.triggerRepaint();
     });
 
     // Allow Cmd+drag (Mac) to act like Ctrl+drag for rotate/pitch
@@ -1940,8 +2213,27 @@
         syncViewToUrl(map);
         if (state.showTileGrid) updateDebugGridSource(map);
       });
+      map.on('rotateend', () => {
+        syncViewToUrl(map);
+      });
+      map.on('pitchend', () => {
+        syncViewToUrl(map);
+      });
       const hybridLayer = createHybridBorderLayer();
       map.addLayer(hybridLayer);
+      map.addLayer({
+        id: 'dem-color-relief',
+        type: 'color-relief',
+        source: DEM_SOURCE_ID,
+        layout: {
+          visibility: state.mode === 'color-relief' ? 'visible' : 'none'
+        },
+        paint: {
+          'color-relief-opacity': state.slopeOpacity,
+          'color-relief-color': ANALYSIS_COLOR['color-relief']
+        }
+      });
+      applyModeState(map);
 
       // Contour lines (on top of slope overlay)
       map.addLayer({
@@ -1950,7 +2242,7 @@
         source: 'contourSource',
         'source-layer': 'contours',
         paint: {
-          'line-opacity': 0.3,
+          'line-opacity': 0.2,
           'line-width': ['match', ['get', 'level'], 1, 1, 0.5]
         }
       });
@@ -2038,13 +2330,30 @@
       const p = parseHashParams();
       hashNavInProgress = true;
       map.jumpTo({center: p.center, zoom: p.zoom});
+      state.basemap = p.basemap || 'osm';
+      state.mode = p.mode;
+      state.slopeOpacity = p.slopeOpacity;
+      state.terrain3d = p.terrain3d;
+      state.terrainExaggeration = p.terrainExaggeration;
+
+      document.getElementById('basemap').value = state.basemap;
+      document.getElementById('mode').value = state.mode;
+      document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
+      document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
+      document.getElementById('terrain3d').checked = state.terrain3d;
+      document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
+      document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
+      document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+
+      updateLegend();
+      map.setBearing(p.bearing);
+      map.setPitch(p.pitch);
+      applyBasemapSelection(map, true);
+      applyModeState(map);
+      applyTerrainState(map);
       hashNavInProgress = false;
       syncViewToUrl(map);
-      if (p.basemap && p.basemap !== state.basemap) {
-        state.basemap = p.basemap;
-        document.getElementById('basemap').value = state.basemap;
-        applyBasemapSelection(map, true);
-      }
+      map.triggerRepaint();
     });
 
     map.on('error', (e) => {
@@ -2061,11 +2370,14 @@
     let drawMode = false;
     let dragVertexInfo = null; // {trackId, index} — desktop drag
     let mobileSelectedVertex = null; // {trackId, index} — mobile move mode
+    let suppressNextMapClick = false;
 
     const drawBtn = document.getElementById('draw-btn');
     const tracksBtn = document.getElementById('tracks-btn');
+    const trackPanelShell = document.getElementById('track-panel-shell');
     const trackPanel = document.getElementById('track-panel');
     const trackListEl = document.getElementById('track-list');
+    const profileToggleBtn = document.getElementById('profile-toggle-btn');
     const dropOverlay = document.getElementById('drop-overlay');
     const mobileHint = document.getElementById('mobile-move-hint');
 
@@ -2075,9 +2387,75 @@
       return c;
     }
 
+    function invalidateTrackStats(t) {
+      if (t) t._statsCache = null;
+    }
+
+    function invalidateAllTrackStats() {
+      for (const t of tracks) invalidateTrackStats(t);
+    }
+
     function elevationAt(lngLat) {
       const r = queryLoadedElevationAtLngLat(map, lngLat);
       return r ? Math.round(r.elevation * 10) / 10 : null;
+    }
+
+    function representativeTrackSampleSpacingMeters(coords, totalDistMeters) {
+      if (!coords.length) return 4;
+      const meanLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
+      const nominal = (40075016.7 / Math.pow(2, DEM_MAX_Z) / CORE_DIM) * Math.max(0.25, Math.cos(meanLat * Math.PI / 180));
+      return Math.max(2, nominal, totalDistMeters / 2000);
+    }
+
+    function interpolateTrackLngLat(coords, cumulativeMeters, targetMeters) {
+      if (targetMeters <= 0) return {lng: coords[0][0], lat: coords[0][1]};
+      const totalMeters = cumulativeMeters[cumulativeMeters.length - 1];
+      if (targetMeters >= totalMeters) {
+        const last = coords[coords.length - 1];
+        return {lng: last[0], lat: last[1]};
+      }
+
+      let segIndex = 1;
+      while (segIndex < cumulativeMeters.length && cumulativeMeters[segIndex] < targetMeters) segIndex++;
+      const startMeters = cumulativeMeters[segIndex - 1];
+      const endMeters = cumulativeMeters[segIndex];
+      const spanMeters = endMeters - startMeters;
+      const t = spanMeters > 0 ? (targetMeters - startMeters) / spanMeters : 0;
+      const a = coords[segIndex - 1];
+      const b = coords[segIndex];
+      return {
+        lng: a[0] + (b[0] - a[0]) * t,
+        lat: a[1] + (b[1] - a[1]) * t
+      };
+    }
+
+    function computeTerrainSlopeAlongTrack(coords, cumulativeMeters, totalDistMeters) {
+      if (coords.length < 2 || totalDistMeters <= 0) {
+        return {average: null, maximum: null, sampleCount: 0, resolvedCount: 0};
+      }
+
+      const spacingMeters = representativeTrackSampleSpacingMeters(coords, totalDistMeters);
+      const sampleCount = Math.max(2, Math.ceil(totalDistMeters / spacingMeters) + 1);
+      let sum = 0;
+      let maximum = -Infinity;
+      let resolvedCount = 0;
+
+      for (let i = 0; i < sampleCount; i++) {
+        const distanceMeters = sampleCount === 1 ? 0 : (i / (sampleCount - 1)) * totalDistMeters;
+        const lngLat = interpolateTrackLngLat(coords, cumulativeMeters, distanceMeters);
+        const sample = queryLoadedElevationAtLngLat(map, lngLat);
+        if (!sample || !Number.isFinite(sample.slopeDeg)) continue;
+        sum += sample.slopeDeg;
+        maximum = Math.max(maximum, sample.slopeDeg);
+        resolvedCount++;
+      }
+
+      return {
+        average: resolvedCount ? sum / resolvedCount : null,
+        maximum: resolvedCount ? maximum : null,
+        sampleCount,
+        resolvedCount
+      };
     }
 
     function enrichElevation(coords) {
@@ -2098,7 +2476,9 @@
         }
       }
       if (anyUpdated) {
+        invalidateAllTrackStats();
         refreshAllTrackSources();
+        renderTrackList();
         updateProfile();
       }
     }
@@ -2106,7 +2486,11 @@
     // Re-enrich when new DEM tiles load
     map.on('data', (e) => {
       if (e.sourceId === DEM_SOURCE_ID && e.dataType === 'source' && tracks.length) {
-        setTimeout(enrichAllTracks, 200);
+        invalidateAllTrackStats();
+        setTimeout(() => {
+          enrichAllTracks();
+          renderTrackList();
+        }, 200);
       }
     });
 
@@ -2114,6 +2498,8 @@
     function trackSourceId(t) { return 'track-' + t.id; }
     function trackLineLayerId(t) { return 'track-line-' + t.id; }
     function trackPtsLayerId(t) { return 'track-pts-' + t.id; }
+    const PROFILE_HOVER_SOURCE_ID = 'profile-hover-point';
+    const PROFILE_HOVER_LAYER_ID = 'profile-hover-point-layer';
 
     function trackGeoJSON(t) {
       const features = [];
@@ -2173,6 +2559,29 @@
       });
     }
 
+    function ensureProfileHoverLayer() {
+      if (!map.getSource(PROFILE_HOVER_SOURCE_ID)) {
+        map.addSource(PROFILE_HOVER_SOURCE_ID, {
+          type: 'geojson',
+          data: {type: 'FeatureCollection', features: []}
+        });
+      }
+      if (!map.getLayer(PROFILE_HOVER_LAYER_ID)) {
+        map.addLayer({
+          id: PROFILE_HOVER_LAYER_ID,
+          type: 'circle',
+          source: PROFILE_HOVER_SOURCE_ID,
+          paint: {
+            'circle-radius': 7,
+            'circle-color': ['coalesce', ['get', 'color'], '#4a90d9'],
+            'circle-opacity': 0.95,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2.5
+          }
+        });
+      }
+    }
+
     function removeTrackFromMap(t) {
       if (map.getLayer(trackPtsLayerId(t))) map.removeLayer(trackPtsLayerId(t));
       if (map.getLayer(trackLineLayerId(t))) map.removeLayer(trackLineLayerId(t));
@@ -2192,17 +2601,67 @@
       map.setGlobalStateProperty('activeTrackId', activeTrackId);
     }
 
+    function syncProfileToggleButton() {
+      if (typeof profileClosed === 'undefined') return;
+      const t = getActiveTrack();
+      const canShow = Boolean(t && t.coords.length >= 2);
+      profileToggleBtn.disabled = !canShow;
+      const isVisible = canShow && profilePanel.classList.contains('visible') && !profileClosed;
+      profileToggleBtn.classList.toggle('active', isVisible);
+      profileToggleBtn.textContent = isVisible ? 'Hide profile' : 'Profile';
+    }
+
+    function syncTrackPanelShell() {
+      const isVisible = trackPanel.classList.contains('visible');
+      const hasTracks = tracks.length > 0;
+      trackPanelShell.classList.toggle('visible', isVisible);
+      tracksBtn.disabled = !hasTracks;
+      tracksBtn.classList.toggle('active', isVisible && hasTracks);
+      tracksBtn.textContent = isVisible && hasTracks ? '×' : '📍'; // FIXME align icon
+      tracksBtn.title = hasTracks ? (isVisible ? 'Close tracks' : 'Track list') : 'No tracks';
+    }
+
+    function setTrackPanelVisible(visible) {
+      trackPanel.classList.toggle('visible', visible && tracks.length > 0);
+      syncTrackPanelShell();
+    }
+
     // --- Track panel UI ---
-    function trackStats(coords) {
+    function trackStats(t) {
+      if (!t || t.coords.length < 2) return null;
+      if (t._statsCache) return t._statsCache;
+
+      const coords = t.coords;
       let dist = 0, gain = 0, loss = 0;
+      let weightedSlopeSum = 0;
+      let weightedSlopeDist = 0;
+      const cumulativeMeters = [0];
       for (let i = 1; i < coords.length; i++) {
-        dist += haversineKm(coords[i-1], coords[i]);
+        const segKm = haversineKm(coords[i - 1], coords[i]);
+        const segMeters = segKm * 1000;
+        dist += segKm;
+        cumulativeMeters.push(cumulativeMeters[i - 1] + segMeters);
         if (coords[i][2] != null && coords[i-1][2] != null) {
           const dh = coords[i][2] - coords[i-1][2];
           if (dh > 0) gain += dh; else loss -= dh;
+          if (segMeters > 0) {
+            weightedSlopeSum += Math.atan2(Math.abs(dh), segMeters) * 180 / Math.PI * segMeters;
+            weightedSlopeDist += segMeters;
+          }
         }
       }
-      return {dist, gain, loss};
+      const terrainSlopeAlongTrack = computeTerrainSlopeAlongTrack(coords, cumulativeMeters, dist * 1000);
+      t._statsCache = {
+        dist,
+        gain,
+        loss,
+        avgSlope: weightedSlopeDist > 0 ? weightedSlopeSum / weightedSlopeDist : null,
+        terrainSlopeAlongTrack: terrainSlopeAlongTrack.average,
+        maxTerrainSlope: terrainSlopeAlongTrack.maximum,
+        terrainSlopeResolvedCount: terrainSlopeAlongTrack.resolvedCount,
+        terrainSlopeSampleCount: terrainSlopeAlongTrack.sampleCount
+      };
+      return t._statsCache;
     }
 
     function renderTrackList() {
@@ -2210,11 +2669,15 @@
       for (const t of tracks) {
         const div = document.createElement('div');
         div.className = 'track-item' + (t.id === activeTrackId ? ' active' : '');
-        const s = t.coords.length >= 2 ? trackStats(t.coords) : null;
+        const s = t.coords.length >= 2 ? trackStats(t) : null;
         const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m` : '';
+        const detailStatsStr = (s && t.id === activeTrackId)
+          ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Maximum terrain slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
+          : '';
         div.innerHTML = `<span class="track-color" style="background:${t.color}"></span>` +
           `<span class="track-name">${t.name} (${t.coords.length} pts)` +
           (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
+          (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
           `</span>` +
           `<button class="track-del" data-id="${t.id}">&times;</button>`;
         div.addEventListener('click', (e) => {
@@ -2224,7 +2687,9 @@
         div.querySelector('.track-del').addEventListener('click', () => deleteTrack(t.id));
         trackListEl.appendChild(div);
       }
-      trackPanel.classList.toggle('visible', tracks.length > 0);
+      if (!tracks.length) setTrackPanelVisible(false);
+      else syncTrackPanelShell();
+      syncProfileToggleButton();
     }
 
     function setActiveTrack(id) {
@@ -2248,16 +2713,21 @@
     let mapReady = false;
 
     function createTrack(name, coords) {
-      const t = { id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), name, color: nextColor(), coords };
+      const t = { id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), name, color: nextColor(), coords, _statsCache: null };
       enrichElevation(t.coords);
       tracks.push(t);
       if (mapReady) addTrackToMap(t);
+      setTrackPanelVisible(true);
       setActiveTrack(t.id);
       return t;
     }
 
     function getActiveTrack() {
       return tracks.find(t => t.id === activeTrackId) || null;
+    }
+
+    function setDefaultMapCursor() {
+      if (!drawMode) map.getCanvas().style.cursor = 'cell';
     }
 
     // --- Draw mode ---
@@ -2271,7 +2741,7 @@
     function exitDrawMode() {
       drawMode = false;
       drawBtn.classList.remove('active');
-      map.getCanvas().style.cursor = '';
+      setDefaultMapCursor();
       const t = getActiveTrack();
       if (t && t.coords.length < 2) deleteTrack(t.id);
       else updateProfile();
@@ -2283,16 +2753,22 @@
     });
 
     tracksBtn.addEventListener('click', () => {
-      trackPanel.classList.toggle('visible');
+      setTrackPanelVisible(!trackPanel.classList.contains('visible'));
     });
 
     // --- Map click: add vertex in draw mode, or select vertex for mobile ---
     map.on('click', (e) => {
+      if (suppressNextMapClick) {
+        suppressNextMapClick = false;
+        return;
+      }
+
       if (drawMode) {
         const t = getActiveTrack();
         if (!t) return;
         const ele = elevationAt(e.lngLat);
         t.coords.push([e.lngLat.lng, e.lngLat.lat, ele]);
+        invalidateTrackStats(t);
         refreshTrackSource(t);
         renderTrackList();
         updateProfile();
@@ -2306,9 +2782,10 @@
           const t = tracks.find(tr => tr.id === hit.trackId);
           if (t) {
             const a = t.coords[hit.insertAfter], b = t.coords[hit.insertAfter + 1];
-            const midLng = (a[0] + b[0]) / 2, midLat = (a[1] + b[1]) / 2;
+            const midLng = (a[0]+b[0])/2, midLat = (a[1]+b[1])/2;
             const ele = elevationAt({lng: midLng, lat: midLat});
             t.coords.splice(hit.insertAfter + 1, 0, [midLng, midLat, ele]);
+            invalidateTrackStats(t);
             refreshTrackSource(t);
             renderTrackList();
             updateProfile();
@@ -2317,13 +2794,14 @@
         }
       }
 
-      // Ctrl+click: delete vertex
-      if (e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+      // Modified click: delete vertex
+      if (e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
         const hit = hitTestVertex(e.point);
         if (hit && hit.index != null) {
           const t = tracks.find(tr => tr.id === hit.trackId);
           if (t) {
             t.coords.splice(hit.index, 1);
+            invalidateTrackStats(t);
             refreshTrackSource(t);
             renderTrackList();
             updateProfile();
@@ -2347,6 +2825,7 @@
         }
       }
     });
+    setDefaultMapCursor();
 
     map.on('dblclick', (e) => {
       if (drawMode) {
@@ -2384,13 +2863,32 @@
     // --- Desktop: drag vertices ---
     if (!isMobile) {
       let hoveredVertex = false;
+      let dragMoved = false;
+
+      function finishVertexDrag() {
+        if (!dragVertexInfo) return;
+        const t = tracks.find(tr => tr.id === dragVertexInfo.trackId);
+        dragVertexInfo = null;
+        map.dragPan.enable();
+        hoveredVertex = false;
+        if (dragMoved) suppressNextMapClick = true;
+        dragMoved = false;
+        setDefaultMapCursor();
+        if (t) {
+          invalidateTrackStats(t);
+          renderTrackList();
+          updateProfile();
+        }
+      }
 
       map.on('mousedown', (e) => {
         if (drawMode || !activeTrackId) return;
         const hit = hitTestVertex(e.point);
         if (!hit || hit.index == null) return;
         e.preventDefault();
+        e.originalEvent.stopPropagation();
         dragVertexInfo = hit;
+        dragMoved = false;
         setActiveTrack(hit.trackId);
         map.dragPan.disable();
         map.getCanvas().style.cursor = 'grabbing';
@@ -2404,30 +2902,28 @@
           c[0] = e.lngLat.lng;
           c[1] = e.lngLat.lat;
           c[2] = elevationAt(e.lngLat);
+          dragMoved = true;
           refreshTrackSource(t);
           return;
         }
         if (!drawMode) {
           const hit = hitTestVertex(e.point);
-          if (hit && !hoveredVertex) {
+          const isRealVertex = Boolean(hit && hit.index != null);
+          if (isRealVertex && !hoveredVertex) {
             hoveredVertex = true;
             map.getCanvas().style.cursor = 'grab';
-          } else if (!hit && hoveredVertex) {
+          } else if (!isRealVertex && hoveredVertex) {
             hoveredVertex = false;
-            map.getCanvas().style.cursor = '';
+            setDefaultMapCursor();
           }
         }
       });
 
       map.on('mouseup', () => {
-        if (dragVertexInfo) {
-          map.dragPan.enable();
-          map.getCanvas().style.cursor = 'grab';
-          const t = tracks.find(tr => tr.id === dragVertexInfo.trackId);
-          dragVertexInfo = null;
-          if (t) { renderTrackList(); updateProfile(); }
-        }
+        finishVertexDrag();
       });
+
+      window.addEventListener('mouseup', finishVertexDrag);
     }
 
     // --- Mobile: tap vertex then pan map to move it ---
@@ -2441,6 +2937,7 @@
         c[0] = center.lng;
         c[1] = center.lat;
         c[2] = elevationAt(center);
+        invalidateTrackStats(t);
         refreshTrackSource(t);
       });
 
@@ -2649,39 +3146,106 @@ ${segs}
     // Add map layers for tracks once map is loaded
     map.on('load', () => {
       mapReady = true;
+      ensureProfileHoverLayer();
       for (const t of tracks) {
         if (!map.getSource(trackSourceId(t))) addTrackToMap(t);
       }
     });
     // ========== END TRACK EDITOR ==========
 
-    // ========== COMPASS ==========
-    const compassEl = document.getElementById('compass');
-    const compassSvg = compassEl.querySelector('svg');
-    function updateCompass() {
-      const bearing = map.getBearing();
-      const pitch = map.getPitch();
-      compassSvg.style.transform = `rotate(${-bearing}deg)`;
-      // Show compass only when bearing or pitch is non-zero
-      compassEl.style.opacity = (Math.abs(bearing) > 0.5 || pitch > 0.5) ? '1' : '0.35';
+    function syncBottomRightOffset() {
+      document.body.classList.toggle('profile-open', profilePanel.classList.contains('visible'));
     }
-    map.on('rotate', updateCompass);
-    map.on('pitch', updateCompass);
-    updateCompass();
-    compassEl.addEventListener('click', () => {
-      map.easeTo({bearing: 0, pitch: 0, duration: 400});
-    });
 
     // ========== ELEVATION PROFILE ==========
     const profilePanel = document.getElementById('profile-panel');
     const profileCanvas = document.getElementById('profile-canvas');
     let profileChart = null;
     let profileClosed = false;
+    let hoveredProfileTrackId = null;
+    let hoveredProfileVertexIndex = null;
+
+    function clearProfileHoverVertex() {
+      hoveredProfileTrackId = null;
+      hoveredProfileVertexIndex = null;
+      const src = map.getSource(PROFILE_HOVER_SOURCE_ID);
+      if (src) src.setData({type: 'FeatureCollection', features: []});
+    }
+
+    function ensureVertexInView(lngLat) {
+      const canvas = map.getCanvas();
+      const padding = {
+        top: 50,
+        right: trackPanel.classList.contains('visible') ? 220 : 60,
+        bottom: profilePanel.classList.contains('visible') ? 170 : 60,
+        left: 60
+      };
+      const point = map.project([lngLat.lng, lngLat.lat]);
+      const withinX = point.x >= padding.left && point.x <= canvas.clientWidth - padding.right;
+      const withinY = point.y >= padding.top && point.y <= canvas.clientHeight - padding.bottom;
+      if (withinX && withinY) return;
+      map.easeTo({
+        center: [lngLat.lng, lngLat.lat],
+        duration: 1000,
+        essential: true,
+        padding
+      });
+    }
+
+    function setProfileHoverVertex(index) {
+      const t = getActiveTrack();
+      if (!t || index == null || index < 0 || index >= t.coords.length) {
+        clearProfileHoverVertex();
+        return;
+      }
+      if (hoveredProfileTrackId === t.id && hoveredProfileVertexIndex === index) return;
+      hoveredProfileTrackId = t.id;
+      hoveredProfileVertexIndex = index;
+      const coord = t.coords[index];
+      const src = map.getSource(PROFILE_HOVER_SOURCE_ID);
+      if (src) {
+        src.setData({
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {type: 'Point', coordinates: [coord[0], coord[1]]},
+            properties: {color: t.color}
+          }]
+        });
+      }
+      ensureVertexInView({lng: coord[0], lat: coord[1]});
+    }
+
+    function destroyProfileChart() {
+      clearProfileHoverVertex();
+      if (profileChart) { profileChart.destroy(); profileChart = null; }
+    }
+
+    function closeProfile(markClosed) {
+      profilePanel.classList.remove('visible');
+      if (markClosed) profileClosed = true;
+      destroyProfileChart();
+      syncBottomRightOffset();
+      syncProfileToggleButton();
+    }
 
     document.getElementById('profile-close').addEventListener('click', () => {
-      profilePanel.classList.remove('visible');
-      profileClosed = true;
-      if (profileChart) { profileChart.destroy(); profileChart = null; }
+      closeProfile(true);
+    });
+
+    profileToggleBtn.addEventListener('click', () => {
+      const t = getActiveTrack();
+      if (!t || t.coords.length < 2) return;
+      if (profilePanel.classList.contains('visible') && !profileClosed) {
+        closeProfile(true);
+        return;
+      }
+      profileClosed = false;
+      updateProfile();
+    });
+
+    profileCanvas.addEventListener('mouseleave', () => {
+      clearProfileHoverVertex();
     });
 
     function haversineKm(a, b) {
@@ -2697,9 +3261,12 @@ ${segs}
       const distances = [0];
       const elevations = [];
       const slopes = [];
+      const terrainSlopes = [];
       for (let i = 0; i < coords.length; i++) {
         if (i > 0) distances.push(distances[i-1] + haversineKm(coords[i-1], coords[i]));
         elevations.push(coords[i][2] != null ? coords[i][2] : null);
+        const terrainSample = queryLoadedElevationAtLngLat(map, {lng: coords[i][0], lat: coords[i][1]});
+        terrainSlopes.push(terrainSample && Number.isFinite(terrainSample.slopeDeg) ? terrainSample.slopeDeg : null);
         if (i > 0) {
           const dh = (coords[i][2] != null && coords[i-1][2] != null)
             ? coords[i][2] - coords[i-1][2] : null;
@@ -2709,23 +3276,25 @@ ${segs}
           slopes.push(null);
         }
       }
-      return {distances, elevations, slopes};
+      return {distances, elevations, slopes, terrainSlopes};
     }
 
     function updateProfile() {
       const t = getActiveTrack();
       if (!t || t.coords.length < 2 || profileClosed) {
         if (!t || t.coords.length < 2) {
-          profilePanel.classList.remove('visible');
-          if (profileChart) { profileChart.destroy(); profileChart = null; }
+          closeProfile(false);
         }
+        syncProfileToggleButton();
         return;
       }
-      const {distances, elevations, slopes} = computeProfile(t.coords);
+      const {distances, elevations, slopes, terrainSlopes} = computeProfile(t.coords);
       const labels = distances.map(d => d.toFixed(2));
 
-      if (profileChart) { profileChart.destroy(); profileChart = null; }
+      destroyProfileChart();
       profilePanel.classList.add('visible');
+      syncBottomRightOffset();
+      syncProfileToggleButton();
 
       profileChart = new Chart(profileCanvas, {
         type: 'line',
@@ -2745,11 +3314,22 @@ ${segs}
               spanGaps: true
             },
             {
-              label: 'Slope (°)',
+              label: 'Track slope (°)',
               data: slopes,
               borderColor: '#e53935',
               pointRadius: 0,
               borderWidth: 1,
+              tension: 0.3,
+              yAxisID: 'ySlope',
+              spanGaps: true
+            },
+            {
+              label: 'Terrain slope (°)',
+              data: terrainSlopes,
+              borderColor: '#7c3aed',
+              pointRadius: 0,
+              borderWidth: 1,
+              borderDash: [5, 3],
               tension: 0.3,
               yAxisID: 'ySlope',
               spanGaps: true
@@ -2760,6 +3340,10 @@ ${segs}
           responsive: true,
           maintainAspectRatio: false,
           animation: false,
+          onHover: (_event, activeElements) => {
+            if (activeElements && activeElements.length) setProfileHoverVertex(activeElements[0].index);
+            else clearProfileHoverVertex();
+          },
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: true, position: 'top', labels: { boxWidth: 12, font: {size: 10} } },
