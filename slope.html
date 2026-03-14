@@ -109,12 +109,20 @@
     .search-result-name { font-weight: 600; }
     .search-result-detail { opacity: 0.6; font-size: 11px; }
 
-    #controls {
-      background: rgba(255,255,255,0.94);
-      border-radius: 8px;
-      padding: 10px 12px;
+    .panel-surface {
+      background: rgba(255,255,255,0.7);
+      border-radius: 12px;
       box-shadow: 0 1px 6px rgba(0,0,0,0.25);
-      min-width: 280px;
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+
+    .panel-padded {
+      padding: 10px 12px;
+    }
+
+    #controls {
+      min-width: 180px;
       font-size: 13px;
     }
     #controls.collapsed { display: none; }
@@ -122,15 +130,18 @@
     #legend {
       position: absolute;
       left: 10px;
-      bottom: 20px;
+      bottom: var(--bottom-overlay-bottom);
       z-index: 10;
-      background: rgba(255,255,255,0.94);
-      border-radius: 8px;
-      padding: 10px 12px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
       min-width: 260px;
       font-size: 12px;
       line-height: 1.3;
+    }
+    #legend.cursor-only .ramp,
+    #legend.cursor-only .labels {
+      display: none;
+    }
+    #legend.cursor-only #cursor-info {
+      margin-top: 0;
     }
 
     .row { margin: 6px 0; }
@@ -181,14 +192,9 @@
       gap: 6px;
     }
     #track-panel-shell.visible {
-      background: rgba(255,255,255,0.5);
-      backdrop-filter: blur(2px);
-      border-radius: 12px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
       padding: 8px 10px 10px;
-      flex-direction: row;
-      align-items: flex-start;
-      gap: 10px;
+      align-items: stretch;
+      gap: 0;
     }
     #track-tool-row {
       display: flex;
@@ -214,14 +220,6 @@
       overflow-y: auto;
       display: none;
     }
-    #track-panel-shell.visible #track-panel {
-      order: 1;
-      min-width: 0;
-    }
-    #track-panel-shell.visible #track-tool-row {
-      order: 2;
-      flex-shrink: 0;
-    }
     #track-panel.visible { display: block; }
     .track-panel-header {
       display: flex;
@@ -229,7 +227,13 @@
       gap: 8px;
       margin-bottom: 4px;
     }
-    #track-panel h3 { margin: 0 auto 0 0; font-size: 13px; }
+    #track-panel h3 { margin: 0; font-size: 13px; }
+    #track-panel .track-panel-header #profile-toggle-btn {
+      margin-left: auto;
+    }
+    #track-panel .track-panel-header #track-tool-row {
+      flex-shrink: 0;
+    }
     #profile-toggle-btn {
       background: rgba(74,144,217,0.12);
       color: #245480;
@@ -311,16 +315,16 @@
     #mobile-move-hint.visible { display: block; }
 
     :root {
-      --bottom-right-controls-bottom: 12px;
+      --bottom-overlay-bottom: 12px;
       --bottom-right-surface: rgba(255,255,255,0.28);
       --bottom-right-surface-hover: rgba(255,255,255,0.62);
     }
     body.profile-open {
-      --bottom-right-controls-bottom: 148px;
+      --bottom-overlay-bottom: 148px;
     }
     .maplibregl-ctrl-bottom-right {
       right: 10px;
-      bottom: var(--bottom-right-controls-bottom);
+      bottom: var(--bottom-overlay-bottom);
     }
     .maplibregl-ctrl-bottom-right {
       display: flex;
@@ -373,7 +377,6 @@
       left: 0;
       right: 0;
       z-index: 20;
-      background: #fff;
       border-top: 1px solid rgba(0,0,0,0.12);
       height: 140px;
       display: none;
@@ -408,10 +411,11 @@
       <div id="search-results"></div>
     </div>
   </div>
-  <div id="controls">
+  <div id="controls" class="panel-surface panel-padded">
     <div class="row">
       <label for="mode"><strong>Mode</strong></label><br />
       <select id="mode">
+        <option value=""></option>
         <option value="slope" selected>Slope</option>
         <option value="aspect">Aspect</option>
         <option value="color-relief">Color relief</option>
@@ -506,12 +510,12 @@
   <div id="drop-overlay">Drop GPX / GeoJSON file here</div>
   <div id="mobile-move-hint">Pan map to move point &bull; tap elsewhere to deselect</div>
 
-  <div id="profile-panel">
+  <div id="profile-panel" class="panel-surface">
     <button id="profile-close" title="Close">&times;</button>
     <canvas id="profile-canvas"></canvas>
   </div>
 
-  <div id="legend">
+  <div id="legend" class="panel-surface panel-padded">
     <div id="legendRamp" class="ramp" title="Slope (degrees)"></div>
     <div id="legendLabels" class="labels"></div>
     <div id="cursor-info">Elevation: <code id="cursorElevation">n/a</code> &middot; Slope: <code id="cursorSlope">n/a</code></div>
@@ -857,7 +861,7 @@
         const hasTerrainExaggeration = Number.isFinite(terrainExaggerationRaw) && terrainExaggerationRaw >= 1 && terrainExaggerationRaw <= 3;
         const hasBearing = Number.isFinite(bearingRaw);
         const hasPitch = Number.isFinite(pitchRaw) && pitchRaw >= 0 && pitchRaw <= 85;
-        const validModes = new Set(['slope', 'aspect', 'color-relief']);
+        const validModes = new Set(['', 'slope', 'aspect', 'color-relief']);
 
         return {
           center: (hasLng && hasLat) ? [lngRaw, latRaw] : fallback.center,
@@ -1093,10 +1097,17 @@
     // </elevation sampling end>
 
     function updateLegend() {
+      const legend = document.getElementById('legend');
       const ramp = document.getElementById('legendRamp');
       const labels = document.getElementById('legendLabels');
 
-      if (state.mode === 'slope') {
+      if (!state.mode) {
+        legend.classList.add('cursor-only');
+        ramp.title = '';
+        ramp.style.background = 'none';
+        labels.innerHTML = '';
+      } else if (state.mode === 'slope') {
+        legend.classList.remove('cursor-only');
         ramp.title = 'Slope (degrees)';
         ramp.style.background = rampToLegendCss('slope');
         // semi-opaque legend-ticks are superposed at 15º (6+1 spans) and 15º (18+1 spans) intervals
@@ -1104,11 +1115,13 @@
          '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
           '<span>0°</span><span>15°</span><span>30°</span><span>45°</span><span>60°</span><span>75°</span><span>90°</span>';
       } else if (state.mode === 'aspect') {
+        legend.classList.remove('cursor-only');
         ramp.title = 'Aspect (compass direction)';
         ramp.style.background = rampToLegendCss('aspect');
         labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span></div>' +
           '<span>N</span><span>E</span><span>S</span><span>W</span><span>N</span>';
       } else {
+        legend.classList.remove('cursor-only');
         ramp.title = 'Elevation color relief (meters)';
         ramp.style.background = interpolateStopsToLegendCss(COLOR_RELIEF_STOPS);
         labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
@@ -1554,7 +1567,7 @@
         },
 
         render(gl, args) {
-          if (state.mode === 'color-relief') {
+          if (!state.mode || state.mode === 'color-relief') {
             state.internalCount = 0;
             state.fallbackCount = 0;
             updateStatus();
@@ -1705,6 +1718,7 @@
       bearing: initialView.bearing,
       pitch: initialView.pitch,
       maxTileCacheZoomLevels: 20,
+      attributionControl: false,
       style: {
         version: 8,
         glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -1963,6 +1977,7 @@
       maxWidth: 120
     });
     map.addControl(scaleControl, 'bottom-right');
+    map.addControl(new maplibregl.AttributionControl(), 'bottom-right');
     map.addControl(navigationControl, 'bottom-right');
     map.addControl(geolocateControl, 'bottom-right');
 
@@ -2263,6 +2278,7 @@
           'text-font': ['Noto Sans Bold']
         }
       });
+      applyContourVisibility(map);
 
       // <elevation sampling start>
       let cursorRaf = 0;
@@ -2375,7 +2391,9 @@
     const drawBtn = document.getElementById('draw-btn');
     const tracksBtn = document.getElementById('tracks-btn');
     const trackPanelShell = document.getElementById('track-panel-shell');
+    const trackToolRow = document.getElementById('track-tool-row');
     const trackPanel = document.getElementById('track-panel');
+    const trackPanelHeader = trackPanel.querySelector('.track-panel-header');
     const trackListEl = document.getElementById('track-list');
     const profileToggleBtn = document.getElementById('profile-toggle-btn');
     const dropOverlay = document.getElementById('drop-overlay');
@@ -2608,13 +2626,19 @@
       profileToggleBtn.disabled = !canShow;
       const isVisible = canShow && profilePanel.classList.contains('visible') && !profileClosed;
       profileToggleBtn.classList.toggle('active', isVisible);
-      profileToggleBtn.textContent = isVisible ? 'Hide profile' : 'Profile';
+      profileToggleBtn.textContent = isVisible ? 'Profile' : 'Show Profile';
     }
 
     function syncTrackPanelShell() {
       const isVisible = trackPanel.classList.contains('visible');
       const hasTracks = tracks.length > 0;
+      const toolRowParent = isVisible ? trackPanelHeader : trackPanelShell;
+      const toolRowNextSibling = isVisible ? null : trackPanel;
+      if (trackToolRow.parentElement !== toolRowParent) {
+        toolRowParent.insertBefore(trackToolRow, toolRowNextSibling);
+      }
       trackPanelShell.classList.toggle('visible', isVisible);
+      trackPanelShell.classList.toggle('panel-surface', isVisible);
       tracksBtn.disabled = !hasTracks;
       tracksBtn.classList.toggle('active', isVisible && hasTracks);
       tracksBtn.textContent = isVisible && hasTracks ? '×' : '📍'; // FIXME align icon
@@ -2625,6 +2649,7 @@
       trackPanel.classList.toggle('visible', visible && tracks.length > 0);
       syncTrackPanelShell();
     }
+    syncTrackPanelShell();
 
     // --- Track panel UI ---
     function trackStats(t) {
@@ -2651,13 +2676,26 @@
         }
       }
       const terrainSlopeAlongTrack = computeTerrainSlopeAlongTrack(coords, cumulativeMeters, dist * 1000);
+      const segmentMaxSlope = weightedSlopeDist > 0
+        ? coords.reduce((maxSlope, _coord, index) => {
+          if (index === 0) return maxSlope;
+          const segMeters = cumulativeMeters[index] - cumulativeMeters[index - 1];
+          if (segMeters <= 0 || coords[index][2] == null || coords[index - 1][2] == null) return maxSlope;
+          const dh = coords[index][2] - coords[index - 1][2];
+          const slopeDeg = Math.atan2(Math.abs(dh), segMeters) * 180 / Math.PI;
+          return Math.max(maxSlope, slopeDeg);
+        }, -Infinity)
+        : null;
+      const maxTerrainSlope = terrainSlopeAlongTrack.maximum != null
+        ? terrainSlopeAlongTrack.maximum
+        : (segmentMaxSlope != null && Number.isFinite(segmentMaxSlope) ? segmentMaxSlope : null);
       t._statsCache = {
         dist,
         gain,
         loss,
         avgSlope: weightedSlopeDist > 0 ? weightedSlopeSum / weightedSlopeDist : null,
         terrainSlopeAlongTrack: terrainSlopeAlongTrack.average,
-        maxTerrainSlope: terrainSlopeAlongTrack.maximum,
+        maxTerrainSlope,
         terrainSlopeResolvedCount: terrainSlopeAlongTrack.resolvedCount,
         terrainSlopeSampleCount: terrainSlopeAlongTrack.sampleCount
       };
@@ -2670,12 +2708,12 @@
         const div = document.createElement('div');
         div.className = 'track-item' + (t.id === activeTrackId ? ' active' : '');
         const s = t.coords.length >= 2 ? trackStats(t) : null;
-        const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m` : '';
+        const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m · ${t.coords.length} pts` : `${t.coords.length} pts`;
         const detailStatsStr = (s && t.id === activeTrackId)
-          ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Maximum terrain slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
+          ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Max slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
           : '';
         div.innerHTML = `<span class="track-color" style="background:${t.color}"></span>` +
-          `<span class="track-name">${t.name} (${t.coords.length} pts)` +
+          `<span class="track-name">${t.name}` +
           (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
           (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
           `</span>` +
