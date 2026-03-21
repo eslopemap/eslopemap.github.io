@@ -110,7 +110,7 @@
     .search-result-detail { opacity: 0.6; font-size: 11px; }
 
     .panel-surface {
-      background: rgba(255,255,255,0.7);
+      background: rgba(255,255,255,0.6);
       border-radius: 12px;
       box-shadow: 0 1px 6px rgba(0,0,0,0.25);
       backdrop-filter: blur(2px);
@@ -118,7 +118,7 @@
     }
 
     .panel-padded {
-      padding: 10px 12px;
+      padding: 7px 9px;
     }
 
     #controls {
@@ -148,13 +148,12 @@
     .legend-title { font-weight: 700; margin-bottom: 6px; }
     .ramp {
       height: 12px;
-      border-radius: 4px;
-      border: 1px solid rgba(0,0,0,0.15);
+      border-bottom: 1px solid rgba(0,0,0,0.4);
       margin: 6px 0 4px;
     }
     .labels { display: flex; justify-content: space-between; opacity: 0.85; position: relative; }
     .legend-ticks { position: absolute; top: -5px; left: 0; right: 0; height: 5px; display: flex; justify-content: space-between; pointer-events: none; }
-    .legend-ticks span { width: 1px; height: 5px; background: rgba(0,0,0,0.35); }
+    .legend-ticks span { width: 1px; height: 8px; background: rgba(0,0,0,0.25); }
     #cursor-info { margin-top: 6px; font-size: 11px; opacity: 0.85; }
     #cursor-info code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; }
     #status { font-size: 12px; opacity: 0.85; }
@@ -515,7 +514,7 @@
     <canvas id="profile-canvas"></canvas>
   </div>
 
-  <div id="legend" class="panel-surface panel-padded">
+  <div id="legend" class="panel-surface panel-padded" style="background: rgba(255,255,255,0.3);">
     <div id="legendRamp" class="ramp" title="Slope (degrees)"></div>
     <div id="legendLabels" class="labels"></div>
     <div id="cursor-info">Elevation: <code id="cursorElevation">n/a</code> &middot; Slope: <code id="cursorSlope">n/a</code></div>
