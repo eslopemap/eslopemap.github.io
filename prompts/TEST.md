@@ -64,8 +64,8 @@ npx playwright install chromium
 
 **Test structure** (`tests/e2e/`):
 
-#### Core map tests
-- Map loads and renders tiles
+#### Core map tests (low prio)
+- Map loads and renders tiles 
 - Settings panel toggles open/close
 - Basemap switching works
 - Mode switching (slope/aspect/color-relief/none)

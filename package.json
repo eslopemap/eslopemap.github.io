@@ -1,0 +1,27 @@
+{
+  "name": "slopedothtml",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://gist.github.com/ff8c4f3d74e1be6747baf3c91b41a50c.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://gist.github.com/ff8c4f3d74e1be6747baf3c91b41a50c"
+  },
+  "homepage": "https://gist.github.com/ff8c4f3d74e1be6747baf3c91b41a50c",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "serve": "^14.2.6"
+  }
+}
