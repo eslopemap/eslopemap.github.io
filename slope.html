@@ -4,7 +4,7 @@
   <!-- https://gist.github.com/eddy-geek/ff8c4f3d74e1be6747baf3c91b41a50c -->
   <!-- .../gh api --method PATCH /gists/ff8c4f3d74e1be6747baf3c91b41a50c -F "files[slope.html][content]=@slope.html" -F "files[slope.md][content]=@slope.md" --jq '.html_url' -->
   <meta charset="utf-8" />
-  <title>Hybrid DEM Slope/Aspect/Color Relief with Border Backfill — MapLibre GL JS</title>
+  <title>Slope viewer & editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
 
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.20.0/dist/maplibre-gl.css" />
@@ -500,12 +500,27 @@
 
     /* Undo-last-point button */
     #undo-btn { font-size: 14px; }
-    /* Insert-here button */
-    #insert-btn { font-size: 16px; font-weight: 700; min-width: 28px; }
-    #insert-btn.active { background: #4a90d9; color: #fff; }
     /* Mobile-friendly mode button */
     #mobile-mode-btn { font-size: 14px; }
     #mobile-mode-btn.active { background: #4a90d9; color: #fff; }
+    /* On-map insert popup near selected vertex */
+    .vertex-insert-popup { cursor: pointer; }
+    .vertex-insert-popup .insert-popup-btn {
+      background: rgba(255,255,255,0.94);
+      border: 1.5px solid #4a90d9;
+      border-radius: 50%;
+      width: 24px; height: 24px;
+      font-size: 16px; font-weight: 700;
+      color: #4a90d9;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+      line-height: 1;
+    }
+    .vertex-insert-popup .insert-popup-btn:hover,
+    .vertex-insert-popup .insert-popup-btn.active {
+      background: #4a90d9; color: #fff;
+    }
     /* end track editor */
   </style>
 </head>
@@ -616,7 +631,6 @@
 
   <div id="track-panel-shell">
     <div id="track-tool-row">
-      <button id="insert-btn" class="tb-btn" title="Insert points after selected vertex" style="display:none">+</button>
       <button id="mobile-mode-btn" class="tb-btn" title="Mobile-friendly edit mode" style="display:none">📱</button>
       <button id="undo-btn" class="tb-btn" title="Delete last point" style="display:none">🗑️</button>
       <button id="draw-btn" class="tb-btn" title="Draw track (click to add points, double-click to finish)">&#9998;</button>
@@ -2636,12 +2650,13 @@
     let hoverInsertInfo = null; // {lngLat, insertAfter} — desktop hover-insert marker
     let selectedVertexIndex = null; // index of selected vertex in editing track
     let insertAfterIdx = null; // when set, new points insert after this index
-    let mobileFriendlyMode = false; // mobile-friendly edit mode (crosshair + center insert)
+    const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    let mobileFriendlyMode = isMobile; // default on for mobile
+    let insertPopupMarker = null; // MapLibre marker for on-map + button
 
     const drawBtn = document.getElementById('draw-btn');
     const tracksBtn = document.getElementById('tracks-btn');
     const undoBtn = document.getElementById('undo-btn');
-    const insertBtn = document.getElementById('insert-btn');
     const mobileModeBtn = document.getElementById('mobile-mode-btn');
     const trackPanelShell = document.getElementById('track-panel-shell');
     const trackToolRow = document.getElementById('track-tool-row');
@@ -2671,13 +2686,51 @@
       const t = getActiveTrack ? getActiveTrack() : null;
       const show = t && t.coords.length > 0 && isTrackEditing(t.id);
       undoBtn.style.display = show ? '' : 'none';
-      // Show insert button only when a vertex is selected in edit mode
-      insertBtn.style.display = (show && selectedVertexIndex != null) ? '' : 'none';
-      insertBtn.classList.toggle('active', insertAfterIdx != null);
-      // Show mobile-friendly button only on mobile when editing
-      mobileModeBtn.style.display = (isMobile && show) ? '' : 'none';
+      // Show mobile-friendly button on mobile when editing, or on localhost for debug
+      mobileModeBtn.style.display = ((isMobile || isLocalhost) && show) ? '' : 'none';
       mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
       updateVertexHighlight();
+      updateInsertPopup();
+      updateInsertPreview();
+    }
+
+    // --- On-map insert popup (+ button near selected vertex) ---
+    function updateInsertPopup() {
+      const t = editingTrackId ? tracks.find(tr => tr.id === editingTrackId) : null;
+      if (!t || selectedVertexIndex == null || selectedVertexIndex >= t.coords.length) {
+        removeInsertPopup();
+        return;
+      }
+      const coord = t.coords[selectedVertexIndex];
+      const lngLat = [coord[0], coord[1]];
+      if (!insertPopupMarker) {
+        const el = document.createElement('div');
+        el.className = 'vertex-insert-popup';
+        el.innerHTML = '<button class="insert-popup-btn" title="Insert points after this vertex">+</button>';
+        el.querySelector('.insert-popup-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (insertAfterIdx != null) {
+            insertAfterIdx = null;
+          } else if (selectedVertexIndex != null) {
+            insertAfterIdx = selectedVertexIndex;
+          }
+          syncUndoBtn();
+        });
+        insertPopupMarker = new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] })
+          .setLngLat(lngLat)
+          .addTo(map);
+      } else {
+        insertPopupMarker.setLngLat(lngLat);
+      }
+      const btn = insertPopupMarker.getElement().querySelector('.insert-popup-btn');
+      if (btn) btn.classList.toggle('active', insertAfterIdx != null);
+    }
+
+    function removeInsertPopup() {
+      if (insertPopupMarker) {
+        insertPopupMarker.remove();
+        insertPopupMarker = null;
+      }
     }
 
     function nextColor() {
@@ -2906,6 +2959,27 @@
           }
         });
       }
+      // Insert-preview line source/layer (dashed line showing where next point will connect)
+      const INSERT_PREVIEW_SOURCE_ID = 'insert-preview-line';
+      const INSERT_PREVIEW_LAYER_ID = 'insert-preview-line-layer';
+      if (!map.getSource(INSERT_PREVIEW_SOURCE_ID)) {
+        map.addSource(INSERT_PREVIEW_SOURCE_ID, {
+          type: 'geojson',
+          data: {type: 'FeatureCollection', features: []}
+        });
+      }
+      if (!map.getLayer(INSERT_PREVIEW_LAYER_ID)) {
+        map.addLayer({
+          id: INSERT_PREVIEW_LAYER_ID,
+          type: 'line',
+          source: INSERT_PREVIEW_SOURCE_ID,
+          paint: {
+            'line-color': 'rgba(74,144,217,0.6)',
+            'line-width': 2,
+            'line-dasharray': [4, 4]
+          }
+        });
+      }
     }
 
     function clearHoverInsertMarker() {
@@ -2923,6 +2997,53 @@
           properties: {}
         }]});
       }
+    }
+
+    // --- Insert preview: show dashed line from attachment points to cursor/crosshair ---
+    let insertPreviewLngLat = null; // updated by mousemove or mobile crosshair
+    function updateInsertPreview() {
+      const src = map.getSource('insert-preview-line');
+      if (!src) return;
+      const t = editingTrackId ? tracks.find(tr => tr.id === editingTrackId) : null;
+      if (!t || !t.coords.length) { src.setData({type: 'FeatureCollection', features: []}); return; }
+
+      // Determine the target point (where the next click would go)
+      let target = insertPreviewLngLat;
+      if (mobileFriendlyMode && editingTrackId) {
+        const center = map.getCenter();
+        target = { lng: center.lng, lat: center.lat };
+      }
+      if (!target) { src.setData({type: 'FeatureCollection', features: []}); return; }
+
+      const features = [];
+      const tCoord = [target.lng, target.lat];
+
+      if (insertAfterIdx != null && insertAfterIdx < t.coords.length) {
+        // Insert mode: show lines from insertAfterIdx to target and from target to insertAfterIdx+1
+        const prev = t.coords[insertAfterIdx];
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [[prev[0], prev[1]], tCoord] },
+          properties: {}
+        });
+        if (insertAfterIdx + 1 < t.coords.length) {
+          const next = t.coords[insertAfterIdx + 1];
+          features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: [tCoord, [next[0], next[1]]] },
+            properties: {}
+          });
+        }
+      } else if (t.coords.length > 0) {
+        // Append mode: show line from last point to target
+        const last = t.coords[t.coords.length - 1];
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [[last[0], last[1]], tCoord] },
+          properties: {}
+        });
+      }
+      src.setData({ type: 'FeatureCollection', features });
     }
 
     function findClosestPointOnTrack(t, mousePoint) {
@@ -3113,7 +3234,7 @@
       updateVertexHighlight();
       renderTrackList();
       syncUndoBtn();
-      if (isMobile && mobileFriendlyMode) {
+      if (mobileFriendlyMode) {
         drawCrosshair.classList.add('visible');
         showToast('Tap anywhere to add a point at center', 3000);
       }
@@ -3124,6 +3245,7 @@
       editingIsNewTrack = false;
       selectedVertexIndex = null;
       insertAfterIdx = null;
+      removeInsertPopup();
       drawBtn.classList.remove('active');
       setDefaultMapCursor();
       drawCrosshair.classList.remove('visible');
@@ -3211,16 +3333,6 @@
       syncUndoBtn();
     });
 
-    insertBtn.addEventListener('click', () => {
-      if (insertAfterIdx != null) {
-        // Toggle off insert mode
-        insertAfterIdx = null;
-      } else if (selectedVertexIndex != null) {
-        insertAfterIdx = selectedVertexIndex;
-      }
-      syncUndoBtn();
-    });
-
     mobileModeBtn.addEventListener('click', () => {
       mobileFriendlyMode = !mobileFriendlyMode;
       mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
@@ -3275,12 +3387,14 @@
         const hitPt = hitTestVertex(e.point);
         if (hitPt && hitPt.index != null) {
           // Mobile friendly mode: start move
-          if (isMobile && mobileFriendlyMode) {
+          if (mobileFriendlyMode) {
+            selectedVertexIndex = hitPt.index;
             mobileSelectedVertex = hitPt;
             mobileHint.textContent = 'Drag screen to move point \u00b7 tap elsewhere to deselect';
             mobileHint.classList.add('visible');
             map.dragPan.disable();
             showToast('Drag screen to move', 2000);
+            syncUndoBtn();
             return;
           }
           // Select vertex (toggle)
@@ -3296,13 +3410,13 @@
         }
 
         // Deselect mobile move if active
-        if (isMobile && mobileFriendlyMode && mobileSelectedVertex) {
+        if (mobileFriendlyMode && mobileSelectedVertex) {
           cancelMobileMove();
         }
 
         // Determine insertion point
         let insertLngLat = e.lngLat;
-        if (isMobile && mobileFriendlyMode) {
+        if (mobileFriendlyMode) {
           // Insert at center crosshair position
           insertLngLat = map.getCenter();
         }
@@ -3461,6 +3575,11 @@
         }
 
         if (editingTrackId) {
+          // Update insert preview with current cursor position
+          if (!mobileFriendlyMode) {
+            insertPreviewLngLat = e.lngLat;
+            updateInsertPreview();
+          }
           // Check vertex hover
           const hit = hitTestVertex(e.point);
           const isRealVertex = Boolean(hit && hit.index != null);
@@ -3599,6 +3718,13 @@
       const t = getActiveTrack();
       if (t) { renderTrackList(); updateProfile(); syncUndoBtn(); }
     }
+
+    // Update insert preview on map move (for mobile-friendly crosshair mode)
+    map.on('move', () => {
+      if (mobileFriendlyMode && editingTrackId) {
+        updateInsertPreview();
+      }
+    });
 
     // --- Drag & drop import ---
     let dragCounter = 0;
