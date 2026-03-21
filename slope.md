@@ -1,7 +1,8 @@
-# slope-hybrid-mltimap-2d — Feature List
+# slope-hybrid-mltimap-2d — Feature summary
 
 ## Map & Visualization
-- **Analysis modes** — `Slope`, `Aspect`, `Color relief`, and an empty `none` mode that disables the DEM analysis overlay entirely
+- **Analysis modes** — `Slope + Color relief` (default), `Slope`, `Aspect`, `Color relief`, and an empty `none` mode that disables the DEM analysis overlay entirely
+- **Slope + Color relief mode** — hybrid mode showing slope analysis at zoom ≥ 14 and color-relief below, with a one-zoom-level crossfade
 - **Slope / Aspect overlay** — custom WebGL layer using Horn's algorithm on raster-DEM tiles, with configurable opacity and color ramp
 - **Color relief** — DEM color ramp mode rendered with the built-in `color-relief` layer
 - **Hillshade** — multiple methods (`standard`, `basic`, `combined`, `multidirectional`, `igor`), configurable opacity
@@ -59,7 +60,8 @@
 - **Contour initialization order** — contour visibility must be re-applied after the contour layers are added, otherwise first-load state can disagree with the checkbox
 - **Contour/basemap coupling** — contour lines are auto-enabled only for OSM; switching basemaps intentionally resets the contour checkbox unless you change the logic
 - **`Mode: none` behavior** — empty mode disables the custom DEM analysis render path and hides the legend ramp/labels, but keeps cursor info visible
-- **Color relief split path** — `color-relief` is rendered via a separate MapLibre layer, not the custom WebGL analysis layer used for slope/aspect
+- **Color relief split path** — `color-relief` is rendered via a separate MapLibre layer, not the custom WebGL analysis layer used for slope/aspect; in `slope+relief` mode both layers are active with zoom-dependent opacity expressions providing the crossfade
+- **Slope + Color relief mode** — this hybrid mode uses a threshold zoom ≥ `SLOPE_RELIEF_CROSSFADE_Z` ; color-relief opacity uses a MapLibre zoom interpolation expression, while the WebGL slope opacity is pre-computed in `state.effectiveSlopeOpacity` (via `computeEffectiveSlopeOpacity`) so `render()` stays mode-agnostic; legend switches dynamically at the zoom threshold
 - **Track button state** — `tracks-btn` must be explicitly synced on startup so the disabled state matches the empty track list before any interaction
 - **Native attribution control** — when adding attribution manually in the bottom-right stack, the map must be created with `attributionControl: false` to avoid duplicate attribution UI
 - **editingTrackId vs activeTrackId** — `activeTrackId` controls selection (wider line, profile); `editingTrackId` controls which track's vertices are interactive; during draw mode, the drawing track has both set

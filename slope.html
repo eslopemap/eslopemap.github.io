@@ -520,7 +520,8 @@
       <label for="mode"><strong>Mode</strong></label><br />
       <select id="mode">
         <option value=""></option>
-        <option value="slope" selected>Slope</option>
+        <option value="slope+relief" selected>Slope + Color relief</option>
+        <option value="slope">Slope</option>
         <option value="aspect">Aspect</option>
         <option value="color-relief">Color relief</option>
       </select>
@@ -822,16 +823,18 @@
 
     const DEM_SOURCE_ID = 'dem';
     const DEM_MAX_Z = 14;
+    const SLOPE_RELIEF_CROSSFADE_Z = 11;
     const CORE_DIM = 512;
     const PAD_STRIDE = CORE_DIM + 2;
 
     const state = {
-      mode: 'slope',
+      mode: 'slope+relief',
       basemap: 'osm',
       basemapOpacity: 1,
       hillshadeOpacity: 0.10,
       hillshadeMethod: 'igor',
       slopeOpacity: 0.45,
+      effectiveSlopeOpacity: 0.45,
       showContours: true,
       showOpenSkiMap: false,
       showTileGrid: false,
@@ -958,7 +961,7 @@
         center: [6.8652, 45.8326],
         zoom: 12,
         basemap: null,
-        mode: 'slope',
+        mode: 'slope+relief',
         slopeOpacity: 0.45,
         terrain3d: false,
         terrainExaggeration: 1.4,
@@ -986,7 +989,7 @@
         const hasTerrainExaggeration = Number.isFinite(terrainExaggerationRaw) && terrainExaggerationRaw >= 1 && terrainExaggerationRaw <= 3;
         const hasBearing = Number.isFinite(bearingRaw);
         const hasPitch = Number.isFinite(pitchRaw) && pitchRaw >= 0 && pitchRaw <= 85;
-        const validModes = new Set(['', 'slope', 'aspect', 'color-relief']);
+        const validModes = new Set(['', 'slope+relief', 'slope', 'aspect', 'color-relief']);
 
         return {
           center: (hasLng && hasLat) ? [lngRaw, latRaw] : fallback.center,
@@ -1258,12 +1261,17 @@
       const ramp = document.getElementById('legendRamp');
       const labels = document.getElementById('legendLabels');
 
-      if (!state.mode) {
+      // In slope+relief mode, show the legend for whichever sub-mode is active at the current zoom
+      const effectiveMode = (state.mode === 'slope+relief')
+        ? (typeof map !== 'undefined' && map.getZoom() < SLOPE_RELIEF_CROSSFADE_Z ? 'color-relief' : 'slope')
+        : state.mode;
+
+      if (!effectiveMode) {
         legend.classList.add('cursor-only');
         ramp.title = '';
         ramp.style.background = 'none';
         labels.innerHTML = '';
-      } else if (state.mode === 'slope') {
+      } else if (effectiveMode === 'slope') {
         legend.classList.remove('cursor-only');
         ramp.title = 'Slope (degrees)';
         ramp.style.background = rampToLegendCss('slope');
@@ -1271,7 +1279,7 @@
         labels.innerHTML = '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
          '<div class="legend-ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
           '<span>0°</span><span>15°</span><span>30°</span><span>45°</span><span>60°</span><span>75°</span><span>90°</span>';
-      } else if (state.mode === 'aspect') {
+      } else if (effectiveMode === 'aspect') {
         legend.classList.remove('cursor-only');
         ramp.title = 'Aspect (compass direction)';
         ramp.style.background = rampToLegendCss('aspect');
@@ -1286,10 +1294,31 @@
       }
     }
 
+    function computeEffectiveSlopeOpacity(map) {
+      if (state.mode !== 'slope+relief') {
+        state.effectiveSlopeOpacity = state.slopeOpacity;
+        return;
+      }
+      const z = map.getZoom();
+      const t = Math.max(0, Math.min(1, z - (SLOPE_RELIEF_CROSSFADE_Z - 1)));
+      state.effectiveSlopeOpacity = state.slopeOpacity * t;
+    }
+
     function applyModeState(map) {
+      computeEffectiveSlopeOpacity(map);
       if (map.getLayer('dem-color-relief')) {
-        map.setLayoutProperty('dem-color-relief', 'visibility', state.mode === 'color-relief' ? 'visible' : 'none');
-        map.setPaintProperty('dem-color-relief', 'color-relief-opacity', state.slopeOpacity);
+        if (state.mode === 'slope+relief') {
+          // Show color-relief below crossfade zoom, fade out over one zoom level
+          map.setLayoutProperty('dem-color-relief', 'visibility', 'visible');
+          map.setPaintProperty('dem-color-relief', 'color-relief-opacity',
+            ['interpolate', ['linear'], ['zoom'],
+              SLOPE_RELIEF_CROSSFADE_Z - 1, state.slopeOpacity,
+              SLOPE_RELIEF_CROSSFADE_Z, 0
+            ]);
+        } else {
+          map.setLayoutProperty('dem-color-relief', 'visibility', state.mode === 'color-relief' ? 'visible' : 'none');
+          map.setPaintProperty('dem-color-relief', 'color-relief-opacity', state.slopeOpacity);
+        }
       }
     }
 
@@ -1724,7 +1753,7 @@
         },
 
         render(gl, args) {
-          if (!state.mode || state.mode === 'color-relief') {
+          if (!state.mode || state.mode === 'color-relief' || state.effectiveSlopeOpacity <= 0) {
             state.internalCount = 0;
             state.fallbackCount = 0;
             updateStatus();
@@ -1736,10 +1765,11 @@
 
           gl.useProgram(this.program);
           gl.uniformMatrix4fv(this.uMatrix, false, args.defaultProjectionData.mainMatrix);
-          gl.uniform1f(this.uOpacity, state.slopeOpacity);
-          gl.uniform1i(this.uMode, state.mode === 'slope' ? 0 : 1);
+          gl.uniform1f(this.uOpacity, state.effectiveSlopeOpacity);
+          const renderAsSlope = (state.mode === 'slope' || state.mode === 'slope+relief');
+          gl.uniform1i(this.uMode, renderAsSlope ? 0 : 1);
 
-          const ramp = state.mode === 'slope' ? PARSED_RAMPS.slope : PARSED_RAMPS.aspect;
+          const ramp = renderAsSlope ? PARSED_RAMPS.slope : PARSED_RAMPS.aspect;
           gl.uniform1i(this.uStepCount, ramp.stepCount);
           gl.uniform1fv(this.uStepValues, ramp.values);
           gl.uniform3fv(this.uStepColors, ramp.colors);
@@ -2396,9 +2426,16 @@
         syncViewToUrl(map);
         if (state.showTileGrid) updateDebugGridSource(map);
       });
+      map.on('zoom', () => {
+        if (state.mode === 'slope+relief') {
+          computeEffectiveSlopeOpacity(map);
+          map.triggerRepaint();
+        }
+      });
       map.on('zoomend', () => {
         syncViewToUrl(map);
         if (state.showTileGrid) updateDebugGridSource(map);
+        if (state.mode === 'slope+relief') updateLegend();
       });
       map.on('rotateend', () => {
         syncViewToUrl(map);
@@ -2413,7 +2450,7 @@
         type: 'color-relief',
         source: DEM_SOURCE_ID,
         layout: {
-          visibility: state.mode === 'color-relief' ? 'visible' : 'none'
+          visibility: (state.mode === 'color-relief' || state.mode === 'slope+relief') ? 'visible' : 'none'
         },
         paint: {
           'color-relief-opacity': state.slopeOpacity,
