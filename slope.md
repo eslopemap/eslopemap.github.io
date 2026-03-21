@@ -23,17 +23,19 @@
 ## Track Editor
 - **Drag & drop import** — GPX (tracks, segments, routes with names) and GeoJSON files, with visual drop overlay
 - **Top-right track workspace** — compact floating panel for track management and export
-- **Draw mode** — pen button in the track header; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during draw
+- **Draw mode** — pen button in the track header; creates a new track and enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
 - **Multi-track management** — color-coded tracks with selection, deletion (with confirmation), export actions, and active-track emphasis
-- **Select vs Edit** — selecting a track widens the line and shows the profile; clicking the edit button (✎) enters edit mode with fully interactive vertices
+- **Select vs Edit** — selecting a track widens the line and shows the profile; clicking the edit button (✎) enters edit mode with fully interactive vertices. No separate draw mode — editing new and existing tracks uses the same unified editing state.
+- **Vertex selection** — clicking a vertex (desktop) or tapping it (mobile) selects it with blue highlight; enables insert-here mode
+- **Insert-here** — "+" button appears when a vertex is selected; toggles insert-after mode where new points are inserted between the selected vertex and the next one
 - **Track stats** — total distance (km), elevation gain (↑), loss (↓), point count, average slope, and max slope for the active track
 - **Elevation enrichment** — all track points (imported and drawn) are enriched from the same DEM source and re-enriched when new DEM tiles load
 - **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
 - **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
 - **Ctrl/Shift/Meta+click delete** — remove individual track vertices (edit mode only)
-- **Desktop vertex editing** — drag vertices to reposition (works during draw and edit modes)
-- **Mobile vertex editing** — tap a vertex to select it, then pan the map to reposition; the point stays pinned at screen center
+- **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode)
+- **Mobile vertex editing** — two modes: default (tap=click, long-press-drag=move vertex) and mobile-friendly (📱 toggle: crosshair at center, tap inserts at center, tap vertex then pan to reposition)
 - **Delete last point** — 🗑️ button in toolbar to remove the last point; also Ctrl/Cmd+Z
 - **Export** — active track as GPX or GeoJSON; all tracks as a single GPX with multiple segments
 
@@ -64,7 +66,7 @@
 - **Slope + Color relief mode** — this hybrid mode uses a threshold zoom ≥ `SLOPE_RELIEF_CROSSFADE_Z` ; color-relief opacity uses a MapLibre zoom interpolation expression, while the WebGL slope opacity is pre-computed in `state.effectiveSlopeOpacity` (via `computeEffectiveSlopeOpacity`) so `render()` stays mode-agnostic; legend switches dynamically at the zoom threshold
 - **Track button state** — `tracks-btn` must be explicitly synced on startup so the disabled state matches the empty track list before any interaction
 - **Native attribution control** — when adding attribution manually in the bottom-right stack, the map must be created with `attributionControl: false` to avoid duplicate attribution UI
-- **editingTrackId vs activeTrackId** — `activeTrackId` controls selection (wider line, profile); `editingTrackId` controls which track's vertices are interactive; during draw mode, the drawing track has both set
+- **editingTrackId vs activeTrackId** — `activeTrackId` controls selection (wider line, profile); `editingTrackId` controls which track's vertices are interactive; when creating a new track via the draw button, `editingIsNewTrack` is set for auto-cleanup
 - **Hover-insert layer** — a separate GeoJSON source (`hover-insert-point`) holds at most one feature for the smart insert marker, avoiding re-rendering the full track GeoJSON on every mousemove
 
 ## Layer Z-Order (bottom to top)
@@ -101,27 +103,37 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 ### Track editor — state model
 - `tracks[]` — array of `{id, name, color, coords, _statsCache}`.
 - `activeTrackId` — currently selected track (wider line, profile shown, start/end markers).
-- `editingTrackId` — track whose vertices are fully interactive (mid vertices visible, drag/hover-insert enabled). Set when user clicks the ✎ edit button in the track list, or automatically during draw mode.
-- `drawMode` — boolean. When true, map clicks append vertices to the active track.
+- `editingTrackId` — track whose vertices are fully interactive (mid vertices visible, drag/hover-insert enabled). Set when user clicks the ✎ edit button in the track list, or the ✏ draw button to create a new track. There is no separate draw mode — editing a new or existing track uses the same unified editing state.
+- `editingIsNewTrack` — boolean. True when editingTrackId was set by creating a new track via the draw button. Controls auto-cleanup on exit (new tracks with < 2 points are removed).
+- `selectedVertexIndex` — index of the currently selected vertex in the editing track. Visual feedback: larger blue circle with white stroke.
+- `insertAfterIdx` — when set, new points are inserted after this index instead of appended to the end. Activated via the "+" insert button.
+- `mobileFriendlyMode` — boolean. When true on mobile, enables crosshair-centered insertion and pan-to-move vertex editing.
 
-### Track selection vs editing
+### Track selection vs editing (unified)
 - **Select** (click track name): sets `activeTrackId`. Line becomes 4px wide. Profile auto-opens. Only start/end markers visible.
-- **Edit** (click ✎ button): sets `editingTrackId`. All vertices visible (radius 4px). On desktop: vertices are draggable; the smart hover-insert marker appears when cursor nears the track line. On mobile: tap vertex → toast "Drag screen to move" → pan to reposition.
-- **Draw** (click ✏ button): creates a new track, sets both `activeTrackId` and `editingTrackId`. Map clicks add vertices. Double-click or Escape finishes. Vertices are draggable during draw.
-- Pressing Escape exits editing or draw mode.
+- **Edit** (click ✎ button on existing track, or ✏ button to create new): sets `editingTrackId`. All vertices visible. Map clicks add vertices (append or insert). Vertices are draggable. Double-click or Escape exits editing.
+- No separate draw mode — the ✏ button creates a new track and enters the same edit mode as ✎.
+
+### Vertex selection and insert-here
+- Clicking a vertex without dragging (desktop) or tapping a vertex (mobile) selects it. Selected vertex shown with blue highlight (radius 7, blue fill).
+- When a vertex is selected, a "+" button appears in the toolbar. Clicking it toggles insert-after mode.
+- In insert-after mode, new clicks insert points after the selected vertex (and chain: each insert advances the insertion index).
+- Selecting a different vertex while in insert mode moves the insertion point.
 
 ### Smart hover-insert (desktop)
 - On `mousemove`: for each segment of the editing track, project both endpoints to screen coords, compute the closest point on the segment to the cursor. Skip if the parameter t < 0.1 or > 0.9 (too close to a vertex). If the closest distance < 20px, show a single grey circle marker at that point via the `hover-insert-point` source.
 - On `mousedown` near that marker: insert a new vertex at the position, then immediately start drag for that vertex.
 
-### Mobile draw mode
-- Entering draw mode shows `#draw-crosshair` at screen center and a toast "Tap anywhere to add a point".
-- Each tap appends a coordinate. Double-tap or Escape finishes.
-- On tap of an existing vertex: toast "Drag screen to move", subsequent pan repositions the vertex.
+### Mobile editing modes
+- **Default (desktop-style)**: tap = click (adds point or selects vertex), long-press + drag = drag vertex. Same interactions as desktop.
+- **Mobile-friendly mode** (📱 button toggle, shown when editing on mobile):
+  - Crosshair shown at screen center; tapping anywhere inserts a point at the center position.
+  - Tapping a vertex selects it for pan-to-move: toast "Drag screen to move", subsequent pan repositions the vertex keeping it at the center.
+  - Touch end confirms the move.
 
 ### Delete last point
 - 🗑️ button in the toolbar (visible only when a track is being edited and has points). Removes the last coordinate.
-- Ctrl/Cmd+Z also removes the last point during edit or draw.
+- Ctrl/Cmd+Z also removes the last point during editing.
 
 ### Track deletion
 - `confirm()` dialog with the track name before removing.

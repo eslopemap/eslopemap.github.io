@@ -500,6 +500,12 @@
 
     /* Undo-last-point button */
     #undo-btn { font-size: 14px; }
+    /* Insert-here button */
+    #insert-btn { font-size: 16px; font-weight: 700; min-width: 28px; }
+    #insert-btn.active { background: #4a90d9; color: #fff; }
+    /* Mobile-friendly mode button */
+    #mobile-mode-btn { font-size: 14px; }
+    #mobile-mode-btn.active { background: #4a90d9; color: #fff; }
     /* end track editor */
   </style>
 </head>
@@ -610,6 +616,8 @@
 
   <div id="track-panel-shell">
     <div id="track-tool-row">
+      <button id="insert-btn" class="tb-btn" title="Insert points after selected vertex" style="display:none">+</button>
+      <button id="mobile-mode-btn" class="tb-btn" title="Mobile-friendly edit mode" style="display:none">📱</button>
       <button id="undo-btn" class="tb-btn" title="Delete last point" style="display:none">🗑️</button>
       <button id="draw-btn" class="tb-btn" title="Draw track (click to add points, double-click to finish)">&#9998;</button>
       <button id="tracks-btn" class="tb-btn" title="Track list" disabled>📍</button>
@@ -2528,7 +2536,7 @@
       // Mobile: show crosshair on tap with elevation info
       if (isMobile) {
         map.on('click', (e) => {
-          if (drawMode) return;
+          if (editingTrackId) return;
           const result = queryLoadedElevationAtLngLat(map, e.lngLat);
           if (state.cursorInfoMode !== 'no') {
             mobileCrosshair.style.left = e.originalEvent.clientX + 'px';
@@ -2621,15 +2629,20 @@
     const tracks = []; // {id, name, color, coords:[[lng,lat,ele],...]}
     let activeTrackId = null;
     let editingTrackId = null;
-    let drawMode = false;
+    let editingIsNewTrack = false; // true when track was just created via draw button
     let dragVertexInfo = null; // {trackId, index} — desktop drag
     let mobileSelectedVertex = null; // {trackId, index} — mobile move mode
     let suppressNextMapClick = false;
     let hoverInsertInfo = null; // {lngLat, insertAfter} — desktop hover-insert marker
+    let selectedVertexIndex = null; // index of selected vertex in editing track
+    let insertAfterIdx = null; // when set, new points insert after this index
+    let mobileFriendlyMode = false; // mobile-friendly edit mode (crosshair + center insert)
 
     const drawBtn = document.getElementById('draw-btn');
     const tracksBtn = document.getElementById('tracks-btn');
     const undoBtn = document.getElementById('undo-btn');
+    const insertBtn = document.getElementById('insert-btn');
+    const mobileModeBtn = document.getElementById('mobile-mode-btn');
     const trackPanelShell = document.getElementById('track-panel-shell');
     const trackToolRow = document.getElementById('track-tool-row');
     const trackPanel = document.getElementById('track-panel');
@@ -2651,13 +2664,20 @@
     }
 
     function isTrackEditing(tId) {
-      return tId != null && (tId === editingTrackId || (drawMode && tId === activeTrackId));
+      return tId != null && tId === editingTrackId;
     }
 
     function syncUndoBtn() {
       const t = getActiveTrack ? getActiveTrack() : null;
       const show = t && t.coords.length > 0 && isTrackEditing(t.id);
       undoBtn.style.display = show ? '' : 'none';
+      // Show insert button only when a vertex is selected in edit mode
+      insertBtn.style.display = (show && selectedVertexIndex != null) ? '' : 'none';
+      insertBtn.classList.toggle('active', insertAfterIdx != null);
+      // Show mobile-friendly button only on mobile when editing
+      mobileModeBtn.style.display = (isMobile && show) ? '' : 'none';
+      mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
+      updateVertexHighlight();
     }
 
     function nextColor() {
@@ -2808,6 +2828,7 @@
       const isActive = ['==', ['get', 'id'], ['global-state', 'activeTrackId']];
       const isEditing = ['==', ['get', 'id'], ['global-state', 'editingTrackId']];
       const isStartOrEnd = ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']];
+      const isSelected = ['all', isEditing, ['==', ['get', 'idx'], ['global-state', 'selectedVertexIdx']]];
       map.addSource(trackSourceId(t), { type: 'geojson', data: trackGeoJSON(t) });
       map.addLayer({
         id: trackLineLayerId(t), type: 'line', source: trackSourceId(t),
@@ -2823,15 +2844,19 @@
         filter: ['==', '$type', 'Point'],
         paint: {
           'circle-radius': ['case',
+            isSelected, 7,
             ['all', isEditing, ['==', ['get', 'role'], 'mid']], 4,
             isEditing, 4,
             ['all', isActive, isStartOrEnd], 4,
             isStartOrEnd, 3,
             0],
-          'circle-color': ['match', ['get', 'role'],
-            'start', '#22c55e', 'end', '#ef4444', t.color],
-          'circle-stroke-color': '#fff',
+          'circle-color': ['case',
+            isSelected, '#4a90d9',
+            ['match', ['get', 'role'],
+              'start', '#22c55e', 'end', '#ef4444', t.color]],
+          'circle-stroke-color': ['case', isSelected, '#fff', '#fff'],
           'circle-stroke-width': ['case',
+            isSelected, 2.5,
             isEditing, 1.5,
             ['all', isActive, isStartOrEnd], 1.5,
             isStartOrEnd, 1,
@@ -2948,6 +2973,7 @@
     function updateVertexHighlight() {
       map.setGlobalStateProperty('activeTrackId', activeTrackId);
       map.setGlobalStateProperty('editingTrackId', editingTrackId);
+      map.setGlobalStateProperty('selectedVertexIdx', selectedVertexIndex != null ? selectedVertexIndex : -1);
     }
 
     function syncProfileToggleButton() {
@@ -3078,14 +3104,42 @@
     }
 
     function enterEditMode(tId) {
-      if (drawMode) return;
+      if (editingTrackId && editingTrackId !== tId) exitEditMode();
       editingTrackId = tId;
+      selectedVertexIndex = null;
+      insertAfterIdx = null;
+      map.getCanvas().style.cursor = 'crosshair';
+      drawBtn.classList.add('active');
       updateVertexHighlight();
       renderTrackList();
       syncUndoBtn();
+      if (isMobile && mobileFriendlyMode) {
+        drawCrosshair.classList.add('visible');
+        showToast('Tap anywhere to add a point at center', 3000);
+      }
     }
 
     function exitEditMode() {
+      const wasNewTrack = editingIsNewTrack;
+      editingIsNewTrack = false;
+      selectedVertexIndex = null;
+      insertAfterIdx = null;
+      drawBtn.classList.remove('active');
+      setDefaultMapCursor();
+      drawCrosshair.classList.remove('visible');
+      if (mobileSelectedVertex) cancelMobileMove();
+      const t = editingTrackId ? tracks.find(tr => tr.id === editingTrackId) : null;
+      if (wasNewTrack && t && t.coords.length < 2) {
+        // Auto-cleanup new tracks with < 2 points
+        const idx = tracks.indexOf(t);
+        if (idx >= 0) {
+          removeTrackFromMap(t);
+          tracks.splice(idx, 1);
+          if (activeTrackId === t.id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+        }
+      } else if (t) {
+        updateProfile();
+      }
       editingTrackId = null;
       clearHoverInsertMarker();
       updateVertexHighlight();
@@ -3123,58 +3177,33 @@
     }
 
     function setDefaultMapCursor() {
-      if (!drawMode) map.getCanvas().style.cursor = 'cell';
+      if (!editingTrackId) map.getCanvas().style.cursor = 'cell';
     }
 
-    // --- Draw mode ---
-    function enterDrawMode() {
+    // --- Enter/exit editing for new tracks (draw button) ---
+    function startNewTrack() {
       if (editingTrackId) exitEditMode();
-      drawMode = true;
-      drawBtn.classList.add('active');
-      map.getCanvas().style.cursor = 'crosshair';
+      editingIsNewTrack = true;
       const t = createTrack('Track ' + (tracks.length + 1), []);
-      editingTrackId = t.id;
-      updateVertexHighlight();
-      syncUndoBtn();
-      if (isMobile) {
-        drawCrosshair.classList.add('visible');
-        showToast('Tap anywhere to add a point', 3000);
-      }
-    }
-
-    function exitDrawMode() {
-      drawMode = false;
-      drawBtn.classList.remove('active');
-      setDefaultMapCursor();
-      drawCrosshair.classList.remove('visible');
-      const t = getActiveTrack();
-      if (t && t.coords.length < 2) {
-        // deleteTrack would ask confirm; skip for auto-cleanup
-        const idx = tracks.indexOf(t);
-        if (idx >= 0) {
-          removeTrackFromMap(t);
-          tracks.splice(idx, 1);
-          if (activeTrackId === t.id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
-        }
-      } else {
-        updateProfile();
-      }
-      editingTrackId = null;
-      clearHoverInsertMarker();
-      updateVertexHighlight();
-      renderTrackList();
-      syncUndoBtn();
+      enterEditMode(t.id);
     }
 
     drawBtn.addEventListener('click', () => {
-      if (drawMode) exitDrawMode();
-      else enterDrawMode();
+      if (editingTrackId) exitEditMode();
+      else startNewTrack();
     });
 
     undoBtn.addEventListener('click', () => {
       const t = getActiveTrack();
       if (!t || !t.coords.length) return;
       t.coords.pop();
+      // Adjust selectedVertexIndex and insertAfterIdx if needed
+      if (selectedVertexIndex != null && selectedVertexIndex >= t.coords.length) {
+        selectedVertexIndex = t.coords.length > 0 ? t.coords.length - 1 : null;
+      }
+      if (insertAfterIdx != null && insertAfterIdx >= t.coords.length) {
+        insertAfterIdx = t.coords.length > 0 ? t.coords.length - 1 : null;
+      }
       invalidateTrackStats(t);
       refreshTrackSource(t);
       renderTrackList();
@@ -3182,37 +3211,57 @@
       syncUndoBtn();
     });
 
+    insertBtn.addEventListener('click', () => {
+      if (insertAfterIdx != null) {
+        // Toggle off insert mode
+        insertAfterIdx = null;
+      } else if (selectedVertexIndex != null) {
+        insertAfterIdx = selectedVertexIndex;
+      }
+      syncUndoBtn();
+    });
+
+    mobileModeBtn.addEventListener('click', () => {
+      mobileFriendlyMode = !mobileFriendlyMode;
+      mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
+      if (mobileFriendlyMode && editingTrackId) {
+        drawCrosshair.classList.add('visible');
+        showToast('Tap anywhere to add a point at center', 3000);
+      } else {
+        drawCrosshair.classList.remove('visible');
+        if (mobileSelectedVertex) cancelMobileMove();
+      }
+      syncUndoBtn();
+    });
+
     tracksBtn.addEventListener('click', () => {
       setTrackPanelVisible(!trackPanel.classList.contains('visible'));
     });
 
-    // --- Map click: add vertex in draw mode, or select vertex for mobile ---
+    // --- Map click: add vertex or select vertex ---
     map.on('click', (e) => {
       if (suppressNextMapClick) {
         suppressNextMapClick = false;
         return;
       }
 
-      if (drawMode) {
-        const t = getActiveTrack();
+      if (editingTrackId) {
+        const t = tracks.find(tr => tr.id === editingTrackId);
         if (!t) return;
-        const ele = elevationAt(e.lngLat);
-        t.coords.push([e.lngLat.lng, e.lngLat.lat, ele]);
-        invalidateTrackStats(t);
-        refreshTrackSource(t);
-        renderTrackList();
-        updateProfile();
-        syncUndoBtn();
-        return;
-      }
 
-      // Modified click: delete vertex (only when editing)
-      if ((e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) && editingTrackId) {
-        const hit = hitTestVertex(e.point);
-        if (hit && hit.index != null) {
-          const t = tracks.find(tr => tr.id === hit.trackId);
-          if (t) {
+        // Modified click: delete vertex
+        if (e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+          const hit = hitTestVertex(e.point);
+          if (hit && hit.index != null) {
             t.coords.splice(hit.index, 1);
+            // Adjust selection indices
+            if (selectedVertexIndex != null) {
+              if (hit.index < selectedVertexIndex) selectedVertexIndex--;
+              else if (hit.index === selectedVertexIndex) selectedVertexIndex = null;
+            }
+            if (insertAfterIdx != null) {
+              if (hit.index <= insertAfterIdx) insertAfterIdx = Math.max(0, insertAfterIdx - 1);
+            }
             invalidateTrackStats(t);
             refreshTrackSource(t);
             renderTrackList();
@@ -3221,35 +3270,72 @@
           }
           return;
         }
-      }
 
-      // Mobile: select vertex for move (only when editing)
-      if (isMobile && isTrackEditing(activeTrackId)) {
+        // Check vertex hit for selection
         const hitPt = hitTestVertex(e.point);
         if (hitPt && hitPt.index != null) {
-          mobileSelectedVertex = hitPt;
-          mobileHint.textContent = 'Drag screen to move point · tap elsewhere to deselect';
-          mobileHint.classList.add('visible');
-          map.dragPan.disable();
+          // Mobile friendly mode: start move
+          if (isMobile && mobileFriendlyMode) {
+            mobileSelectedVertex = hitPt;
+            mobileHint.textContent = 'Drag screen to move point \u00b7 tap elsewhere to deselect';
+            mobileHint.classList.add('visible');
+            map.dragPan.disable();
+            showToast('Drag screen to move', 2000);
+            return;
+          }
+          // Select vertex (toggle)
+          if (selectedVertexIndex === hitPt.index) {
+            selectedVertexIndex = null;
+            insertAfterIdx = null;
+          } else {
+            selectedVertexIndex = hitPt.index;
+            if (insertAfterIdx != null) insertAfterIdx = hitPt.index;
+          }
+          syncUndoBtn();
           return;
         }
-        if (mobileSelectedVertex) {
+
+        // Deselect mobile move if active
+        if (isMobile && mobileFriendlyMode && mobileSelectedVertex) {
           cancelMobileMove();
         }
+
+        // Determine insertion point
+        let insertLngLat = e.lngLat;
+        if (isMobile && mobileFriendlyMode) {
+          // Insert at center crosshair position
+          insertLngLat = map.getCenter();
+        }
+
+        const ele = elevationAt(insertLngLat);
+        if (insertAfterIdx != null) {
+          // Insert after selected vertex
+          t.coords.splice(insertAfterIdx + 1, 0, [insertLngLat.lng, insertLngLat.lat, ele]);
+          insertAfterIdx++;
+          selectedVertexIndex = insertAfterIdx;
+        } else {
+          // Append to end
+          t.coords.push([insertLngLat.lng, insertLngLat.lat, ele]);
+        }
+        invalidateTrackStats(t);
+        refreshTrackSource(t);
+        renderTrackList();
+        updateProfile();
+        syncUndoBtn();
+        return;
       }
     });
     setDefaultMapCursor();
 
     map.on('dblclick', (e) => {
-      if (drawMode) {
+      if (editingTrackId) {
         e.preventDefault();
-        exitDrawMode();
+        exitEditMode();
       }
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && drawMode) exitDrawMode();
-      else if (e.key === 'Escape' && editingTrackId) exitEditMode();
+      if (e.key === 'Escape' && editingTrackId) exitEditMode();
       if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
       // Ctrl+Z / Cmd+Z to undo last point
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && isTrackEditing(activeTrackId)) {
@@ -3257,6 +3343,12 @@
         if (t && t.coords.length > 0) {
           e.preventDefault();
           t.coords.pop();
+          if (selectedVertexIndex != null && selectedVertexIndex >= t.coords.length) {
+            selectedVertexIndex = t.coords.length > 0 ? t.coords.length - 1 : null;
+          }
+          if (insertAfterIdx != null && insertAfterIdx >= t.coords.length) {
+            insertAfterIdx = t.coords.length > 0 ? t.coords.length - 1 : null;
+          }
           invalidateTrackStats(t);
           refreshTrackSource(t);
           renderTrackList();
@@ -3268,7 +3360,7 @@
 
     // --- Vertex hit test (only hits when track is being edited) ---
     function hitTestVertex(point) {
-      const tId = editingTrackId || (drawMode ? activeTrackId : null);
+      const tId = editingTrackId;
       if (!tId) return null;
       const t = tracks.find(tr => tr.id === tId);
       if (!t) return null;
@@ -3294,6 +3386,11 @@
       function finishVertexDrag() {
         if (!dragVertexInfo) return;
         const t = tracks.find(tr => tr.id === dragVertexInfo.trackId);
+        // If barely moved, treat as vertex click (selection)
+        if (!dragMoved && t) {
+          selectedVertexIndex = dragVertexInfo.index;
+          if (insertAfterIdx != null) insertAfterIdx = dragVertexInfo.index;
+        }
         dragVertexInfo = null;
         hoverInsertDrag = false;
         map.dragPan.enable();
@@ -3310,9 +3407,7 @@
       }
 
       map.on('mousedown', (e) => {
-        if (!activeTrackId) return;
-        const canEdit = isTrackEditing(activeTrackId);
-        if (!canEdit) return;
+        if (!editingTrackId) return;
 
         // Check vertex hit first
         const hit = hitTestVertex(e.point);
@@ -3331,7 +3426,7 @@
           const hiPt = map.project([hoverInsertInfo.lngLat.lng, hoverInsertInfo.lngLat.lat]);
           const dist = Math.sqrt((e.point.x - hiPt.x) ** 2 + (e.point.y - hiPt.y) ** 2);
           if (dist < 20) {
-            const t = tracks.find(tr => tr.id === activeTrackId);
+            const t = tracks.find(tr => tr.id === editingTrackId);
             if (t) {
               const ele = elevationAt(hoverInsertInfo.lngLat);
               t.coords.splice(hoverInsertInfo.insertAfter + 1, 0,
@@ -3365,8 +3460,7 @@
           return;
         }
 
-        const canEdit = isTrackEditing(activeTrackId);
-        if (canEdit) {
+        if (editingTrackId) {
           // Check vertex hover
           const hit = hitTestVertex(e.point);
           const isRealVertex = Boolean(hit && hit.index != null);
@@ -3376,12 +3470,12 @@
             map.getCanvas().style.cursor = 'grab';
           } else if (!isRealVertex && hoveredVertex) {
             hoveredVertex = false;
-            setDefaultMapCursor();
+            map.getCanvas().style.cursor = 'crosshair';
           }
 
           // Smart hover-insert marker: show when near track line but not near vertex
           if (!isRealVertex && !hoveredVertex) {
-            const t = tracks.find(tr => tr.id === activeTrackId);
+            const t = tracks.find(tr => tr.id === editingTrackId);
             const closest = findClosestPointOnTrack(t, e.point);
             if (closest) {
               hoverInsertInfo = closest;
@@ -3390,22 +3484,11 @@
             } else {
               if (hoverInsertInfo) {
                 clearHoverInsertMarker();
-                setDefaultMapCursor();
+                map.getCanvas().style.cursor = 'crosshair';
               }
             }
           } else if (hoverInsertInfo) {
             clearHoverInsertMarker();
-          }
-        } else if (drawMode) {
-          // During draw mode: check vertex hover for drag
-          const hit = hitTestVertex(e.point);
-          const isRealVertex = Boolean(hit && hit.index != null);
-          if (isRealVertex && !hoveredVertex) {
-            hoveredVertex = true;
-            map.getCanvas().style.cursor = 'grab';
-          } else if (!isRealVertex && hoveredVertex) {
-            hoveredVertex = false;
-            map.getCanvas().style.cursor = 'crosshair';
           }
         }
       });
@@ -3417,13 +3500,83 @@
       window.addEventListener('mouseup', finishVertexDrag);
     }
 
-    // --- Mobile: tap vertex then pan map to move it ---
+    // --- Mobile: vertex interaction ---
     if (isMobile) {
+      // Long-press drag for non-mobile-friendly mode
+      let touchLongPressTimer = null;
+      let touchStartPt = null;
+      let mobileDragVertex = null; // {trackId, index, screenX, screenY}
+
+      map.getCanvas().addEventListener('touchstart', (e) => {
+        if (!editingTrackId || mobileFriendlyMode) return;
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        const rect = map.getCanvas().getBoundingClientRect();
+        const pt = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+        touchStartPt = pt;
+        const hit = hitTestVertex(pt);
+        if (hit && hit.index != null) {
+          touchLongPressTimer = setTimeout(() => {
+            mobileDragVertex = { ...hit, screenX: touch.clientX, screenY: touch.clientY };
+            map.dragPan.disable();
+            showToast('Drag to move point', 1500);
+          }, 400);
+        }
+      }, { passive: true });
+
+      map.getCanvas().addEventListener('touchmove', (e) => {
+        if (touchLongPressTimer && touchStartPt) {
+          const touch = e.touches[0];
+          const rect = map.getCanvas().getBoundingClientRect();
+          const dx = touch.clientX - rect.left - touchStartPt.x;
+          const dy = touch.clientY - rect.top - touchStartPt.y;
+          if (Math.sqrt(dx * dx + dy * dy) > 10) {
+            clearTimeout(touchLongPressTimer);
+            touchLongPressTimer = null;
+          }
+        }
+        if (mobileDragVertex && e.touches.length === 1) {
+          const touch = e.touches[0];
+          const rect = map.getCanvas().getBoundingClientRect();
+          const pt = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+          const lngLat = map.unproject([pt.x, pt.y]);
+          const t = tracks.find(tr => tr.id === mobileDragVertex.trackId);
+          if (t) {
+            const c = t.coords[mobileDragVertex.index];
+            c[0] = lngLat.lng;
+            c[1] = lngLat.lat;
+            c[2] = elevationAt(lngLat);
+            invalidateTrackStats(t);
+            refreshTrackSource(t);
+          }
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      map.getCanvas().addEventListener('touchend', () => {
+        if (touchLongPressTimer) {
+          clearTimeout(touchLongPressTimer);
+          touchLongPressTimer = null;
+        }
+        if (mobileDragVertex) {
+          const t = tracks.find(tr => tr.id === mobileDragVertex.trackId);
+          mobileDragVertex = null;
+          map.dragPan.enable();
+          if (t) {
+            invalidateTrackStats(t);
+            renderTrackList();
+            updateProfile();
+            syncUndoBtn();
+          }
+        }
+        touchStartPt = null;
+      }, { passive: true });
+
+      // Mobile-friendly mode: pan moves selected vertex to center
       map.on('move', () => {
         if (!mobileSelectedVertex) return;
         const t = tracks.find(tr => tr.id === mobileSelectedVertex.trackId);
         if (!t) return;
-        // Keep the point at the same screen position (center of map)
         const center = map.getCenter();
         const c = t.coords[mobileSelectedVertex.index];
         c[0] = center.lng;
