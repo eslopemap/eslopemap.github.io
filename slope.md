@@ -1,4 +1,4 @@
-# slope-hybrid-mltimap-2d — Feature summary
+# Slope viewer & editor — Feature summary
 
 ## Map & Visualization
 - **Analysis modes** — `Slope + Color relief` (default), `Slope`, `Aspect`, `Color relief`, and an empty `none` mode that disables the DEM analysis overlay entirely
@@ -27,15 +27,16 @@
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
 - **Multi-track management** — color-coded tracks with selection, deletion (with confirmation), export actions, and active-track emphasis
 - **Select vs Edit** — selecting a track widens the line and shows the profile; clicking the edit button (✎) enters edit mode with fully interactive vertices. No separate draw mode — editing new and existing tracks uses the same unified editing state.
-- **Vertex selection** — clicking a vertex (desktop) or tapping it (mobile) selects it with blue highlight; enables insert-here mode
-- **Insert-here** — "+" button appears when a vertex is selected; toggles insert-after mode where new points are inserted between the selected vertex and the next one
+- **Vertex selection** — clicking a vertex (desktop) or tapping it (mobile) selects it with blue highlight; an on-map "+" popup appears next to the selected vertex
+- **Insert-here** — clicking the on-map "+" popup toggles insert-after mode where new points are inserted between the selected vertex and the next one
+- **Insert preview** — dashed line shows where the next point will connect: from last point (append) or between neighbouring vertices (insert-after mode)
 - **Track stats** — total distance (km), elevation gain (↑), loss (↓), point count, average slope, and max slope for the active track
 - **Elevation enrichment** — all track points (imported and drawn) are enriched from the same DEM source and re-enriched when new DEM tiles load
 - **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
 - **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
 - **Ctrl/Shift/Meta+click delete** — remove individual track vertices (edit mode only)
 - **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode)
-- **Mobile vertex editing** — two modes: default (tap=click, long-press-drag=move vertex) and mobile-friendly (📱 toggle: crosshair at center, tap inserts at center, tap vertex then pan to reposition)
+- **Mobile vertex editing** — mobile-friendly mode is default on mobile (📱 toggle); crosshair at center, tap inserts at center, tap vertex then pan to reposition. Desktop-style mode also available (tap=click, long-press-drag=move vertex). On localhost, the 📱 toggle is shown on desktop for debugging.
 - **Delete last point** — 🗑️ button in toolbar to remove the last point; also Ctrl/Cmd+Z
 - **Export** — active track as GPX or GeoJSON; all tracks as a single GPX with multiple segments
 
@@ -57,6 +58,8 @@
 - **Search** — Nominatim geocoding with collapsible search box
 - **Ctrl/Cmd+drag** — tilt and rotate the map (same as right-click drag)
 - **Toast notifications** — ephemeral messages for mobile edition hints
+- **PWA installable** — manifest.json with icons at 192, 512, 180 (apple-touch), 32, 16 sizes; SVG favicon with mountain/slope theme
+- **Localhost debug** — mobile-friendly mode toggle (📱) shown on desktop when served from localhost
 
 ## Technical gotchas
 - **Contour initialization order** — contour visibility must be re-applied after the contour layers are added, otherwise first-load state can disagree with the checkbox
@@ -106,8 +109,10 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 - `editingTrackId` — track whose vertices are fully interactive (mid vertices visible, drag/hover-insert enabled). Set when user clicks the ✎ edit button in the track list, or the ✏ draw button to create a new track. There is no separate draw mode — editing a new or existing track uses the same unified editing state.
 - `editingIsNewTrack` — boolean. True when editingTrackId was set by creating a new track via the draw button. Controls auto-cleanup on exit (new tracks with < 2 points are removed).
 - `selectedVertexIndex` — index of the currently selected vertex in the editing track. Visual feedback: larger blue circle with white stroke.
-- `insertAfterIdx` — when set, new points are inserted after this index instead of appended to the end. Activated via the "+" insert button.
-- `mobileFriendlyMode` — boolean. When true on mobile, enables crosshair-centered insertion and pan-to-move vertex editing.
+- `insertAfterIdx` — when set, new points are inserted after this index instead of appended to the end. Activated via the on-map "+" popup next to the selected vertex.
+- `mobileFriendlyMode` — boolean. Default true on mobile. When enabled, shows crosshair-centered insertion and pan-to-move vertex editing. On localhost, the toggle is also shown on desktop for debugging.
+- `insertPreviewLngLat` — tracks cursor/center position for the insert preview dashed line.
+- `insertPopupMarker` — MapLibre marker showing the "+" button on the map next to the selected vertex.
 
 ### Track selection vs editing (unified)
 - **Select** (click track name): sets `activeTrackId`. Line becomes 4px wide. Profile auto-opens. Only start/end markers visible.
@@ -116,20 +121,26 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 
 ### Vertex selection and insert-here
 - Clicking a vertex without dragging (desktop) or tapping a vertex (mobile) selects it. Selected vertex shown with blue highlight (radius 7, blue fill).
-- When a vertex is selected, a "+" button appears in the toolbar. Clicking it toggles insert-after mode.
+- When a vertex is selected, an on-map "+" popup appears next to it (as a MapLibre marker, anchored left with offset). Clicking it toggles insert-after mode.
 - In insert-after mode, new clicks insert points after the selected vertex (and chain: each insert advances the insertion index).
 - Selecting a different vertex while in insert mode moves the insertion point.
+
+### Insert preview
+- A dashed line (via `insert-preview-line` source/layer) shows where the next click will connect.
+- In append mode: line from last track point to cursor/crosshair.
+- In insert-after mode: two lines from `insertAfterIdx` to cursor and from cursor to `insertAfterIdx+1`.
+- Updated on `mousemove` (desktop) or `map.move` (mobile-friendly crosshair mode).
 
 ### Smart hover-insert (desktop)
 - On `mousemove`: for each segment of the editing track, project both endpoints to screen coords, compute the closest point on the segment to the cursor. Skip if the parameter t < 0.1 or > 0.9 (too close to a vertex). If the closest distance < 20px, show a single grey circle marker at that point via the `hover-insert-point` source.
 - On `mousedown` near that marker: insert a new vertex at the position, then immediately start drag for that vertex.
 
 ### Mobile editing modes
-- **Default (desktop-style)**: tap = click (adds point or selects vertex), long-press + drag = drag vertex. Same interactions as desktop.
-- **Mobile-friendly mode** (📱 button toggle, shown when editing on mobile):
+- **Mobile-friendly mode** (📱 button toggle, **default on** for mobile devices, shown on localhost for desktop debugging):
   - Crosshair shown at screen center; tapping anywhere inserts a point at the center position.
-  - Tapping a vertex selects it for pan-to-move: toast "Drag screen to move", subsequent pan repositions the vertex keeping it at the center.
+  - Tapping a vertex selects it (blue highlight) and enters pan-to-move: toast "Drag screen to move", subsequent pan repositions the vertex keeping it at the center.
   - Touch end confirms the move.
+- **Desktop-style mode** (📱 toggled off): tap = click (adds point or selects vertex), long-press (400ms) + drag = move vertex directly.
 
 ### Delete last point
 - 🗑️ button in the toolbar (visible only when a track is being edited and has points). Removes the last coordinate.
