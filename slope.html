@@ -395,6 +395,89 @@
       line-height: 1;
     }
     #profile-close:hover { opacity: 1; }
+
+    /* Cursor tooltip (follows mouse) */
+    #cursor-tooltip {
+      position: fixed;
+      z-index: 30;
+      pointer-events: none;
+      background: rgba(255,255,255,0.92);
+      border-radius: 6px;
+      padding: 3px 7px;
+      font-size: 11px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      white-space: nowrap;
+      display: none;
+    }
+    #cursor-tooltip.visible { display: block; }
+    #cursor-tooltip code { background: rgba(0,0,0,0.05); padding: 1px 3px; border-radius: 2px; }
+
+    /* Mobile crosshair (appears on tap) */
+    #mobile-crosshair {
+      position: fixed;
+      z-index: 25;
+      pointer-events: none;
+      display: none;
+      width: 0; height: 0;
+    }
+    #mobile-crosshair.visible { display: block; }
+    #mobile-crosshair::before,
+    #mobile-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(0,0,0,0.55);
+    }
+    #mobile-crosshair::before { width: 1px; height: 24px; left: 0; top: -12px; }
+    #mobile-crosshair::after { width: 24px; height: 1px; left: -12px; top: 0; }
+
+    /* Draw-mode crosshair (center of screen, mobile) */
+    #draw-crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      z-index: 15;
+      pointer-events: none;
+      display: none;
+      width: 0; height: 0;
+    }
+    #draw-crosshair.visible { display: block; }
+    #draw-crosshair::before,
+    #draw-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(74,144,217,0.7);
+    }
+    #draw-crosshair::before { width: 2px; height: 30px; left: -1px; top: -15px; }
+    #draw-crosshair::after { width: 30px; height: 2px; left: -15px; top: -1px; }
+
+    /* Toast notification */
+    #toast {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(0,0,0,0.78);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    #toast.visible { opacity: 1; }
+
+    /* Track edit button in track list */
+    .track-item .track-edit {
+      background: none; border: none; cursor: pointer;
+      font-size: 12px; opacity: 0.5; padding: 0 2px;
+    }
+    .track-item .track-edit:hover { opacity: 1; }
+    .track-item .track-edit.active { opacity: 1; color: #4a90d9; }
+
+    /* Undo-last-point button */
+    #undo-btn { font-size: 14px; }
     /* end track editor */
   </style>
 </head>
@@ -471,6 +554,15 @@
     </div>
 
     <div class="row">
+      <label for="cursorInfoMode"><strong>Elevation &amp; slope</strong></label><br />
+      <select id="cursorInfoMode">
+        <option value="cursor" selected>At cursor</option>
+        <option value="corner">Corner</option>
+        <option value="no">No</option>
+      </select>
+    </div>
+
+    <div class="row">
       <label><input id="multiplyBlend" type="checkbox" checked /> Multiply blend</label>
     </div>
 
@@ -489,6 +581,7 @@
 
   <div id="track-panel-shell">
     <div id="track-tool-row">
+      <button id="undo-btn" class="tb-btn" title="Delete last point" style="display:none">🗑️</button>
       <button id="draw-btn" class="tb-btn" title="Draw track (click to add points, double-click to finish)">&#9998;</button>
       <button id="tracks-btn" class="tb-btn" title="Track list" disabled>📍</button>
     </div>
@@ -508,6 +601,10 @@
 
   <div id="drop-overlay">Drop GPX / GeoJSON file here</div>
   <div id="mobile-move-hint">Pan map to move point &bull; tap elsewhere to deselect</div>
+  <div id="cursor-tooltip"></div>
+  <div id="mobile-crosshair"></div>
+  <div id="draw-crosshair"></div>
+  <div id="toast"></div>
 
   <div id="profile-panel" class="panel-surface">
     <button id="profile-close" title="Close">&times;</button>
@@ -710,6 +807,7 @@
       showContours: true,
       showOpenSkiMap: false,
       showTileGrid: false,
+      cursorInfoMode: 'cursor',
       multiplyBlend: true,
       terrain3d: false,
       terrainExaggeration: 1.4,
@@ -1005,11 +1103,43 @@
     }
 
     // <elevation sampling start>
+    let lastPointerScreenXY = null;
+    const cursorTooltip = document.getElementById('cursor-tooltip');
+
     function setCursorInfo(eleText, slopeText) {
-      const el = document.getElementById('cursorElevation');
-      if (el) el.textContent = eleText;
-      const sl = document.getElementById('cursorSlope');
-      if (sl) sl.textContent = slopeText || 'n/a';
+      // Corner display
+      if (state.cursorInfoMode === 'corner') {
+        const el = document.getElementById('cursorElevation');
+        if (el) el.textContent = eleText;
+        const sl = document.getElementById('cursorSlope');
+        if (sl) sl.textContent = slopeText || 'n/a';
+      }
+    }
+
+    function showCursorTooltipAt(screenX, screenY, eleText, slopeText) {
+      if (state.cursorInfoMode !== 'cursor') {
+        cursorTooltip.classList.remove('visible');
+        return;
+      }
+      cursorTooltip.innerHTML = `Elev: <code>${eleText}</code> · Slope: <code>${slopeText || 'n/a'}</code>`;
+      cursorTooltip.style.left = (screenX + 15) + 'px';
+      cursorTooltip.style.top = (screenY + 15) + 'px';
+      cursorTooltip.classList.add('visible');
+    }
+
+    function hideCursorTooltip() {
+      cursorTooltip.classList.remove('visible');
+    }
+
+    function updateCursorInfoVisibility() {
+      const legend = document.getElementById('legend');
+      const cursorInfoEl = document.getElementById('cursor-info');
+      if (state.cursorInfoMode === 'corner') {
+        if (cursorInfoEl) cursorInfoEl.style.display = '';
+      } else {
+        if (cursorInfoEl) cursorInfoEl.style.display = 'none';
+        hideCursorTooltip();
+      }
     }
 
     function sampleElevationFromDEMData(dem, fx, fy) {
@@ -2174,6 +2304,11 @@
       map.triggerRepaint();
     });
 
+    document.getElementById('cursorInfoMode').addEventListener('change', (e) => {
+      state.cursorInfoMode = e.target.value;
+      updateCursorInfoVisibility();
+    });
+
     document.getElementById('terrain3d').addEventListener('change', (e) => {
       state.terrain3d = Boolean(e.target.checked);
       document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
@@ -2209,6 +2344,7 @@
 
     updateLegend();
     updateStatus();
+    updateCursorInfoVisibility();
 
     map.on('load', () => {
       ensureDebugGridLayer(map);
@@ -2286,28 +2422,56 @@
         cursorRaf = 0;
         if (!lastPointerLngLat) {
           setCursorInfo('n/a');
+          hideCursorTooltip();
           return;
         }
 
         const result = queryLoadedElevationAtLngLat(map, lastPointerLngLat);
         if (!result) {
           setCursorInfo('no loaded tile');
+          if (lastPointerScreenXY) showCursorTooltipAt(lastPointerScreenXY.x, lastPointerScreenXY.y, 'no tile', 'n/a');
           return;
         }
 
-        const slopeStr = result.slopeDeg != null ? `${result.slopeDeg.toFixed(1)}°` : 'n/a';
-        setCursorInfo(`${result.elevation.toFixed(1)} m (z${result.tileZoom})`, slopeStr);
+        const eleText = `${result.elevation.toFixed(0)} m`;
+        const slopeStr = result.slopeDeg != null ? `${result.slopeDeg.toFixed(0)}°` : 'n/a';
+        setCursorInfo(eleText, slopeStr);
+        if (lastPointerScreenXY) showCursorTooltipAt(lastPointerScreenXY.x, lastPointerScreenXY.y, eleText, slopeStr);
       };
 
       map.on('mousemove', (e) => {
         lastPointerLngLat = e.lngLat;
+        lastPointerScreenXY = {x: e.originalEvent.clientX, y: e.originalEvent.clientY};
         if (!cursorRaf) cursorRaf = requestAnimationFrame(updateCursorElevation);
       });
 
       map.on('mouseout', () => {
         lastPointerLngLat = null;
+        lastPointerScreenXY = null;
         if (!cursorRaf) cursorRaf = requestAnimationFrame(updateCursorElevation);
       });
+
+      // Mobile: show crosshair on tap with elevation info
+      if (isMobile) {
+        map.on('click', (e) => {
+          if (drawMode) return;
+          const result = queryLoadedElevationAtLngLat(map, e.lngLat);
+          if (state.cursorInfoMode !== 'no') {
+            mobileCrosshair.style.left = e.originalEvent.clientX + 'px';
+            mobileCrosshair.style.top = e.originalEvent.clientY + 'px';
+            mobileCrosshair.classList.add('visible');
+            if (state.cursorInfoMode === 'cursor' && result) {
+              const eleText = `${result.elevation.toFixed(0)} m`;
+              const slopeStr = result.slopeDeg != null ? `${result.slopeDeg.toFixed(0)}°` : 'n/a';
+              showCursorTooltipAt(e.originalEvent.clientX, e.originalEvent.clientY, eleText, slopeStr);
+            }
+          }
+        });
+        map.on('dragstart', () => {
+          mobileCrosshair.classList.remove('visible');
+          hideCursorTooltip();
+        });
+      }
       // </elevation sampling end>
 
       // <tile border fix start>
@@ -2382,13 +2546,16 @@
 
     const tracks = []; // {id, name, color, coords:[[lng,lat,ele],...]}
     let activeTrackId = null;
+    let editingTrackId = null;
     let drawMode = false;
     let dragVertexInfo = null; // {trackId, index} — desktop drag
     let mobileSelectedVertex = null; // {trackId, index} — mobile move mode
     let suppressNextMapClick = false;
+    let hoverInsertInfo = null; // {lngLat, insertAfter} — desktop hover-insert marker
 
     const drawBtn = document.getElementById('draw-btn');
     const tracksBtn = document.getElementById('tracks-btn');
+    const undoBtn = document.getElementById('undo-btn');
     const trackPanelShell = document.getElementById('track-panel-shell');
     const trackToolRow = document.getElementById('track-tool-row');
     const trackPanel = document.getElementById('track-panel');
@@ -2397,6 +2564,27 @@
     const profileToggleBtn = document.getElementById('profile-toggle-btn');
     const dropOverlay = document.getElementById('drop-overlay');
     const mobileHint = document.getElementById('mobile-move-hint');
+    const toastEl = document.getElementById('toast');
+    const drawCrosshair = document.getElementById('draw-crosshair');
+    const mobileCrosshair = document.getElementById('mobile-crosshair');
+
+    let toastTimer = 0;
+    function showToast(msg, durationMs) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('visible'), durationMs || 2500);
+    }
+
+    function isTrackEditing(tId) {
+      return tId != null && (tId === editingTrackId || (drawMode && tId === activeTrackId));
+    }
+
+    function syncUndoBtn() {
+      const t = getActiveTrack ? getActiveTrack() : null;
+      const show = t && t.coords.length > 0 && isTrackEditing(t.id);
+      undoBtn.style.display = show ? '' : 'none';
+    }
 
     function nextColor() {
       const c = TRACK_COLORS[trackColorIdx % TRACK_COLORS.length];
@@ -2535,41 +2723,43 @@
           geometry: { type: 'Point', coordinates: t.coords[i].slice() },
           properties: { id: t.id, idx: i, role }
         });
-        if (i < last) {
-          const a = t.coords[i], b = t.coords[i + 1];
-          features.push({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [(a[0]+b[0])/2, (a[1]+b[1])/2] },
-            properties: { id: t.id, insertAfter: i, role: 'insert' }
-          });
-        }
       }
       return { type: 'FeatureCollection', features };
     }
 
+    const HOVER_INSERT_SOURCE_ID = 'hover-insert-point';
+    const HOVER_INSERT_LAYER_ID = 'hover-insert-point-layer';
+
     function addTrackToMap(t) {
       const isActive = ['==', ['get', 'id'], ['global-state', 'activeTrackId']];
+      const isEditing = ['==', ['get', 'id'], ['global-state', 'editingTrackId']];
       const isStartOrEnd = ['any', ['==', ['get', 'role'], 'start'], ['==', ['get', 'role'], 'end']];
       map.addSource(trackSourceId(t), { type: 'geojson', data: trackGeoJSON(t) });
       map.addLayer({
         id: trackLineLayerId(t), type: 'line', source: trackSourceId(t),
         filter: ['==', '$type', 'LineString'],
-        paint: { 'line-color': t.color, 'line-width': 3, 'line-opacity': 0.9 }
+        paint: {
+          'line-color': t.color,
+          'line-width': ['case', isActive, 4, 3],
+          'line-opacity': 0.9
+        }
       });
       map.addLayer({
         id: trackPtsLayerId(t), type: 'circle', source: trackSourceId(t),
         filter: ['==', '$type', 'Point'],
         paint: {
           'circle-radius': ['case',
-            isActive, ['match', ['get', 'role'], 'insert', 3, 4],
+            ['all', isEditing, ['==', ['get', 'role'], 'mid']], 4,
+            isEditing, 4,
+            ['all', isActive, isStartOrEnd], 4,
             isStartOrEnd, 3,
             0],
           'circle-color': ['match', ['get', 'role'],
-            'start', '#22c55e', 'end', '#ef4444',
-            'insert', 'rgba(128,128,128,0.5)', t.color],
+            'start', '#22c55e', 'end', '#ef4444', t.color],
           'circle-stroke-color': '#fff',
           'circle-stroke-width': ['case',
-            isActive, ['match', ['get', 'role'], 'insert', 0.5, 1.5],
+            isEditing, 1.5,
+            ['all', isActive, isStartOrEnd], 1.5,
             isStartOrEnd, 1,
             0]
         }
@@ -2597,6 +2787,73 @@
           }
         });
       }
+      // Hover-insert marker source/layer
+      if (!map.getSource(HOVER_INSERT_SOURCE_ID)) {
+        map.addSource(HOVER_INSERT_SOURCE_ID, {
+          type: 'geojson',
+          data: {type: 'FeatureCollection', features: []}
+        });
+      }
+      if (!map.getLayer(HOVER_INSERT_LAYER_ID)) {
+        map.addLayer({
+          id: HOVER_INSERT_LAYER_ID,
+          type: 'circle',
+          source: HOVER_INSERT_SOURCE_ID,
+          paint: {
+            'circle-radius': 5,
+            'circle-color': 'rgba(128,128,128,0.5)',
+            'circle-stroke-color': '#fff',
+            'circle-stroke-width': 1
+          }
+        });
+      }
+    }
+
+    function clearHoverInsertMarker() {
+      hoverInsertInfo = null;
+      const src = map.getSource(HOVER_INSERT_SOURCE_ID);
+      if (src) src.setData({type: 'FeatureCollection', features: []});
+    }
+
+    function showHoverInsertMarker(lngLat) {
+      const src = map.getSource(HOVER_INSERT_SOURCE_ID);
+      if (src) {
+        src.setData({type: 'FeatureCollection', features: [{
+          type: 'Feature',
+          geometry: {type: 'Point', coordinates: [lngLat.lng, lngLat.lat]},
+          properties: {}
+        }]});
+      }
+    }
+
+    function findClosestPointOnTrack(t, mousePoint) {
+      if (!t || t.coords.length < 2) return null;
+      let bestDist = Infinity;
+      let bestLngLat = null;
+      let bestSegment = -1;
+      for (let i = 0; i < t.coords.length - 1; i++) {
+        const a = map.project([t.coords[i][0], t.coords[i][1]]);
+        const b = map.project([t.coords[i+1][0], t.coords[i+1][1]]);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+        let tp = 0;
+        if (len2 > 0) {
+          tp = ((mousePoint.x - a.x) * dx + (mousePoint.y - a.y) * dy) / len2;
+          tp = Math.max(0, Math.min(1, tp));
+        }
+        if (tp < 0.1 || tp > 0.9) continue;
+        const px = a.x + tp * dx, py = a.y + tp * dy;
+        const dist = Math.sqrt((mousePoint.x - px) ** 2 + (mousePoint.y - py) ** 2);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestLngLat = map.unproject([px, py]);
+          bestSegment = i;
+        }
+      }
+      if (bestDist < 20 && bestSegment >= 0) {
+        return { lngLat: bestLngLat, insertAfter: bestSegment, distance: bestDist };
+      }
+      return null;
     }
 
     function removeTrackFromMap(t) {
@@ -2616,6 +2873,7 @@
 
     function updateVertexHighlight() {
       map.setGlobalStateProperty('activeTrackId', activeTrackId);
+      map.setGlobalStateProperty('editingTrackId', editingTrackId);
     }
 
     function syncProfileToggleButton() {
@@ -2711,15 +2969,21 @@
         const detailStatsStr = (s && t.id === activeTrackId)
           ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Max slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
           : '';
+        const editActive = isTrackEditing(t.id);
         div.innerHTML = `<span class="track-color" style="background:${t.color}"></span>` +
           `<span class="track-name">${t.name}` +
           (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
           (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
           `</span>` +
+          `<button class="track-edit${editActive ? ' active' : ''}" data-id="${t.id}" title="Edit track">&#9998;</button>` +
           `<button class="track-del" data-id="${t.id}">&times;</button>`;
         div.addEventListener('click', (e) => {
-          if (e.target.classList.contains('track-del')) return;
+          if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
           setActiveTrack(t.id);
+        });
+        div.querySelector('.track-edit').addEventListener('click', () => {
+          if (isTrackEditing(t.id)) exitEditMode();
+          else { setActiveTrack(t.id); enterEditMode(t.id); }
         });
         div.querySelector('.track-del').addEventListener('click', () => deleteTrack(t.id));
         trackListEl.appendChild(div);
@@ -2727,20 +2991,41 @@
       if (!tracks.length) setTrackPanelVisible(false);
       else syncTrackPanelShell();
       syncProfileToggleButton();
+      syncUndoBtn();
     }
 
     function setActiveTrack(id) {
       if (id !== activeTrackId && typeof profileClosed !== 'undefined') profileClosed = false;
+      if (editingTrackId && editingTrackId !== id) exitEditMode();
       activeTrackId = id;
       renderTrackList();
       updateVertexHighlight();
       updateProfile();
     }
 
+    function enterEditMode(tId) {
+      if (drawMode) return;
+      editingTrackId = tId;
+      updateVertexHighlight();
+      renderTrackList();
+      syncUndoBtn();
+    }
+
+    function exitEditMode() {
+      editingTrackId = null;
+      clearHoverInsertMarker();
+      updateVertexHighlight();
+      renderTrackList();
+      syncUndoBtn();
+    }
+
     function deleteTrack(id) {
-      const idx = tracks.findIndex(t => t.id === id);
-      if (idx < 0) return;
-      removeTrackFromMap(tracks[idx]);
+      const t = tracks.find(tr => tr.id === id);
+      if (!t) return;
+      if (!confirm(`Delete track "${t.name}"?`)) return;
+      const idx = tracks.indexOf(t);
+      if (editingTrackId === id) exitEditMode();
+      removeTrackFromMap(t);
       tracks.splice(idx, 1);
       if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
       renderTrackList();
@@ -2769,24 +3054,58 @@
 
     // --- Draw mode ---
     function enterDrawMode() {
+      if (editingTrackId) exitEditMode();
       drawMode = true;
       drawBtn.classList.add('active');
       map.getCanvas().style.cursor = 'crosshair';
-      createTrack('Track ' + (tracks.length + 1), []);
+      const t = createTrack('Track ' + (tracks.length + 1), []);
+      editingTrackId = t.id;
+      updateVertexHighlight();
+      syncUndoBtn();
+      if (isMobile) {
+        drawCrosshair.classList.add('visible');
+        showToast('Tap anywhere to add a point', 3000);
+      }
     }
 
     function exitDrawMode() {
       drawMode = false;
       drawBtn.classList.remove('active');
       setDefaultMapCursor();
+      drawCrosshair.classList.remove('visible');
       const t = getActiveTrack();
-      if (t && t.coords.length < 2) deleteTrack(t.id);
-      else updateProfile();
+      if (t && t.coords.length < 2) {
+        // deleteTrack would ask confirm; skip for auto-cleanup
+        const idx = tracks.indexOf(t);
+        if (idx >= 0) {
+          removeTrackFromMap(t);
+          tracks.splice(idx, 1);
+          if (activeTrackId === t.id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+        }
+      } else {
+        updateProfile();
+      }
+      editingTrackId = null;
+      clearHoverInsertMarker();
+      updateVertexHighlight();
+      renderTrackList();
+      syncUndoBtn();
     }
 
     drawBtn.addEventListener('click', () => {
       if (drawMode) exitDrawMode();
       else enterDrawMode();
+    });
+
+    undoBtn.addEventListener('click', () => {
+      const t = getActiveTrack();
+      if (!t || !t.coords.length) return;
+      t.coords.pop();
+      invalidateTrackStats(t);
+      refreshTrackSource(t);
+      renderTrackList();
+      updateProfile();
+      syncUndoBtn();
     });
 
     tracksBtn.addEventListener('click', () => {
@@ -2809,30 +3128,12 @@
         refreshTrackSource(t);
         renderTrackList();
         updateProfile();
+        syncUndoBtn();
         return;
       }
 
-      // Click on insert-point: splice a new vertex
-      if (activeTrackId) {
-        const hit = hitTestVertex(e.point);
-        if (hit && hit.insertAfter != null) {
-          const t = tracks.find(tr => tr.id === hit.trackId);
-          if (t) {
-            const a = t.coords[hit.insertAfter], b = t.coords[hit.insertAfter + 1];
-            const midLng = (a[0]+b[0])/2, midLat = (a[1]+b[1])/2;
-            const ele = elevationAt({lng: midLng, lat: midLat});
-            t.coords.splice(hit.insertAfter + 1, 0, [midLng, midLat, ele]);
-            invalidateTrackStats(t);
-            refreshTrackSource(t);
-            renderTrackList();
-            updateProfile();
-          }
-          return;
-        }
-      }
-
-      // Modified click: delete vertex
-      if (e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+      // Modified click: delete vertex (only when editing)
+      if ((e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) && editingTrackId) {
         const hit = hitTestVertex(e.point);
         if (hit && hit.index != null) {
           const t = tracks.find(tr => tr.id === hit.trackId);
@@ -2848,11 +3149,12 @@
         }
       }
 
-      // Mobile: select vertex for move
-      if (isMobile && activeTrackId) {
+      // Mobile: select vertex for move (only when editing)
+      if (isMobile && isTrackEditing(activeTrackId)) {
         const hitPt = hitTestVertex(e.point);
-        if (hitPt) {
+        if (hitPt && hitPt.index != null) {
           mobileSelectedVertex = hitPt;
+          mobileHint.textContent = 'Drag screen to move point · tap elsewhere to deselect';
           mobileHint.classList.add('visible');
           map.dragPan.disable();
           return;
@@ -2873,13 +3175,28 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && drawMode) exitDrawMode();
+      else if (e.key === 'Escape' && editingTrackId) exitEditMode();
       if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
+      // Ctrl+Z / Cmd+Z to undo last point
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && isTrackEditing(activeTrackId)) {
+        const t = getActiveTrack();
+        if (t && t.coords.length > 0) {
+          e.preventDefault();
+          t.coords.pop();
+          invalidateTrackStats(t);
+          refreshTrackSource(t);
+          renderTrackList();
+          updateProfile();
+          syncUndoBtn();
+        }
+      }
     });
 
-    // --- Vertex hit test ---
+    // --- Vertex hit test (only hits when track is being edited) ---
     function hitTestVertex(point) {
-      if (!activeTrackId) return null;
-      const t = tracks.find(tr => tr.id === activeTrackId);
+      const tId = editingTrackId || (drawMode ? activeTrackId : null);
+      if (!tId) return null;
+      const t = tracks.find(tr => tr.id === tId);
       if (!t) return null;
       const layerId = trackPtsLayerId(t);
       if (!map.getLayer(layerId)) return null;
@@ -2889,23 +3206,22 @@
         { layers: [layerId] }
       );
       if (!features.length) return null;
-      // Prefer real vertices over insert-points
-      const real = features.find(f => f.properties.role !== 'insert');
+      const real = features.find(f => f.properties.idx != null);
       if (real) return { trackId: t.id, index: real.properties.idx };
-      const ins = features.find(f => f.properties.role === 'insert');
-      if (ins) return { trackId: t.id, insertAfter: ins.properties.insertAfter };
       return null;
     }
 
-    // --- Desktop: drag vertices ---
+    // --- Desktop: drag vertices + smart hover insert marker ---
     if (!isMobile) {
       let hoveredVertex = false;
       let dragMoved = false;
+      let hoverInsertDrag = false; // true when dragging a just-inserted hover vertex
 
       function finishVertexDrag() {
         if (!dragVertexInfo) return;
         const t = tracks.find(tr => tr.id === dragVertexInfo.trackId);
         dragVertexInfo = null;
+        hoverInsertDrag = false;
         map.dragPan.enable();
         hoveredVertex = false;
         if (dragMoved) suppressNextMapClick = true;
@@ -2915,20 +3231,51 @@
           invalidateTrackStats(t);
           renderTrackList();
           updateProfile();
+          syncUndoBtn();
         }
       }
 
       map.on('mousedown', (e) => {
-        if (drawMode || !activeTrackId) return;
+        if (!activeTrackId) return;
+        const canEdit = isTrackEditing(activeTrackId);
+        if (!canEdit) return;
+
+        // Check vertex hit first
         const hit = hitTestVertex(e.point);
-        if (!hit || hit.index == null) return;
-        e.preventDefault();
-        e.originalEvent.stopPropagation();
-        dragVertexInfo = hit;
-        dragMoved = false;
-        setActiveTrack(hit.trackId);
-        map.dragPan.disable();
-        map.getCanvas().style.cursor = 'grabbing';
+        if (hit && hit.index != null) {
+          e.preventDefault();
+          e.originalEvent.stopPropagation();
+          dragVertexInfo = hit;
+          dragMoved = false;
+          map.dragPan.disable();
+          map.getCanvas().style.cursor = 'grabbing';
+          return;
+        }
+
+        // Check hover-insert marker hit (if near track line)
+        if (hoverInsertInfo) {
+          const hiPt = map.project([hoverInsertInfo.lngLat.lng, hoverInsertInfo.lngLat.lat]);
+          const dist = Math.sqrt((e.point.x - hiPt.x) ** 2 + (e.point.y - hiPt.y) ** 2);
+          if (dist < 20) {
+            const t = tracks.find(tr => tr.id === activeTrackId);
+            if (t) {
+              const ele = elevationAt(hoverInsertInfo.lngLat);
+              t.coords.splice(hoverInsertInfo.insertAfter + 1, 0,
+                [hoverInsertInfo.lngLat.lng, hoverInsertInfo.lngLat.lat, ele]);
+              invalidateTrackStats(t);
+              refreshTrackSource(t);
+              e.preventDefault();
+              e.originalEvent.stopPropagation();
+              dragVertexInfo = { trackId: t.id, index: hoverInsertInfo.insertAfter + 1 };
+              hoverInsertDrag = true;
+              dragMoved = false;
+              clearHoverInsertMarker();
+              map.dragPan.disable();
+              map.getCanvas().style.cursor = 'grabbing';
+              return;
+            }
+          }
+        }
       });
 
       map.on('mousemove', (e) => {
@@ -2943,7 +3290,40 @@
           refreshTrackSource(t);
           return;
         }
-        if (!drawMode) {
+
+        const canEdit = isTrackEditing(activeTrackId);
+        if (canEdit) { // && !drawMode) {
+          // Check vertex hover
+          const hit = hitTestVertex(e.point);
+          const isRealVertex = Boolean(hit && hit.index != null);
+          if (isRealVertex && !hoveredVertex) {
+            hoveredVertex = true;
+            clearHoverInsertMarker();
+            map.getCanvas().style.cursor = 'grab';
+          } else if (!isRealVertex && hoveredVertex) {
+            hoveredVertex = false;
+            setDefaultMapCursor();
+          }
+
+          // Smart hover-insert marker: show when near track line but not near vertex
+          if (!isRealVertex && !hoveredVertex) {
+            const t = tracks.find(tr => tr.id === activeTrackId);
+            const closest = findClosestPointOnTrack(t, e.point);
+            if (closest) {
+              hoverInsertInfo = closest;
+              showHoverInsertMarker(closest.lngLat);
+              map.getCanvas().style.cursor = 'copy';
+            } else {
+              if (hoverInsertInfo) {
+                clearHoverInsertMarker();
+                setDefaultMapCursor();
+              }
+            }
+          } else if (hoverInsertInfo) {
+            clearHoverInsertMarker();
+          }
+        } else if (drawMode) {
+          // During draw mode: check vertex hover for drag
           const hit = hitTestVertex(e.point);
           const isRealVertex = Boolean(hit && hit.index != null);
           if (isRealVertex && !hoveredVertex) {
@@ -2951,7 +3331,7 @@
             map.getCanvas().style.cursor = 'grab';
           } else if (!isRealVertex && hoveredVertex) {
             hoveredVertex = false;
-            setDefaultMapCursor();
+            map.getCanvas().style.cursor = 'crosshair';
           }
         }
       });
@@ -2969,6 +3349,7 @@
         if (!mobileSelectedVertex) return;
         const t = tracks.find(tr => tr.id === mobileSelectedVertex.trackId);
         if (!t) return;
+        // Keep the point at the same screen position (center of map)
         const center = map.getCenter();
         const c = t.coords[mobileSelectedVertex.index];
         c[0] = center.lng;
@@ -2980,10 +3361,8 @@
 
       map.on('touchend', () => {
         if (!mobileSelectedVertex) return;
-        // Finish move on second tap or when user lifts finger after panning
+        cancelMobileMove();
       });
-
-      // tap elsewhere = deselect (handled in map click above)
     }
 
     function cancelMobileMove() {
@@ -2991,7 +3370,7 @@
       mobileHint.classList.remove('visible');
       map.dragPan.enable();
       const t = getActiveTrack();
-      if (t) { renderTrackList(); updateProfile(); }
+      if (t) { renderTrackList(); updateProfile(); syncUndoBtn(); }
     }
 
     // --- Drag & drop import ---
@@ -3233,6 +3612,7 @@ ${segs}
       const t = getActiveTrack();
       if (!t || index == null || index < 0 || index >= t.coords.length) {
         clearProfileHoverVertex();
+        hideCursorTooltip();
         return;
       }
       if (hoveredProfileTrackId === t.id && hoveredProfileVertexIndex === index) return;
@@ -3251,6 +3631,15 @@ ${segs}
         });
       }
       ensureVertexInView({lng: coord[0], lat: coord[1]});
+      // Show cursor tooltip at the vertex's screen position
+      if (state.cursorInfoMode === 'cursor') {
+        const result = queryLoadedElevationAtLngLat(map, {lng: coord[0], lat: coord[1]});
+        if (result) {
+          const pt = map.project([coord[0], coord[1]]);
+          const rect = map.getCanvas().getBoundingClientRect();
+          showCursorTooltipAt(rect.left + pt.x, rect.top + pt.y, `${result.elevation.toFixed(0)} m`, result.slopeDeg != null ? `${result.slopeDeg.toFixed(0)}°` : 'n/a');
+        }
+      }
     }
 
     function destroyProfileChart() {
@@ -3283,6 +3672,7 @@ ${segs}
 
     profileCanvas.addEventListener('mouseleave', () => {
       clearProfileHoverVertex();
+      hideCursorTooltip();
     });
 
     function haversineKm(a, b) {

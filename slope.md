@@ -22,33 +22,38 @@
 ## Track Editor
 - **Drag & drop import** — GPX (tracks, segments, routes with names) and GeoJSON files, with visual drop overlay
 - **Top-right track workspace** — compact floating panel for track management and export
-- **Draw mode** — pen button in the track header; click to add vertices, double-click or `Escape` to finish
+- **Draw mode** — pen button in the track header; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during draw
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
-- **Multi-track management** — color-coded tracks with selection, deletion, export actions, and active-track emphasis
+- **Multi-track management** — color-coded tracks with selection, deletion (with confirmation), export actions, and active-track emphasis
+- **Select vs Edit** — selecting a track widens the line and shows the profile; clicking the edit button (✎) enters edit mode with fully interactive vertices
 - **Track stats** — total distance (km), elevation gain (↑), loss (↓), point count, average slope, and max slope for the active track
 - **Elevation enrichment** — all track points (imported and drawn) are enriched from the same DEM source and re-enriched when new DEM tiles load
-- **Track markers** — green start / red end dots; mid-points and insert-point handles shown only for the active track
-- **Insert vertex** — click a midpoint handle between two vertices to insert a new point
-- **Ctrl+click delete** — remove individual track vertices
-- **Desktop vertex editing** — drag vertices to reposition
-- **Mobile vertex editing** — tap a vertex, then pan the map to move it
+- **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
+- **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
+- **Ctrl/Shift/Meta+click delete** — remove individual track vertices (edit mode only)
+- **Desktop vertex editing** — drag vertices to reposition (works during draw and edit modes)
+- **Mobile vertex editing** — tap a vertex to select it, then pan the map to reposition; the point stays pinned at screen center
+- **Delete last point** — 🗑️ button in toolbar to remove the last point; also Ctrl/Cmd+Z
 - **Export** — active track as GPX or GeoJSON; all tracks as a single GPX with multiple segments
 
 ## Profile
 - **Elevation profile** — bottom panel showing elevation (m), track slope (°), and terrain slope (°) vs distance (km), with dual Y-axes and a zero-line
 - **Reopenable profile** — the track panel includes a profile toggle so closing the chart is not terminal
-- **Profile-to-map hover linkage** — hovering the profile highlights the corresponding track vertex on the map
+- **Profile-to-map hover linkage** — hovering the profile highlights the corresponding track vertex on the map and shows cursor tooltip at the vertex
 - **Hover pan assist** — if the hovered vertex is out of view, the map pans to bring it back on screen
 
 ## UX
 - **Settings toggle** — top-left `🌍 Settings` button with auto-collapse when you start dragging the map
+- **Elevation & slope display** — configurable via dropdown: `At cursor` (floating tooltip near pointer, default), `Corner` (fixed in legend panel), `No` (hidden)
+- **Mobile crosshair** — tapping the map on mobile shows a crosshair at tap location with elevation/slope info; disappears on pan
+- **Mobile draw crosshair** — entering draw mode on mobile shows a center cross and a toast hint
 - **Track panel header layout** — when open, the header row is `Tracks`, `Profile`, draw button, close button; track details stay below
 - **Panel styling** — controls, legend, profile, and the open track panel share the same translucent blurred panel surface
 - **Bottom-right controls** — native MapLibre bottom-right stack with navigation, geolocate, ruler, and attribution
 - **Legend behavior** — dynamic color ramp for the current mode; in `Mode: none`, the legend collapses to cursor info only
-- **Cursor elevation & slope** — live DEM readout at the pointer (`Elevation` and `Slope`)
 - **Search** — Nominatim geocoding with collapsible search box
 - **Ctrl/Cmd+drag** — tilt and rotate the map (same as right-click drag)
+- **Toast notifications** — ephemeral messages for mobile edition hints
 
 ## Technical gotchas
 - **Contour initialization order** — contour visibility must be re-applied after the contour layers are added, otherwise first-load state can disagree with the checkbox
@@ -57,6 +62,8 @@
 - **Color relief split path** — `color-relief` is rendered via a separate MapLibre layer, not the custom WebGL analysis layer used for slope/aspect
 - **Track button state** — `tracks-btn` must be explicitly synced on startup so the disabled state matches the empty track list before any interaction
 - **Native attribution control** — when adding attribution manually in the bottom-right stack, the map must be created with `attributionControl: false` to avoid duplicate attribution UI
+- **editingTrackId vs activeTrackId** — `activeTrackId` controls selection (wider line, profile); `editingTrackId` controls which track's vertices are interactive; during draw mode, the drawing track has both set
+- **Hover-insert layer** — a separate GeoJSON source (`hover-insert-point`) holds at most one feature for the smart insert marker, avoiding re-rendering the full track GeoJSON on every mousemove
 
 ## Layer Z-Order (bottom to top)
 1. Basemap
@@ -64,4 +71,68 @@
 3. Hillshade
 4. DEM analysis overlay (`Slope` / `Aspect`) or `Color relief`
 5. Contour lines
-6. Track lines, vertices, and profile-hover marker
+6. Track lines, vertices, hover-insert marker, and profile-hover marker
+
+## Detailed behaviour
+
+### Startup
+1. Parse URL hash for `lng`, `lat`, `zoom`, `basemap`, `mode`, `opacity`, `terrain`, `exaggeration`, `bearing`, `pitch`. Missing keys fall back to Mont Blanc area at zoom 12, slope mode, 0.45 opacity.
+2. Build the MapLibre map with all sources (OSM, OTM, IGN, SwissTopo vector, Kartverket, OpenSkiMap, DEM raster-dem, contour vector tiles).
+3. Style layers are defined inline: basemap raster/vector, OpenSkiMap fill/line/symbol, hillshade, color-relief, contours, and a custom WebGL layer for slope/aspect.
+4. On `map.on('load')`: apply basemap selection, terrain state, debug grid, global-state properties, add the custom hybrid border layer, contour layers, and wire up elevation sampling.
+5. Call `updateCursorInfoVisibility()` to set initial cursor-info display mode.
+
+### DEM analysis rendering
+- The custom WebGL layer `dem-analysis-hybrid-border` renders slope or aspect per visible tile. For each tile it checks MapLibre's internal DEM tile manager first (which has proper padded borders for derivative accuracy). If no internal tile exists, it fetches the raw DEM tile as a fallback, decodes Terrarium encoding, pads to a 514×514 Float32 array, and backfills border pixels from loaded neighbours.
+- Horn's 3×3 derivative kernel is computed in the fragment shader; the slope/aspect scalar is mapped to a step colour ramp uploaded as uniforms.
+- The `color-relief` mode uses a separate MapLibre built-in layer rather than the custom shader.
+
+### Cursor elevation & slope
+- **At cursor** (default): a small `#cursor-tooltip` div positioned at `clientX+15, clientY+15` shows elevation and slope. Updated every frame via `requestAnimationFrame`. On profile hover, it repositions to the hovered vertex's screen coordinates.
+- **Corner**: the `#cursor-info` element inside the legend panel shows the values (original behaviour).
+- **No**: both hidden.
+- On mobile: a `#mobile-crosshair` is shown at the tap point with the tooltip. Hidden on drag.
+
+### Settings panel
+Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, OpenSkiMap overlay, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. Also shows internal/fallback tile counts.
+
+### Track editor — state model
+- `tracks[]` — array of `{id, name, color, coords, _statsCache}`.
+- `activeTrackId` — currently selected track (wider line, profile shown, start/end markers).
+- `editingTrackId` — track whose vertices are fully interactive (mid vertices visible, drag/hover-insert enabled). Set when user clicks the ✎ edit button in the track list, or automatically during draw mode.
+- `drawMode` — boolean. When true, map clicks append vertices to the active track.
+
+### Track selection vs editing
+- **Select** (click track name): sets `activeTrackId`. Line becomes 4px wide. Profile auto-opens. Only start/end markers visible.
+- **Edit** (click ✎ button): sets `editingTrackId`. All vertices visible (radius 4px). On desktop: vertices are draggable; the smart hover-insert marker appears when cursor nears the track line. On mobile: tap vertex → toast "Drag screen to move" → pan to reposition.
+- **Draw** (click ✏ button): creates a new track, sets both `activeTrackId` and `editingTrackId`. Map clicks add vertices. Double-click or Escape finishes. Vertices are draggable during draw.
+- Pressing Escape exits editing or draw mode.
+
+### Smart hover-insert (desktop)
+- On `mousemove`: for each segment of the editing track, project both endpoints to screen coords, compute the closest point on the segment to the cursor. Skip if the parameter t < 0.1 or > 0.9 (too close to a vertex). If the closest distance < 20px, show a single grey circle marker at that point via the `hover-insert-point` source.
+- On `mousedown` near that marker: insert a new vertex at the position, then immediately start drag for that vertex.
+
+### Mobile draw mode
+- Entering draw mode shows `#draw-crosshair` at screen center and a toast "Tap anywhere to add a point".
+- Each tap appends a coordinate. Double-tap or Escape finishes.
+- On tap of an existing vertex: toast "Drag screen to move", subsequent pan repositions the vertex.
+
+### Delete last point
+- 🗑️ button in the toolbar (visible only when a track is being edited and has points). Removes the last coordinate.
+- Ctrl/Cmd+Z also removes the last point during edit or draw.
+
+### Track deletion
+- `confirm()` dialog with the track name before removing.
+
+### Profile
+- Chart.js line chart with three datasets: elevation (left Y-axis, filled), track slope (right Y-axis, red), terrain slope (right Y-axis, dashed purple).
+- `onHover` callback calls `setProfileHoverVertex(index)` which places a circle on the map and, if cursor-info mode is `cursor`, shows the tooltip at the vertex's projected screen position.
+- Profile closes automatically when switching away from a 2-point track. Re-openable via the "Profile" button.
+
+### URL hash sync
+- `syncViewToUrl` writes `lng, lat, zoom, basemap, mode, opacity, terrain, exaggeration, bearing, pitch` to the hash on every `moveend`, `zoomend`, `rotateend`, `pitchend`.
+- `hashchange` event reads the hash back and updates map + state + UI controls.
+
+### GPX / GeoJSON import
+- Drag & drop or programmatic. GPX parser extracts `<trk>/<trkseg>/<trkpt>` and `<rte>/<rtept>` elements. GeoJSON parser extracts `LineString` and `MultiLineString` geometries.
+- Imported tracks are elevation-enriched from the DEM source and fitted to bounds.
