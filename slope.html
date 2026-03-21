@@ -124,8 +124,30 @@
     #controls {
       min-width: 180px;
       font-size: 13px;
+      max-height: calc(100vh - 60px - var(--bottom-overlay-bottom));
+      overflow-y: auto;
     }
     #controls.collapsed { display: none; }
+
+    #advanced-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      padding: 4px 0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      opacity: 0.7;
+      width: 100%;
+      color: inherit;
+    }
+    #advanced-toggle:hover { opacity: 1; }
+    #advanced-toggle .arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
+    #advanced-toggle .arrow.open { transform: rotate(90deg); }
+    #advanced-section { display: none; }
+    #advanced-section.open { display: block; }
 
     #legend {
       position: absolute;
@@ -516,33 +538,7 @@
     </div>
 
     <div class="row">
-      <label for="basemapOpacity"><strong>Basemap opacity</strong>: <span id="basemapOpacityValue">1.00</span></label><br />
-      <input id="basemapOpacity" type="range" min="0" max="1" step="0.01" value="1" />
-    </div>
-
-    <div class="row">
-      <label for="hillshadeOpacity"><strong>Hillshade opacity</strong>: <span id="hillshadeOpacityValue">0.10</span></label><br />
-      <input id="hillshadeOpacity" type="range" min="0" max="1" step="0.01" value="0.10" />
-    </div>
-
-    <div class="row">
-      <label for="hillshadeMethod"><strong>Hillshade method</strong></label><br />
-      <select id="hillshadeMethod">
-        <option value="standard">Standard</option>
-        <option value="basic">Basic</option>
-        <option value="combined">Combined</option>
-        <option value="multidirectional" selected>Multidirectional</option>
-        <option value="igor">Igor</option>
-      </select>
-    </div>
-
-    <div class="row">
-      <label for="slopeOpacity"><strong>Analysis opacity</strong>: <span id="slopeOpacityValue">0.45</span></label><br />
-      <input id="slopeOpacity" type="range" min="0" max="1" step="0.01" value="0.45" />
-    </div>
-
-    <div class="row">
-      <label><input id="showContours" type="checkbox" checked /> Show contour lines</label>
+      <label><input id="showContours" type="checkbox" checked /> Contour lines</label>
     </div>
 
     <div class="row">
@@ -550,31 +546,63 @@
     </div>
 
     <div class="row">
-      <label><input id="showTileGrid" type="checkbox" /> Show DEM tile grid</label>
+      <label><input id="terrain3d" type="checkbox" /> 3D terrain</label>
     </div>
 
-    <div class="row">
-      <label for="cursorInfoMode"><strong>Elevation &amp; slope</strong></label><br />
-      <select id="cursorInfoMode">
-        <option value="cursor" selected>At cursor</option>
-        <option value="corner">Corner</option>
-        <option value="no">No</option>
-      </select>
-    </div>
+    <button id="advanced-toggle" type="button"><span class="arrow">&#9654;</span> Advanced</button>
+    <div id="advanced-section">
+      <div class="row">
+        <label for="basemapOpacity"><strong>Basemap opacity</strong>: <span id="basemapOpacityValue">1.00</span></label><br />
+        <input id="basemapOpacity" type="range" min="0" max="1" step="0.01" value="1" />
+      </div>
 
-    <div class="row">
-      <label><input id="multiplyBlend" type="checkbox" checked /> Multiply blend</label>
-    </div>
+      <div class="row">
+        <label for="slopeOpacity"><strong>Analysis opacity</strong>: <span id="slopeOpacityValue">0.45</span></label><br />
+        <input id="slopeOpacity" type="range" min="0" max="1" step="0.01" value="0.45" />
+      </div>
 
-    <div class="row">
-      <label><input id="terrain3d" type="checkbox" /> Enable 3D terrain</label><br />
-      <label for="terrainExaggeration"><strong>Terrain exaggeration</strong>: <span id="terrainExaggerationValue">1.40</span></label><br />
-      <input id="terrainExaggeration" type="range" min="1" max="3" step="0.1" value="1.4" disabled />
-    </div>
+      <div class="row">
+        <label for="hillshadeOpacity"><strong>Hillshade opacity</strong>: <span id="hillshadeOpacityValue">0.10</span></label><br />
+        <input id="hillshadeOpacity" type="range" min="0" max="1" step="0.01" value="0.10" />
+      </div>
 
-    <div id="status" class="row">
-      Internal backfilled DEM tiles: <code id="internalCount">0</code><br />
-      Fallback border-fixed tiles: <code id="fallbackCount">0</code>
+      <div class="row">
+        <label for="hillshadeMethod"><strong>Hillshade method</strong></label><br />
+        <select id="hillshadeMethod">
+          <option value="standard">Standard</option>
+          <option value="basic">Basic</option>
+          <option value="combined">Combined</option>
+          <option value="multidirectional" selected>Multidirectional</option>
+          <option value="igor">Igor</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="cursorInfoMode"><strong>Elevation &amp; slope</strong></label><br />
+        <select id="cursorInfoMode">
+          <option value="cursor" selected>At cursor</option>
+          <option value="corner">Corner</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label><input id="multiplyBlend" type="checkbox" checked /> Multiply blend</label>
+      </div>
+
+      <div class="row">
+        <label><input id="showTileGrid" type="checkbox" /> Show DEM tile grid</label>
+      </div>
+
+      <div class="row">
+        <label for="terrainExaggeration"><strong>Terrain exaggeration</strong>: <span id="terrainExaggerationValue">1.40</span></label><br />
+        <input id="terrainExaggeration" type="range" min="1" max="3" step="0.1" value="1.4" disabled />
+      </div>
+
+      <div id="status" class="row">
+        Internal backfilled DEM tiles: <code id="internalCount">0</code><br />
+        Fallback border-fixed tiles: <code id="fallbackCount">0</code>
+      </div>
     </div>
   </div>
   </div>
@@ -2126,6 +2154,15 @@
       setControlsCollapsed(!controlsPanel.classList.contains('collapsed'));
     });
     syncControlsToggleLabel();
+
+    // Advanced section toggle
+    const advancedToggle = document.getElementById('advanced-toggle');
+    const advancedSection = document.getElementById('advanced-section');
+    advancedToggle.addEventListener('click', () => {
+      const open = advancedSection.classList.toggle('open');
+      advancedToggle.querySelector('.arrow').classList.toggle('open', open);
+    });
+
     map.on('dragstart', () => {
       setControlsCollapsed(true);
     });
@@ -3292,7 +3329,7 @@
         }
 
         const canEdit = isTrackEditing(activeTrackId);
-        if (canEdit) { // && !drawMode) {
+        if (canEdit) {
           // Check vertex hover
           const hit = hitTestVertex(e.point);
           const isRealVertex = Boolean(hit && hit.index != null);
