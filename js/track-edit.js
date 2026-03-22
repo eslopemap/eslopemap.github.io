@@ -210,6 +210,7 @@ function hitTestVertex(point) {
 // ---- Undo/UI sync ----
 
 function syncUndoBtn() {
+  if (!tracksFns.getActiveTrack) return; // not yet wired
   const t = tracksFns.getActiveTrack();
   const show = t && t.coords.length > 0 && isTrackEditing(t.id);
   undoBtn.style.display = show ? '' : 'none';
