@@ -21,6 +21,7 @@ import {
 
 import { initTracks, getTracksState } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
+import { importFileContent } from './io.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 
@@ -735,7 +736,7 @@ Object.defineProperties(window, {
   selectedVertexIndex: { get() { return tracksState.selectedVertexIndex; } },
   insertAfterIdx:      { get() { return tracksState.insertAfterIdx; } },
   mobileFriendlyMode:  { get() { return tracksState.mobileFriendlyMode; } },
-  importFileContent:   { get() { return tracksState.importFileContent; } },
+  importFileContent:   { get() { return importFileContent; } },
   profileChart:        { get() { return getProfileChart(); } },
   profileClosed:       { get() { return tracksState.profileClosed; } },
 });

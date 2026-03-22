@@ -1,45 +1,24 @@
-// Track editor: CRUD, vertex editing, import/export, drag/drop, mobile.
+// Track data model, CRUD, map rendering, stats, panel UI.
+// Editing interaction is in track-edit.js, import/export in io.js.
 
-import { haversineKm, downloadFile } from './utils.js';
+import { haversineKm } from './utils.js';
 import { DEM_MAX_Z, DEM_SOURCE_ID, CORE_DIM, TRACK_COLORS } from './constants.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
-import { showCursorTooltipAt, hideCursorTooltip } from './ui.js';
+import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
+import { initIO, importFileContent } from './io.js';
 
 let map, state;
 let updateProfileFn = () => {};  // wired by initTracks
 
 const tracks = [];
 let activeTrackId = null;
-let editingTrackId = null;
-let editingIsNewTrack = false;
-let dragVertexInfo = null;
-let mobileSelectedVertex = null;
-let suppressNextMapClick = false;
-let hoverInsertInfo = null;
-let selectedVertexIndex = null;
-let insertAfterIdx = null;
 let trackColorIdx = 0;
 let mapReady = false;
-let insertPopupMarker = null;
-let insertPreviewLngLat = null;
 let profileClosed = false;
 
-const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-let mobileFriendlyMode = isMobile;
-
 // DOM refs (resolved at init)
-let drawBtn, tracksBtn, undoBtn, mobileModeBtn, trackPanelShell, trackToolRow;
+let tracksBtn, trackPanelShell, trackToolRow;
 let trackPanel, trackPanelHeader, trackListEl, profileToggleBtn;
-let dropOverlay, mobileHint, toastEl, drawCrosshair, mobileCrosshair;
-
-let toastTimer = 0;
-function showToast(msg, durationMs) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('visible');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('visible'), durationMs || 2500);
-}
 
 // ---- Helpers ----
 
@@ -47,10 +26,6 @@ const PROFILE_HOVER_SOURCE_ID = 'profile-hover-point';
 const PROFILE_HOVER_LAYER_ID = 'profile-hover-point-layer';
 const HOVER_INSERT_SOURCE_ID = 'hover-insert-point';
 const HOVER_INSERT_LAYER_ID = 'hover-insert-point-layer';
-
-function isTrackEditing(tId) {
-  return tId != null && tId === editingTrackId;
-}
 
 function nextColor() {
   const c = TRACK_COLORS[trackColorIdx % TRACK_COLORS.length];
@@ -284,95 +259,6 @@ function ensureProfileHoverLayer() {
   }
 }
 
-function clearHoverInsertMarker() {
-  hoverInsertInfo = null;
-  const src = map.getSource(HOVER_INSERT_SOURCE_ID);
-  if (src) src.setData({type: 'FeatureCollection', features: []});
-}
-
-function showHoverInsertMarker(lngLat) {
-  const src = map.getSource(HOVER_INSERT_SOURCE_ID);
-  if (src) {
-    src.setData({type: 'FeatureCollection', features: [{
-      type: 'Feature',
-      geometry: {type: 'Point', coordinates: [lngLat.lng, lngLat.lat]},
-      properties: {}
-    }]});
-  }
-}
-
-function updateInsertPreview() {
-  const src = map.getSource('insert-preview-line');
-  if (!src) return;
-  const t = editingTrackId ? tracks.find(tr => tr.id === editingTrackId) : null;
-  if (!t || !t.coords.length) { src.setData({type: 'FeatureCollection', features: []}); return; }
-
-  let target = insertPreviewLngLat;
-  if (mobileFriendlyMode && editingTrackId) {
-    const center = map.getCenter();
-    target = { lng: center.lng, lat: center.lat };
-  }
-  if (!target) { src.setData({type: 'FeatureCollection', features: []}); return; }
-
-  const features = [];
-  const tCoord = [target.lng, target.lat];
-
-  if (insertAfterIdx != null && insertAfterIdx < t.coords.length) {
-    const prev = t.coords[insertAfterIdx];
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[prev[0], prev[1]], tCoord] },
-      properties: {}
-    });
-    if (insertAfterIdx + 1 < t.coords.length) {
-      const next = t.coords[insertAfterIdx + 1];
-      features.push({
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: [tCoord, [next[0], next[1]]] },
-        properties: {}
-      });
-    }
-  } else if (t.coords.length > 0) {
-    const last = t.coords[t.coords.length - 1];
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[last[0], last[1]], tCoord] },
-      properties: {}
-    });
-  }
-  src.setData({ type: 'FeatureCollection', features });
-}
-
-function findClosestPointOnTrack(t, mousePoint) {
-  if (!t || t.coords.length < 2) return null;
-  let bestDist = Infinity;
-  let bestLngLat = null;
-  let bestSegment = -1;
-  for (let i = 0; i < t.coords.length - 1; i++) {
-    const a = map.project([t.coords[i][0], t.coords[i][1]]);
-    const b = map.project([t.coords[i+1][0], t.coords[i+1][1]]);
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const len2 = dx * dx + dy * dy;
-    let tp = 0;
-    if (len2 > 0) {
-      tp = ((mousePoint.x - a.x) * dx + (mousePoint.y - a.y) * dy) / len2;
-      tp = Math.max(0, Math.min(1, tp));
-    }
-    if (tp < 0.1 || tp > 0.9) continue;
-    const px = a.x + tp * dx, py = a.y + tp * dy;
-    const dist = Math.sqrt((mousePoint.x - px) ** 2 + (mousePoint.y - py) ** 2);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestLngLat = map.unproject([px, py]);
-      bestSegment = i;
-    }
-  }
-  if (bestDist < 20 && bestSegment >= 0) {
-    return { lngLat: bestLngLat, insertAfter: bestSegment, distance: bestDist };
-  }
-  return null;
-}
-
 function removeTrackFromMap(t) {
   if (map.getLayer(trackPtsLayerId(t))) map.removeLayer(trackPtsLayerId(t));
   if (map.getLayer(trackLineLayerId(t))) map.removeLayer(trackLineLayerId(t));
@@ -388,64 +274,13 @@ function refreshAllTrackSources() {
   for (const t of tracks) refreshTrackSource(t);
 }
 
-function updateVertexHighlight() {
+function updateVertexHighlight(editingId, selIdx) {
   map.setGlobalStateProperty('activeTrackId', activeTrackId);
-  map.setGlobalStateProperty('editingTrackId', editingTrackId);
-  map.setGlobalStateProperty('selectedVertexIdx', selectedVertexIndex != null ? selectedVertexIndex : -1);
-}
-
-// ---- Insert popup ----
-
-function updateInsertPopup() {
-  const t = editingTrackId ? tracks.find(tr => tr.id === editingTrackId) : null;
-  if (!t || selectedVertexIndex == null || selectedVertexIndex >= t.coords.length) {
-    removeInsertPopup();
-    return;
-  }
-  const coord = t.coords[selectedVertexIndex];
-  const lngLat = [coord[0], coord[1]];
-  if (!insertPopupMarker) {
-    const el = document.createElement('div');
-    el.className = 'vertex-insert-popup';
-    el.innerHTML = '<button class="insert-popup-btn" title="Insert points after this vertex">+</button>';
-    el.querySelector('.insert-popup-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (insertAfterIdx != null) {
-        insertAfterIdx = null;
-      } else if (selectedVertexIndex != null) {
-        insertAfterIdx = selectedVertexIndex;
-      }
-      syncUndoBtn();
-    });
-    insertPopupMarker = new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] })
-      .setLngLat(lngLat)
-      .addTo(map);
-  } else {
-    insertPopupMarker.setLngLat(lngLat);
-  }
-  const btn = insertPopupMarker.getElement().querySelector('.insert-popup-btn');
-  if (btn) btn.classList.toggle('active', insertAfterIdx != null);
-}
-
-function removeInsertPopup() {
-  if (insertPopupMarker) {
-    insertPopupMarker.remove();
-    insertPopupMarker = null;
-  }
+  map.setGlobalStateProperty('editingTrackId', editingId != null ? editingId : null);
+  map.setGlobalStateProperty('selectedVertexIdx', selIdx != null ? selIdx : -1);
 }
 
 // ---- Panel/UI sync ----
-
-function syncUndoBtn() {
-  const t = getActiveTrack ? getActiveTrack() : null;
-  const show = t && t.coords.length > 0 && isTrackEditing(t.id);
-  undoBtn.style.display = show ? '' : 'none';
-  mobileModeBtn.style.display = ((isMobile || isLocalhost) && show) ? '' : 'none';
-  mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
-  updateVertexHighlight();
-  updateInsertPopup();
-  updateInsertPreview();
-}
 
 function syncProfileToggleButton() {
   const t = getActiveTrack();
@@ -564,62 +399,20 @@ function renderTrackList() {
   if (!tracks.length) setTrackPanelVisible(false);
   else syncTrackPanelShell();
   syncProfileToggleButton();
-  syncUndoBtn();
+  const es = getEditState();
+  es.syncUndoBtn();
 }
 
-// ---- Active track / edit mode ----
+// ---- Active track ----
 
 function setActiveTrack(id) {
   if (id !== activeTrackId) profileClosed = false;
-  if (editingTrackId && editingTrackId !== id) exitEditMode();
+  const es = getEditState();
+  if (es.editingTrackId && es.editingTrackId !== id) exitEditMode();
   activeTrackId = id;
   renderTrackList();
-  updateVertexHighlight();
+  updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
   updateProfileFn();
-}
-
-function enterEditMode(tId) {
-  if (editingTrackId && editingTrackId !== tId) exitEditMode();
-  editingTrackId = tId;
-  selectedVertexIndex = null;
-  insertAfterIdx = null;
-  map.getCanvas().style.cursor = 'crosshair';
-  drawBtn.classList.add('active');
-  updateVertexHighlight();
-  renderTrackList();
-  syncUndoBtn();
-  if (mobileFriendlyMode) {
-    drawCrosshair.classList.add('visible');
-    showToast('Tap anywhere to add a point at center', 3000);
-  }
-}
-
-function exitEditMode() {
-  const wasNewTrack = editingIsNewTrack;
-  editingIsNewTrack = false;
-  selectedVertexIndex = null;
-  insertAfterIdx = null;
-  removeInsertPopup();
-  drawBtn.classList.remove('active');
-  setDefaultMapCursor();
-  drawCrosshair.classList.remove('visible');
-  if (mobileSelectedVertex) cancelMobileMove();
-  const t = editingTrackId ? tracks.find(tr => tr.id === editingTrackId) : null;
-  if (wasNewTrack && t && t.coords.length < 2) {
-    const idx = tracks.indexOf(t);
-    if (idx >= 0) {
-      removeTrackFromMap(t);
-      tracks.splice(idx, 1);
-      if (activeTrackId === t.id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
-    }
-  } else if (t) {
-    updateProfileFn();
-  }
-  editingTrackId = null;
-  clearHoverInsertMarker();
-  updateVertexHighlight();
-  renderTrackList();
-  syncUndoBtn();
 }
 
 function deleteTrack(id) {
@@ -627,12 +420,13 @@ function deleteTrack(id) {
   if (!t) return;
   if (!confirm(`Delete track "${t.name}"?`)) return;
   const idx = tracks.indexOf(t);
-  if (editingTrackId === id) exitEditMode();
+  const es = getEditState();
+  if (es.editingTrackId === id) exitEditMode();
   removeTrackFromMap(t);
   tracks.splice(idx, 1);
   if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
   renderTrackList();
-  updateVertexHighlight();
+  updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
 }
 
 function createTrack(name, coords) {
@@ -649,43 +443,6 @@ function getActiveTrack() {
   return tracks.find(t => t.id === activeTrackId) || null;
 }
 
-function setDefaultMapCursor() {
-  if (!editingTrackId) map.getCanvas().style.cursor = 'cell';
-}
-
-function startNewTrack() {
-  if (editingTrackId) exitEditMode();
-  editingIsNewTrack = true;
-  const t = createTrack('Track ' + (tracks.length + 1), []);
-  enterEditMode(t.id);
-}
-
-function hitTestVertex(point) {
-  const tId = editingTrackId;
-  if (!tId) return null;
-  const t = tracks.find(tr => tr.id === tId);
-  if (!t) return null;
-  const layerId = trackPtsLayerId(t);
-  if (!map.getLayer(layerId)) return null;
-  const r = 12;
-  const features = map.queryRenderedFeatures(
-    [[point.x - r, point.y - r], [point.x + r, point.y + r]],
-    { layers: [layerId] }
-  );
-  if (!features.length) return null;
-  const real = features.find(f => f.properties.idx != null);
-  if (real) return { trackId: t.id, index: real.properties.idx };
-  return null;
-}
-
-function cancelMobileMove() {
-  mobileSelectedVertex = null;
-  mobileHint.classList.remove('visible');
-  map.dragPan.enable();
-  const t = getActiveTrack();
-  if (t) { renderTrackList(); updateProfileFn(); syncUndoBtn(); }
-}
-
 function fitToTrack(t) {
   if (t.coords.length < 1) return;
   const bounds = t.coords.reduce(
@@ -695,157 +452,47 @@ function fitToTrack(t) {
   map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 1000 });
 }
 
-// ---- Import/export ----
+// ---- Callbacks from track-edit.js ----
 
-function importFileContent(filename, text) {
-  const baseName = filename.replace(/\.[^.]+$/, '');
+function onTrackCoordsChanged(t) {
+  invalidateTrackStats(t);
+  refreshTrackSource(t);
+  renderTrackList();
+  updateProfileFn();
+}
 
-  if (filename.endsWith('.gpx')) {
-    const parsed = parseGPX(text, baseName);
-    if (!parsed.length) { console.warn('No tracks found in', filename); return; }
-    for (const {name, coords} of parsed) {
-      const t = createTrack(name, coords);
-      fitToTrack(t);
-    }
-  } else {
-    const coordsList = parseGeoJSON(text);
-    if (!coordsList.length) { console.warn('No tracks found in', filename); return; }
-    for (let i = 0; i < coordsList.length; i++) {
-      const name = coordsList.length > 1 ? `${baseName} (${i + 1})` : baseName;
-      const t = createTrack(name, coordsList[i]);
-      fitToTrack(t);
-    }
+function invalidateAndRefresh(t) {
+  invalidateTrackStats(t);
+  refreshTrackSource(t);
+}
+
+function removeIncompleteNewTrack(t) {
+  const idx = tracks.indexOf(t);
+  if (idx >= 0) {
+    removeTrackFromMap(t);
+    tracks.splice(idx, 1);
+    if (activeTrackId === t.id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
   }
 }
 
-function gpxParsePoints(ptEls) {
-  const coords = [];
-  for (const pt of ptEls) {
-    const lat = +pt.getAttribute('lat');
-    const lon = +pt.getAttribute('lon');
-    const eleEl = pt.querySelector('ele');
-    coords.push([lon, lat, eleEl ? +eleEl.textContent : null]);
-  }
-  return coords;
-}
-
-function parseGPX(text, baseName) {
-  const doc = new DOMParser().parseFromString(text, 'text/xml');
-  const results = [];
-  for (const trk of doc.querySelectorAll('trk')) {
-    const nameEl = trk.querySelector(':scope > name');
-    const trkName = nameEl ? nameEl.textContent.trim() : baseName;
-    const segs = trk.querySelectorAll('trkseg');
-    if (segs.length === 0) continue;
-    if (segs.length === 1) {
-      const coords = gpxParsePoints(segs[0].querySelectorAll('trkpt'));
-      if (coords.length) results.push({name: trkName, coords});
-    } else {
-      for (let i = 0; i < segs.length; i++) {
-        const coords = gpxParsePoints(segs[i].querySelectorAll('trkpt'));
-        if (coords.length) results.push({name: `${trkName} seg${i + 1}`, coords});
-      }
-    }
-  }
-  for (const rte of doc.querySelectorAll('rte')) {
-    const nameEl = rte.querySelector(':scope > name');
-    const rteName = nameEl ? nameEl.textContent.trim() : baseName;
-    const coords = gpxParsePoints(rte.querySelectorAll('rtept'));
-    if (coords.length) results.push({name: rteName, coords});
-  }
-  return results;
-}
-
-function parseGeoJSON(text) {
-  const gj = JSON.parse(text);
-  const results = [];
-
-  function extractCoords(geom) {
-    if (geom.type === 'LineString') {
-      results.push(geom.coordinates.map(c => [c[0], c[1], c[2] != null ? c[2] : null]));
-    } else if (geom.type === 'MultiLineString') {
-      for (const line of geom.coordinates) {
-        results.push(line.map(c => [c[0], c[1], c[2] != null ? c[2] : null]));
-      }
-    }
-  }
-
-  if (gj.type === 'FeatureCollection') {
-    for (const f of gj.features) extractCoords(f.geometry);
-  } else if (gj.type === 'Feature') {
-    extractCoords(gj.geometry);
-  } else {
-    extractCoords(gj);
-  }
-  return results;
-}
-
-function exportActiveGPX() {
-  const t = getActiveTrack();
-  if (!t || !t.coords.length) return;
-  const pts = t.coords.map(c => {
-    const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-    return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
-  }).join('\n');
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="slope-editor">
-  <trk>
-<name>${t.name}</name>
-<trkseg>
-${pts}
-</trkseg>
-  </trk>
-</gpx>`;
-  downloadFile(t.name + '.gpx', gpx, 'application/gpx+xml');
-}
-
-function exportActiveGeoJSON() {
-  const t = getActiveTrack();
-  if (!t || !t.coords.length) return;
-  const gj = {
-    type: 'Feature',
-    properties: { name: t.name },
-    geometry: {
-      type: 'LineString',
-      coordinates: t.coords.map(c => c[2] != null ? [c[0], c[1], c[2]] : [c[0], c[1]])
-    }
-  };
-  downloadFile(t.name + '.geojson', JSON.stringify(gj, null, 2), 'application/geo+json');
-}
-
-function exportAllGPX() {
-  if (!tracks.length) return;
-  const segs = tracks.map(t => {
-    const pts = t.coords.map(c => {
-      const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-      return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
-    }).join('\n');
-    return `    <trkseg>\n${pts}\n    </trkseg>`;
-  }).join('\n');
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="slope-editor">
-  <trk>
-<name>All tracks</name>
-${segs}
-  </trk>
-</gpx>`;
-  downloadFile('all-tracks.gpx', gpx, 'application/gpx+xml');
+function createNewTrack() {
+  return createTrack('Track ' + (tracks.length + 1), []);
 }
 
 // ---- Public API ----
 
 export function getTracksState() {
+  const es = getEditState();
   return {
     tracks,
     get activeTrackId() { return activeTrackId; },
-    get editingTrackId() { return editingTrackId; },
-    get selectedVertexIndex() { return selectedVertexIndex; },
-    get insertAfterIdx() { return insertAfterIdx; },
-    get mobileFriendlyMode() { return mobileFriendlyMode; },
+    get editingTrackId() { return es.editingTrackId; },
+    get selectedVertexIndex() { return es.selectedVertexIndex; },
+    get insertAfterIdx() { return es.insertAfterIdx; },
+    get mobileFriendlyMode() { return es.mobileFriendlyMode; },
     get mapReady() { return mapReady; },
     get profileClosed() { return profileClosed; },
     set profileClosed(v) { profileClosed = v; },
-    importFileContent,
     getActiveTrack,
     ensureProfileHoverLayer,
     PROFILE_HOVER_SOURCE_ID,
@@ -863,23 +510,31 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   state = stateRef;
   updateProfileFn = updateProfile;
 
-  drawBtn = document.getElementById('draw-btn');
   tracksBtn = document.getElementById('tracks-btn');
-  undoBtn = document.getElementById('undo-btn');
-  mobileModeBtn = document.getElementById('mobile-mode-btn');
   trackPanelShell = document.getElementById('track-panel-shell');
   trackToolRow = document.getElementById('track-tool-row');
   trackPanel = document.getElementById('track-panel');
   trackPanelHeader = trackPanel.querySelector('.track-panel-header');
   trackListEl = document.getElementById('track-list');
   profileToggleBtn = document.getElementById('profile-toggle-btn');
-  dropOverlay = document.getElementById('drop-overlay');
-  mobileHint = document.getElementById('mobile-move-hint');
-  toastEl = document.getElementById('toast');
-  drawCrosshair = document.getElementById('draw-crosshair');
-  mobileCrosshair = document.getElementById('mobile-crosshair');
 
   syncTrackPanelShell();
+
+  // Init the editing module
+  initTrackEdit(mapRef, stateRef, updateProfile, {
+    findTrack: (id) => tracks.find(tr => tr.id === id),
+    getActiveTrack,
+    createNewTrack,
+    deleteTrack,
+    removeIncompleteNewTrack,
+    onTrackCoordsChanged,
+    invalidateAndRefresh,
+    refreshTrackSource,
+    renderTrackList,
+    updateVertexHighlight,
+    trackPtsLayerId,
+    elevationAt,
+  });
 
   // Re-enrich when new DEM tiles load
   map.on('data', (e) => {
@@ -892,407 +547,17 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     }
   });
 
-  // Button handlers
-  drawBtn.addEventListener('click', () => {
-    if (editingTrackId) exitEditMode();
-    else startNewTrack();
-  });
-
-  undoBtn.addEventListener('click', () => {
-    const t = getActiveTrack();
-    if (!t || !t.coords.length) return;
-    t.coords.pop();
-    if (selectedVertexIndex != null && selectedVertexIndex >= t.coords.length) {
-      selectedVertexIndex = t.coords.length > 0 ? t.coords.length - 1 : null;
-    }
-    if (insertAfterIdx != null && insertAfterIdx >= t.coords.length) {
-      insertAfterIdx = t.coords.length > 0 ? t.coords.length - 1 : null;
-    }
-    invalidateTrackStats(t);
-    refreshTrackSource(t);
-    renderTrackList();
-    updateProfileFn();
-    syncUndoBtn();
-  });
-
-  mobileModeBtn.addEventListener('click', () => {
-    mobileFriendlyMode = !mobileFriendlyMode;
-    mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
-    if (mobileFriendlyMode && editingTrackId) {
-      drawCrosshair.classList.add('visible');
-      showToast('Tap anywhere to add a point at center', 3000);
-    } else {
-      drawCrosshair.classList.remove('visible');
-      if (mobileSelectedVertex) cancelMobileMove();
-    }
-    syncUndoBtn();
-  });
-
   tracksBtn.addEventListener('click', () => {
     setTrackPanelVisible(!trackPanel.classList.contains('visible'));
   });
 
-  // Map click: add vertex or select vertex
-  map.on('click', (e) => {
-    if (suppressNextMapClick) {
-      suppressNextMapClick = false;
-      return;
-    }
-
-    if (editingTrackId) {
-      const t = tracks.find(tr => tr.id === editingTrackId);
-      if (!t) return;
-
-      if (e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
-        const hit = hitTestVertex(e.point);
-        if (hit && hit.index != null) {
-          t.coords.splice(hit.index, 1);
-          if (selectedVertexIndex != null) {
-            if (hit.index < selectedVertexIndex) selectedVertexIndex--;
-            else if (hit.index === selectedVertexIndex) selectedVertexIndex = null;
-          }
-          if (insertAfterIdx != null) {
-            if (hit.index <= insertAfterIdx) insertAfterIdx = Math.max(0, insertAfterIdx - 1);
-          }
-          invalidateTrackStats(t);
-          refreshTrackSource(t);
-          renderTrackList();
-          updateProfileFn();
-          if (t.coords.length === 0) deleteTrack(t.id);
-        }
-        return;
-      }
-
-      const hitPt = hitTestVertex(e.point);
-      if (hitPt && hitPt.index != null) {
-        if (mobileFriendlyMode) {
-          selectedVertexIndex = hitPt.index;
-          mobileSelectedVertex = hitPt;
-          mobileHint.textContent = 'Drag screen to move point \u00b7 tap elsewhere to deselect';
-          mobileHint.classList.add('visible');
-          map.dragPan.disable();
-          showToast('Drag screen to move', 2000);
-          syncUndoBtn();
-          return;
-        }
-        if (selectedVertexIndex === hitPt.index) {
-          selectedVertexIndex = null;
-          insertAfterIdx = null;
-        } else {
-          selectedVertexIndex = hitPt.index;
-          if (insertAfterIdx != null) insertAfterIdx = hitPt.index;
-        }
-        syncUndoBtn();
-        return;
-      }
-
-      if (mobileFriendlyMode && mobileSelectedVertex) {
-        cancelMobileMove();
-      }
-
-      let insertLngLat = e.lngLat;
-      if (mobileFriendlyMode) {
-        insertLngLat = map.getCenter();
-      }
-
-      const ele = elevationAt(insertLngLat);
-      if (insertAfterIdx != null) {
-        t.coords.splice(insertAfterIdx + 1, 0, [insertLngLat.lng, insertLngLat.lat, ele]);
-        insertAfterIdx++;
-        selectedVertexIndex = insertAfterIdx;
-      } else {
-        t.coords.push([insertLngLat.lng, insertLngLat.lat, ele]);
-      }
-      invalidateTrackStats(t);
-      refreshTrackSource(t);
-      renderTrackList();
-      updateProfileFn();
-      syncUndoBtn();
-      return;
-    }
+  // Init the IO module (drag-drop, export buttons)
+  initIO({
+    createTrack,
+    getActiveTrack,
+    getTracks: () => tracks,
+    fitToTrack,
   });
-  setDefaultMapCursor();
-
-  map.on('dblclick', (e) => {
-    if (editingTrackId) {
-      e.preventDefault();
-      exitEditMode();
-    }
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && editingTrackId) exitEditMode();
-    if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && isTrackEditing(activeTrackId)) {
-      const t = getActiveTrack();
-      if (t && t.coords.length > 0) {
-        e.preventDefault();
-        t.coords.pop();
-        if (selectedVertexIndex != null && selectedVertexIndex >= t.coords.length) {
-          selectedVertexIndex = t.coords.length > 0 ? t.coords.length - 1 : null;
-        }
-        if (insertAfterIdx != null && insertAfterIdx >= t.coords.length) {
-          insertAfterIdx = t.coords.length > 0 ? t.coords.length - 1 : null;
-        }
-        invalidateTrackStats(t);
-        refreshTrackSource(t);
-        renderTrackList();
-        updateProfileFn();
-        syncUndoBtn();
-      }
-    }
-  });
-
-  // Desktop: drag vertices + smart hover insert marker
-  if (!isMobile) {
-    let hoveredVertex = false;
-    let dragMoved = false;
-    let hoverInsertDrag = false;
-
-    function finishVertexDrag() {
-      if (!dragVertexInfo) return;
-      const t = tracks.find(tr => tr.id === dragVertexInfo.trackId);
-      if (!dragMoved && t) {
-        selectedVertexIndex = dragVertexInfo.index;
-        if (insertAfterIdx != null) insertAfterIdx = dragVertexInfo.index;
-      }
-      dragVertexInfo = null;
-      hoverInsertDrag = false;
-      map.dragPan.enable();
-      hoveredVertex = false;
-      if (dragMoved) suppressNextMapClick = true;
-      dragMoved = false;
-      setDefaultMapCursor();
-      if (t) {
-        invalidateTrackStats(t);
-        renderTrackList();
-        updateProfileFn();
-        syncUndoBtn();
-      }
-    }
-
-    map.on('mousedown', (e) => {
-      if (!editingTrackId) return;
-
-      const hit = hitTestVertex(e.point);
-      if (hit && hit.index != null) {
-        e.preventDefault();
-        e.originalEvent.stopPropagation();
-        dragVertexInfo = hit;
-        dragMoved = false;
-        map.dragPan.disable();
-        map.getCanvas().style.cursor = 'grabbing';
-        return;
-      }
-
-      if (hoverInsertInfo) {
-        const hiPt = map.project([hoverInsertInfo.lngLat.lng, hoverInsertInfo.lngLat.lat]);
-        const dist = Math.sqrt((e.point.x - hiPt.x) ** 2 + (e.point.y - hiPt.y) ** 2);
-        if (dist < 20) {
-          const t = tracks.find(tr => tr.id === editingTrackId);
-          if (t) {
-            const ele = elevationAt(hoverInsertInfo.lngLat);
-            t.coords.splice(hoverInsertInfo.insertAfter + 1, 0,
-              [hoverInsertInfo.lngLat.lng, hoverInsertInfo.lngLat.lat, ele]);
-            invalidateTrackStats(t);
-            refreshTrackSource(t);
-            e.preventDefault();
-            e.originalEvent.stopPropagation();
-            dragVertexInfo = { trackId: t.id, index: hoverInsertInfo.insertAfter + 1 };
-            hoverInsertDrag = true;
-            dragMoved = false;
-            clearHoverInsertMarker();
-            map.dragPan.disable();
-            map.getCanvas().style.cursor = 'grabbing';
-            return;
-          }
-        }
-      }
-    });
-
-    map.on('mousemove', (e) => {
-      if (dragVertexInfo) {
-        const t = tracks.find(tr => tr.id === dragVertexInfo.trackId);
-        if (!t) return;
-        const c = t.coords[dragVertexInfo.index];
-        c[0] = e.lngLat.lng;
-        c[1] = e.lngLat.lat;
-        c[2] = elevationAt(e.lngLat);
-        dragMoved = true;
-        refreshTrackSource(t);
-        return;
-      }
-
-      if (editingTrackId) {
-        if (!mobileFriendlyMode) {
-          insertPreviewLngLat = e.lngLat;
-          updateInsertPreview();
-        }
-        const hit = hitTestVertex(e.point);
-        const isRealVertex = Boolean(hit && hit.index != null);
-        if (isRealVertex && !hoveredVertex) {
-          hoveredVertex = true;
-          clearHoverInsertMarker();
-          map.getCanvas().style.cursor = 'grab';
-        } else if (!isRealVertex && hoveredVertex) {
-          hoveredVertex = false;
-          map.getCanvas().style.cursor = 'crosshair';
-        }
-
-        if (!isRealVertex && !hoveredVertex) {
-          const t = tracks.find(tr => tr.id === editingTrackId);
-          const closest = findClosestPointOnTrack(t, e.point);
-          if (closest) {
-            hoverInsertInfo = closest;
-            showHoverInsertMarker(closest.lngLat);
-            map.getCanvas().style.cursor = 'copy';
-          } else {
-            if (hoverInsertInfo) {
-              clearHoverInsertMarker();
-              map.getCanvas().style.cursor = 'crosshair';
-            }
-          }
-        } else if (hoverInsertInfo) {
-          clearHoverInsertMarker();
-        }
-      }
-    });
-
-    map.on('mouseup', () => {
-      finishVertexDrag();
-    });
-
-    window.addEventListener('mouseup', finishVertexDrag);
-  }
-
-  // Mobile: vertex interaction
-  if (isMobile) {
-    let touchLongPressTimer = null;
-    let touchStartPt = null;
-    let mobileDragVertex = null;
-
-    map.getCanvas().addEventListener('touchstart', (e) => {
-      if (!editingTrackId || mobileFriendlyMode) return;
-      if (e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      const rect = map.getCanvas().getBoundingClientRect();
-      const pt = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-      touchStartPt = pt;
-      const hit = hitTestVertex(pt);
-      if (hit && hit.index != null) {
-        touchLongPressTimer = setTimeout(() => {
-          mobileDragVertex = { ...hit, screenX: touch.clientX, screenY: touch.clientY };
-          map.dragPan.disable();
-          showToast('Drag to move point', 1500);
-        }, 400);
-      }
-    }, { passive: true });
-
-    map.getCanvas().addEventListener('touchmove', (e) => {
-      if (touchLongPressTimer && touchStartPt) {
-        const touch = e.touches[0];
-        const rect = map.getCanvas().getBoundingClientRect();
-        const dx = touch.clientX - rect.left - touchStartPt.x;
-        const dy = touch.clientY - rect.top - touchStartPt.y;
-        if (Math.sqrt(dx * dx + dy * dy) > 10) {
-          clearTimeout(touchLongPressTimer);
-          touchLongPressTimer = null;
-        }
-      }
-      if (mobileDragVertex && e.touches.length === 1) {
-        const touch = e.touches[0];
-        const rect = map.getCanvas().getBoundingClientRect();
-        const pt = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-        const lngLat = map.unproject([pt.x, pt.y]);
-        const t = tracks.find(tr => tr.id === mobileDragVertex.trackId);
-        if (t) {
-          const c = t.coords[mobileDragVertex.index];
-          c[0] = lngLat.lng;
-          c[1] = lngLat.lat;
-          c[2] = elevationAt(lngLat);
-          invalidateTrackStats(t);
-          refreshTrackSource(t);
-        }
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    map.getCanvas().addEventListener('touchend', () => {
-      if (touchLongPressTimer) {
-        clearTimeout(touchLongPressTimer);
-        touchLongPressTimer = null;
-      }
-      if (mobileDragVertex) {
-        const t = tracks.find(tr => tr.id === mobileDragVertex.trackId);
-        mobileDragVertex = null;
-        map.dragPan.enable();
-        if (t) {
-          invalidateTrackStats(t);
-          renderTrackList();
-          updateProfileFn();
-          syncUndoBtn();
-        }
-      }
-      touchStartPt = null;
-    }, { passive: true });
-
-    map.on('move', () => {
-      if (!mobileSelectedVertex) return;
-      const t = tracks.find(tr => tr.id === mobileSelectedVertex.trackId);
-      if (!t) return;
-      const center = map.getCenter();
-      const c = t.coords[mobileSelectedVertex.index];
-      c[0] = center.lng;
-      c[1] = center.lat;
-      c[2] = elevationAt(center);
-      invalidateTrackStats(t);
-      refreshTrackSource(t);
-    });
-
-    map.on('touchend', () => {
-      if (!mobileSelectedVertex) return;
-      cancelMobileMove();
-    });
-  }
-
-  // Update insert preview on map move (for mobile-friendly crosshair mode)
-  map.on('move', () => {
-    if (mobileFriendlyMode && editingTrackId) {
-      updateInsertPreview();
-    }
-  });
-
-  // Drag & drop import
-  let dragCounter = 0;
-  document.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    dragCounter++;
-    dropOverlay.classList.add('visible');
-  });
-  document.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dragCounter--;
-    if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('visible'); }
-  });
-  document.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  });
-  document.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dragCounter = 0;
-    dropOverlay.classList.remove('visible');
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => importFileContent(file.name, reader.result);
-    reader.readAsText(file);
-  });
-
-  // Export buttons
-  document.getElementById('export-gpx-btn').addEventListener('click', exportActiveGPX);
-  document.getElementById('export-geojson-btn').addEventListener('click', exportActiveGeoJSON);
-  document.getElementById('export-all-gpx-btn').addEventListener('click', exportAllGPX);
 
   // Add map layers for tracks once map is loaded
   map.on('load', () => {

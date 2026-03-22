@@ -23,5 +23,8 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "serve": "^14.2.6"
+  },
+  "dependencies": {
+    "@we-gold/gpxjs": "^1.1.0"
   }
 }

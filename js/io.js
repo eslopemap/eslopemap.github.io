@@ -1,0 +1,233 @@
+// Import/export, drag-drop, file handling.
+// Uses @we-gold/gpxjs for GPX parsing.
+
+import { parseGPX as gpxjsParse, stringifyGPX } from '@we-gold/gpxjs';
+import { downloadFile } from './utils.js';
+
+let tracksFns = {};  // wired at init
+
+// ---- GPX Parsing (via gpxjs) ----
+
+/**
+ * Parse a GPX string into tracks, routes, and waypoints.
+ * Multi-segment tracks are split into separate entries (matching legacy behavior).
+ * Each result track carries _gpxParsed + _gpxTrackIdx for future round-trip export.
+ */
+export function parseGPXTracks(text, baseName) {
+  const [parsed, err] = gpxjsParse(text, { removeEmptyFields: false });
+  if (err || !parsed) {
+    console.warn('GPX parse error:', err);
+    return { tracks: [], waypoints: [] };
+  }
+
+  const result = { tracks: [], waypoints: [], _gpxParsed: parsed };
+  const xml = parsed.xml;
+  const trkEls = Array.from(xml.querySelectorAll('trk'));
+
+  for (let ti = 0; ti < trkEls.length && ti < parsed.tracks.length; ti++) {
+    const trkEl = trkEls[ti];
+    const nameEl = trkEl.querySelector(':scope > name');
+    const trkName = nameEl ? nameEl.textContent.trim() : baseName;
+    const segs = trkEl.querySelectorAll('trkseg');
+    const gpxTrack = parsed.tracks[ti];
+
+    if (segs.length <= 1) {
+      const coords = gpxTrack.points.map(p => [p.longitude, p.latitude, p.elevation]);
+      if (coords.length) {
+        result.tracks.push({ name: trkName, coords, _gpxParsed: parsed, _gpxTrackIdx: ti });
+      }
+    } else {
+      // gpxjs concatenates all segments; split back using per-segment point counts
+      let offset = 0;
+      for (let si = 0; si < segs.length; si++) {
+        const segPtCount = segs[si].querySelectorAll('trkpt').length;
+        const segPoints = gpxTrack.points.slice(offset, offset + segPtCount);
+        const coords = segPoints.map(p => [p.longitude, p.latitude, p.elevation]);
+        if (coords.length) {
+          result.tracks.push({
+            name: `${trkName} seg${si + 1}`,
+            coords,
+            _gpxParsed: parsed,
+            _gpxTrackIdx: ti,
+            _segmentIndex: si,
+          });
+        }
+        offset += segPtCount;
+      }
+    }
+  }
+
+  // Routes
+  for (let i = 0; i < parsed.routes.length; i++) {
+    const gr = parsed.routes[i];
+    const name = gr.name || baseName;
+    const coords = gr.points.map(p => [p.longitude, p.latitude, p.elevation]);
+    if (coords.length) {
+      result.tracks.push({ name, coords, _gpxParsed: parsed, _gpxRouteIdx: i });
+    }
+  }
+
+  // Waypoints
+  for (const wp of parsed.waypoints) {
+    result.waypoints.push({
+      name: wp.name,
+      coords: [wp.longitude, wp.latitude, wp.elevation],
+      sym: wp.symbol,
+      desc: wp.description,
+      comment: wp.comment,
+    });
+  }
+
+  return result;
+}
+
+// ---- GeoJSON Parsing ----
+
+export function parseGeoJSON(text) {
+  const gj = JSON.parse(text);
+  const results = [];
+
+  function extractCoords(geom) {
+    if (geom.type === 'LineString') {
+      results.push(geom.coordinates.map(c => [c[0], c[1], c[2] != null ? c[2] : null]));
+    } else if (geom.type === 'MultiLineString') {
+      for (const line of geom.coordinates) {
+        results.push(line.map(c => [c[0], c[1], c[2] != null ? c[2] : null]));
+      }
+    }
+  }
+
+  if (gj.type === 'FeatureCollection') {
+    for (const f of gj.features) extractCoords(f.geometry);
+  } else if (gj.type === 'Feature') {
+    extractCoords(gj.geometry);
+  } else {
+    extractCoords(gj);
+  }
+  return results;
+}
+
+// ---- Import dispatch ----
+
+export function importFileContent(filename, text) {
+  const baseName = filename.replace(/\.[^.]+$/, '');
+
+  if (filename.endsWith('.gpx')) {
+    const { tracks: parsed } = parseGPXTracks(text, baseName);
+    if (!parsed.length) { console.warn('No tracks found in', filename); return; }
+    for (const { name, coords } of parsed) {
+      const t = tracksFns.createTrack(name, coords);
+      tracksFns.fitToTrack(t);
+    }
+  } else {
+    const coordsList = parseGeoJSON(text);
+    if (!coordsList.length) { console.warn('No tracks found in', filename); return; }
+    for (let i = 0; i < coordsList.length; i++) {
+      const name = coordsList.length > 1 ? `${baseName} (${i + 1})` : baseName;
+      const t = tracksFns.createTrack(name, coordsList[i]);
+      tracksFns.fitToTrack(t);
+    }
+  }
+}
+
+// ---- Export ----
+
+function escapeXml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildTrackGPXString(name, coords) {
+  const pts = coords.map(c => {
+    const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
+    return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-editor">
+  <trk>
+    <name>${escapeXml(name)}</name>
+    <trkseg>
+${pts}
+    </trkseg>
+  </trk>
+</gpx>`;
+}
+
+function exportActiveGPX() {
+  const t = tracksFns.getActiveTrack();
+  if (!t || !t.coords.length) return;
+  downloadFile(t.name + '.gpx', buildTrackGPXString(t.name, t.coords), 'application/gpx+xml');
+}
+
+function exportActiveGeoJSON() {
+  const t = tracksFns.getActiveTrack();
+  if (!t || !t.coords.length) return;
+  const gj = {
+    type: 'Feature',
+    properties: { name: t.name },
+    geometry: {
+      type: 'LineString',
+      coordinates: t.coords.map(c => c[2] != null ? [c[0], c[1], c[2]] : [c[0], c[1]])
+    }
+  };
+  downloadFile(t.name + '.geojson', JSON.stringify(gj, null, 2), 'application/geo+json');
+}
+
+function exportAllGPX() {
+  const tracks = tracksFns.getTracks();
+  if (!tracks.length) return;
+  const segs = tracks.map(t => {
+    const pts = t.coords.map(c => {
+      const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
+      return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
+    }).join('\n');
+    return `    <trkseg>\n${pts}\n    </trkseg>`;
+  }).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-editor">
+  <trk>
+    <name>All tracks</name>
+${segs}
+  </trk>
+</gpx>`;
+  downloadFile('all-tracks.gpx', gpx, 'application/gpx+xml');
+}
+
+// ---- Init: wire drag-drop + export buttons ----
+
+export function initIO(deps) {
+  tracksFns = deps;
+
+  const dropOverlay = document.getElementById('drop-overlay');
+
+  // Drag & drop import
+  let dragCounter = 0;
+  document.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    dropOverlay.classList.add('visible');
+  });
+  document.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('visible'); }
+  });
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropOverlay.classList.remove('visible');
+    for (const file of e.dataTransfer.files) {
+      const reader = new FileReader();
+      reader.onload = () => importFileContent(file.name, reader.result);
+      reader.readAsText(file);
+    }
+  });
+
+  // Export buttons
+  document.getElementById('export-gpx-btn').addEventListener('click', exportActiveGPX);
+  document.getElementById('export-geojson-btn').addEventListener('click', exportActiveGeoJSON);
+  document.getElementById('export-all-gpx-btn').addEventListener('click', exportAllGPX);
+}
