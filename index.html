@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- https://gist.github.com/eddy-geek/ff8c4f3d74e1be6747baf3c91b41a50c -->
-  <!-- .../gh api --method PATCH /gists/ff8c4f3d74e1be6747baf3c91b41a50c -F "files[slope.html][content]=@slope.html" -F "files[slope.md][content]=@slope.md" --jq '.html_url' -->
   <meta charset="utf-8" />
   <title>Slope viewer & editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
@@ -18,7 +16,7 @@
   <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
-  <script type="importmap">{"imports":{"@we-gold/gpxjs":"./node_modules/@we-gold/gpxjs/dist/gpxjs.js"}}</script>
+  <script type="importmap">{"imports":{"@we-gold/gpxjs":"https://cdn.jsdelivr.net/npm/@we-gold/gpxjs@1.1.0/+esm"}}</script>
 </head>
 <body>
   <div id="map"></div>
