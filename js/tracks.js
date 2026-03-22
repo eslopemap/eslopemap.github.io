@@ -6,6 +6,7 @@ import { DEM_MAX_Z, DEM_SOURCE_ID, CORE_DIM, TRACK_COLORS } from './constants.js
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
+import { saveTracks, loadTracks } from './persist.js';
 
 let map, state;
 let updateProfileFn = () => {};  // wired by initTracks
@@ -15,6 +16,13 @@ let activeTrackId = null;
 let trackColorIdx = 0;
 let mapReady = false;
 let profileClosed = false;
+
+// Debounced save to localStorage
+let _saveTimer = 0;
+function scheduleSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => saveTracks(tracks), 300);
+}
 
 // DOM refs (resolved at init)
 let tracksBtn, trackPanelShell, trackToolRow;
@@ -427,6 +435,7 @@ function deleteTrack(id) {
   if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
   renderTrackList();
   updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
+  scheduleSave();
 }
 
 function createTrack(name, coords) {
@@ -436,6 +445,7 @@ function createTrack(name, coords) {
   if (mapReady) addTrackToMap(t);
   setTrackPanelVisible(true);
   setActiveTrack(t.id);
+  scheduleSave();
   return t;
 }
 
@@ -459,6 +469,7 @@ function onTrackCoordsChanged(t) {
   refreshTrackSource(t);
   renderTrackList();
   updateProfileFn();
+  scheduleSave();
 }
 
 function invalidateAndRefresh(t) {
@@ -472,6 +483,7 @@ function removeIncompleteNewTrack(t) {
     removeTrackFromMap(t);
     tracks.splice(idx, 1);
     if (activeTrackId === t.id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+    scheduleSave();
   }
 }
 
@@ -519,6 +531,25 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   profileToggleBtn = document.getElementById('profile-toggle-btn');
 
   syncTrackPanelShell();
+
+  // Restore saved tracks
+  const saved = loadTracks();
+  for (const st of saved) {
+    if (!st.coords || !st.coords.length) continue;
+    const t = {
+      id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      name: st.name || 'Track',
+      color: st.color || nextColor(),
+      coords: st.coords,
+      _statsCache: null,
+    };
+    tracks.push(t);
+  }
+  if (tracks.length) {
+    activeTrackId = tracks[tracks.length - 1].id;
+    setTrackPanelVisible(true);
+    renderTrackList();
+  }
 
   // Init the editing module
   initTrackEdit(mapRef, stateRef, updateProfile, {

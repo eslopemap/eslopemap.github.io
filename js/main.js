@@ -22,6 +22,7 @@ import {
 import { initTracks, getTracksState } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
+import { loadSettings, saveSettings, clearAll as clearPersistedData } from './persist.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 
@@ -91,17 +92,25 @@ function ensureDebugGridLayer(map) {
   }
 }
 
-// ---- Initial view from URL hash ----
+// ---- Initial view from URL hash + persisted settings ----
+
+// Persisted settings as defaults, URL hash overrides
+const persisted = loadSettings();
+if (persisted) {
+  for (const k of Object.keys(persisted)) {
+    if (persisted[k] !== undefined) state[k] = persisted[k];
+  }
+}
 
 const initialView = parseHashParams();
 if (initialView.basemap) {
   state.basemap = initialView.basemap;
-  document.getElementById('basemap').value = state.basemap;
 }
 state.mode = initialView.mode;
 state.slopeOpacity = initialView.slopeOpacity;
 state.terrain3d = initialView.terrain3d;
 state.terrainExaggeration = initialView.terrainExaggeration;
+document.getElementById('basemap').value = state.basemap;
 document.getElementById('mode').value = state.mode;
 document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
 document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
@@ -109,6 +118,31 @@ document.getElementById('terrain3d').checked = state.terrain3d;
 document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
 document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
 document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+// Sync additional persisted settings to UI
+if (persisted) {
+  if (persisted.basemapOpacity != null) {
+    document.getElementById('basemapOpacity').value = String(state.basemapOpacity);
+    document.getElementById('basemapOpacityValue').textContent = state.basemapOpacity.toFixed(2);
+  }
+  if (persisted.hillshadeOpacity != null) {
+    document.getElementById('hillshadeOpacity').value = String(state.hillshadeOpacity);
+    document.getElementById('hillshadeOpacityValue').textContent = state.hillshadeOpacity.toFixed(2);
+  }
+  if (persisted.hillshadeMethod != null) {
+    document.getElementById('hillshadeMethod').value = state.hillshadeMethod;
+  }
+  if (persisted.showContours != null) document.getElementById('showContours').checked = state.showContours;
+  if (persisted.showOpenSkiMap != null) document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
+  if (persisted.multiplyBlend != null) document.getElementById('multiplyBlend').checked = state.multiplyBlend;
+  if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
+}
+
+// Debounced settings save
+let _settingsSaveTimer = 0;
+function scheduleSettingsSave() {
+  clearTimeout(_settingsSaveTimer);
+  _settingsSaveTimer = setTimeout(() => saveSettings(state), 300);
+}
 
 // ---- Contour line source ----
 
@@ -418,6 +452,7 @@ document.getElementById('mode').addEventListener('change', (e) => {
   applyModeState(map, state);
   syncViewToUrl(map, state);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('basemap').addEventListener('change', (e) => {
@@ -425,6 +460,7 @@ document.getElementById('basemap').addEventListener('change', (e) => {
   applyBasemapSelection(map, state, true);
   syncViewToUrl(map, state);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('basemapOpacity').addEventListener('input', (e) => {
@@ -432,6 +468,7 @@ document.getElementById('basemapOpacity').addEventListener('input', (e) => {
   document.getElementById('basemapOpacityValue').textContent = state.basemapOpacity.toFixed(2);
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('hillshadeOpacity').addEventListener('input', (e) => {
@@ -439,6 +476,7 @@ document.getElementById('hillshadeOpacity').addEventListener('input', (e) => {
   document.getElementById('hillshadeOpacityValue').textContent = state.hillshadeOpacity.toFixed(2);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('hillshadeMethod').addEventListener('change', (e) => {
@@ -447,6 +485,7 @@ document.getElementById('hillshadeMethod').addEventListener('change', (e) => {
     map.setPaintProperty('dem-loader', 'hillshade-method', state.hillshadeMethod);
   }
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('slopeOpacity').addEventListener('input', (e) => {
@@ -455,16 +494,19 @@ document.getElementById('slopeOpacity').addEventListener('input', (e) => {
   applyModeState(map, state);
   syncViewToUrl(map, state);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('showContours').addEventListener('change', (e) => {
   state.showContours = Boolean(e.target.checked);
   applyContourVisibility(map, state);
+  scheduleSettingsSave();
 });
 
 document.getElementById('showOpenSkiMap').addEventListener('change', (e) => {
   state.showOpenSkiMap = Boolean(e.target.checked);
   applyOpenSkiMapOverlay(map, state);
+  scheduleSettingsSave();
 });
 
 document.getElementById('showTileGrid').addEventListener('change', (e) => {
@@ -481,11 +523,13 @@ document.getElementById('showTileGrid').addEventListener('change', (e) => {
 document.getElementById('multiplyBlend').addEventListener('change', (e) => {
   state.multiplyBlend = Boolean(e.target.checked);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('cursorInfoMode').addEventListener('change', (e) => {
   state.cursorInfoMode = e.target.value;
   updateCursorInfoVisibility(state);
+  scheduleSettingsSave();
 });
 
 document.getElementById('terrain3d').addEventListener('change', (e) => {
@@ -494,6 +538,7 @@ document.getElementById('terrain3d').addEventListener('change', (e) => {
   applyTerrainState(map, state);
   syncViewToUrl(map, state);
   map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('terrainExaggeration').addEventListener('input', (e) => {
@@ -504,6 +549,14 @@ document.getElementById('terrainExaggeration').addEventListener('input', (e) => 
   }
   syncViewToUrl(map, state);
   map.triggerRepaint();
+  scheduleSettingsSave();
+});
+
+document.getElementById('clear-data-btn').addEventListener('click', () => {
+  if (confirm('Clear all saved tracks and settings?')) {
+    clearPersistedData();
+    location.reload();
+  }
 });
 
 // Allow Cmd+drag (Mac) to act like Ctrl+drag for rotate/pitch
