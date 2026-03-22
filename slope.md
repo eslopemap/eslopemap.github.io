@@ -61,7 +61,29 @@
 - **PWA installable** — manifest.json with icons at 192, 512, 180 (apple-touch), 32, 16 sizes; SVG favicon with mountain/slope theme
 - **Localhost debug** — mobile-friendly mode toggle (📱) shown on desktop when served from localhost
 
+## Module structure
+- **slope.html** (168 lines) — shell with HTML markup, CDN script tags, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
+- **css/main.css** (508 lines) — all styles
+- **js/main.js** (~740 lines) — entry point: creates map, imports all modules, wires settings event handlers, exposes window getters for tests
+- **js/constants.js** (~200 lines) — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers
+- **js/dem.js** (~580 lines) — DEM tile processing, elevation sampling (`queryLoadedElevationAtLngLat`, `sampleElevationFromDEMData`), WebGL hybrid border layer with GLSL shaders
+- **js/ui.js** (~400 lines) — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, tile grid visibility, Nominatim search
+- **js/tracks.js** (~1300 lines) — track editor: CRUD, vertex editing, import/export (GPX/GeoJSON), drag/drop, desktop drag vertices, mobile editing, track stats
+- **js/profile.js** (~260 lines) — Chart.js elevation profile, profile-to-map hover linkage
+- **js/state.js** (~34 lines) — reactive Proxy store (`createStore`) + `STATE_DEFAULTS`
+- **js/utils.js** (~114 lines) — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
+
+### Dependency flow
+- `constants.js` ← `utils.js` (pure, no DOM)
+- `dem.js` ← `utils.js`, `constants.js` (no DOM except for fallback tile fetch)
+- `ui.js` ← `constants.js`, `utils.js` (DOM access for settings UI)
+- `tracks.js` ← `utils.js`, `constants.js`, `dem.js`, `ui.js` (full DOM + map access)
+- `profile.js` ← `utils.js`, `dem.js`, `ui.js` (Chart.js + DOM)
+- `main.js` ← all modules (orchestrator)
+- `state.js` — standalone, imported by `main.js` which creates the store and passes it to modules
+
 ## Technical gotchas
+
 - **Contour initialization order** — contour visibility must be re-applied after the contour layers are added, otherwise first-load state can disagree with the checkbox
 - **Contour/basemap coupling** — contour lines are auto-enabled only for OSM; switching basemaps intentionally resets the contour checkbox unless you change the logic
 - **`Mode: none` behavior** — empty mode disables the custom DEM analysis render path and hides the legend ramp/labels, but keeps cursor info visible

@@ -1,14 +1,14 @@
-// Reactive state store using Proxy (FUTURE.md step 3).
+// Reactive state store using Proxy.
 //
 // Side effects (repaint, URL sync, UI updates) are driven from a single
 // onChange dispatcher instead of being scattered after every `state.foo = …`.
 
 export function createStore(initial, onChange) {
-  return new Proxy(initial, {
+  return new Proxy({...initial}, {
     set(target, key, value) {
       const old = target[key];
       target[key] = value;
-      if (old !== value) onChange(key, value, old);
+      if (old !== value && onChange) onChange(key, value, old);
       return true;
     }
   });
