@@ -453,35 +453,118 @@ function trackStats(t) {
 
 // ---- Track list rendering ----
 
+// Collapsed groups (persisted as a Set of groupIds)
+const collapsedGroups = new Set();
+
+function buildTrackItemHTML(t) {
+  const s = t.coords.length >= 2 ? trackStats(t) : null;
+  const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m · ${t.coords.length} pts` : `${t.coords.length} pts`;
+  const detailStatsStr = (s && t.id === activeTrackId)
+    ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Max slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
+    : '';
+  const editActive = isTrackEditing(t.id);
+  return `<span class="track-color" style="background:${t.color}"></span>` +
+    `<span class="track-name">${t.segmentLabel || t.name}` +
+    (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
+    (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
+    `</span>` +
+    `<button class="track-edit${editActive ? ' active' : ''}" data-id="${t.id}" title="Edit track">&#9998;</button>` +
+    `<button class="track-del" data-id="${t.id}">&times;</button>`;
+}
+
 function renderTrackList() {
   trackListEl.innerHTML = '';
+
+  // Group tracks by groupId
+  const grouped = new Map(); // groupId → track[]
+  const ungrouped = [];
   for (const t of tracks) {
-    const div = document.createElement('div');
-    div.className = 'track-item' + (t.id === activeTrackId ? ' active' : '');
-    const s = t.coords.length >= 2 ? trackStats(t) : null;
-    const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m · ${t.coords.length} pts` : `${t.coords.length} pts`;
-    const detailStatsStr = (s && t.id === activeTrackId)
-      ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Max slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
-      : '';
-    const editActive = isTrackEditing(t.id);
-    div.innerHTML = `<span class="track-color" style="background:${t.color}"></span>` +
-      `<span class="track-name">${t.name}` +
-      (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
-      (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
-      `</span>` +
-      `<button class="track-edit${editActive ? ' active' : ''}" data-id="${t.id}" title="Edit track">&#9998;</button>` +
-      `<button class="track-del" data-id="${t.id}">&times;</button>`;
-    div.addEventListener('click', (e) => {
-      if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
-      setActiveTrack(t.id);
-    });
-    div.querySelector('.track-edit').addEventListener('click', () => {
-      if (isTrackEditing(t.id)) exitEditMode();
-      else { setActiveTrack(t.id); enterEditMode(t.id); }
-    });
-    div.querySelector('.track-del').addEventListener('click', () => deleteTrack(t.id));
-    trackListEl.appendChild(div);
+    if (t.groupId) {
+      if (!grouped.has(t.groupId)) grouped.set(t.groupId, []);
+      grouped.get(t.groupId).push(t);
+    } else {
+      ungrouped.push(t);
+    }
   }
+
+  // Render in order: maintain original tracks order
+  const rendered = new Set();
+  for (const t of tracks) {
+    if (rendered.has(t.id)) continue;
+
+    if (t.groupId && grouped.has(t.groupId)) {
+      const group = grouped.get(t.groupId);
+      grouped.delete(t.groupId); // only render once
+      const collapsed = collapsedGroups.has(t.groupId);
+
+      // Group header
+      const header = document.createElement('div');
+      header.className = 'track-group-header';
+      const anyActive = group.some(g => g.id === activeTrackId);
+      if (anyActive) header.classList.add('active');
+
+      // Aggregate stats
+      let totalDist = 0, totalGain = 0, totalLoss = 0, totalPts = 0;
+      for (const g of group) {
+        const gs = g.coords.length >= 2 ? trackStats(g) : null;
+        if (gs) { totalDist += gs.dist; totalGain += gs.gain; totalLoss += gs.loss; }
+        totalPts += g.coords.length;
+      }
+      const aggStats = totalPts >= 2
+        ? `${totalDist.toFixed(1)} km · ↑${Math.round(totalGain)} m · ↓${Math.round(totalLoss)} m · ${totalPts} pts`
+        : `${totalPts} pts`;
+
+      header.innerHTML = `<span class="track-group-toggle">${collapsed ? '▸' : '▾'}</span>` +
+        `<span class="track-color" style="background:${group[0].color}"></span>` +
+        `<span class="track-name">${t.groupName || 'Group'}` +
+        `<br><span class="track-stats">${aggStats} · ${group.length} segs</span>` +
+        `</span>`;
+      header.addEventListener('click', () => {
+        if (collapsed) collapsedGroups.delete(t.groupId);
+        else collapsedGroups.add(t.groupId);
+        renderTrackList();
+      });
+      trackListEl.appendChild(header);
+
+      // Group children (segments)
+      if (!collapsed) {
+        for (const g of group) {
+          rendered.add(g.id);
+          const div = document.createElement('div');
+          div.className = 'track-item track-item-nested' + (g.id === activeTrackId ? ' active' : '');
+          div.innerHTML = buildTrackItemHTML(g);
+          div.addEventListener('click', (e) => {
+            if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
+            setActiveTrack(g.id);
+          });
+          div.querySelector('.track-edit').addEventListener('click', () => {
+            if (isTrackEditing(g.id)) exitEditMode();
+            else { setActiveTrack(g.id); enterEditMode(g.id); }
+          });
+          div.querySelector('.track-del').addEventListener('click', () => deleteTrack(g.id));
+          trackListEl.appendChild(div);
+        }
+      } else {
+        for (const g of group) rendered.add(g.id);
+      }
+    } else if (!t.groupId) {
+      rendered.add(t.id);
+      const div = document.createElement('div');
+      div.className = 'track-item' + (t.id === activeTrackId ? ' active' : '');
+      div.innerHTML = buildTrackItemHTML(t);
+      div.addEventListener('click', (e) => {
+        if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
+        setActiveTrack(t.id);
+      });
+      div.querySelector('.track-edit').addEventListener('click', () => {
+        if (isTrackEditing(t.id)) exitEditMode();
+        else { setActiveTrack(t.id); enterEditMode(t.id); }
+      });
+      div.querySelector('.track-del').addEventListener('click', () => deleteTrack(t.id));
+      trackListEl.appendChild(div);
+    }
+  }
+
   if (!tracks.length) setTrackPanelVisible(false);
   else syncTrackPanelShell();
   syncProfileToggleButton();
@@ -516,8 +599,14 @@ function deleteTrack(id) {
   scheduleSave();
 }
 
-function createTrack(name, coords) {
-  const t = { id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), name, color: nextColor(), coords, _statsCache: null };
+function createTrack(name, coords, opts) {
+  const t = {
+    id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+    name, color: nextColor(), coords, _statsCache: null,
+    groupId: opts?.groupId || null,
+    groupName: opts?.groupName || null,
+    segmentLabel: opts?.segmentLabel || null,
+  };
   enrichElevation(t.coords);
   tracks.push(t);
   if (mapReady) addTrackToMap(t);
@@ -621,6 +710,9 @@ export function initTracks(mapRef, stateRef, updateProfile) {
       color: st.color || nextColor(),
       coords: st.coords,
       _statsCache: null,
+      groupId: st.groupId || null,
+      groupName: st.groupName || null,
+      segmentLabel: st.segmentLabel || null,
     };
     tracks.push(t);
   }

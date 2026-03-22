@@ -12,6 +12,9 @@ function serializeTracks(tracks) {
     name: t.name,
     color: t.color,
     coords: t.coords,
+    groupId: t.groupId || undefined,
+    groupName: t.groupName || undefined,
+    segmentLabel: t.segmentLabel || undefined,
   }));
 }
 

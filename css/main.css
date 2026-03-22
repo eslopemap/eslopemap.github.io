@@ -274,6 +274,20 @@
       background: none; border: none; cursor: pointer; font-size: 13px; opacity: 0.5; padding: 0 2px;
     }
     .track-item .track-del:hover { opacity: 1; }
+
+    .track-group-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 0 2px;
+      cursor: pointer;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .track-group-header.active { font-weight: 700; }
+    .track-group-toggle { font-size: 10px; flex-shrink: 0; width: 10px; text-align: center; }
+    .track-item-nested { padding-left: 18px; }
+
     .track-export-bar { display: flex; gap: 4px; margin-top: 6px; }
     .track-export-bar button {
       flex: 1;

@@ -38,6 +38,7 @@ export function parseGPXTracks(text, baseName) {
       }
     } else {
       // gpxjs concatenates all segments; split back using per-segment point counts
+      const groupId = 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
       let offset = 0;
       for (let si = 0; si < segs.length; si++) {
         const segPtCount = segs[si].querySelectorAll('trkpt').length;
@@ -50,6 +51,9 @@ export function parseGPXTracks(text, baseName) {
             _gpxParsed: parsed,
             _gpxTrackIdx: ti,
             _segmentIndex: si,
+            groupId,
+            groupName: trkName,
+            segmentLabel: `seg ${si + 1}`,
           });
         }
         offset += segPtCount;
@@ -118,8 +122,12 @@ export function importFileContent(filename, text) {
       console.warn('No tracks or waypoints found in', filename);
       return;
     }
-    for (const { name, coords } of result.tracks) {
-      const t = tracksFns.createTrack(name, coords);
+    for (const trk of result.tracks) {
+      const t = tracksFns.createTrack(trk.name, trk.coords, {
+        groupId: trk.groupId,
+        groupName: trk.groupName,
+        segmentLabel: trk.segmentLabel,
+      });
       tracksFns.fitToTrack(t);
     }
     if (result.waypoints.length && tracksFns.addWaypoints) {
@@ -195,18 +203,46 @@ function exportAllGPX() {
   const wpts = tracksFns.getWaypoints ? tracksFns.getWaypoints() : [];
   if (!tracks.length && !wpts.length) return;
   const wptXml = buildWaypointsGPXFragment(wpts);
-  const segs = tracks.map(t => {
+
+  // Group tracks by groupId for proper <trk>/<trkseg> structure
+  const trkFragments = [];
+  const grouped = new Map();
+  const ungrouped = [];
+  for (const t of tracks) {
+    if (t.groupId) {
+      if (!grouped.has(t.groupId)) grouped.set(t.groupId, []);
+      grouped.get(t.groupId).push(t);
+    } else {
+      ungrouped.push(t);
+    }
+  }
+
+  // Grouped tracks → one <trk> per group with multiple <trkseg>
+  for (const [, group] of grouped) {
+    const name = group[0].groupName || group[0].name;
+    const segs = group.map(t => {
+      const pts = t.coords.map(c => {
+        const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
+        return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
+      }).join('\n');
+      return `    <trkseg>\n${pts}\n    </trkseg>`;
+    }).join('\n');
+    trkFragments.push(`  <trk>\n    <name>${escapeXml(name)}</name>\n${segs}\n  </trk>`);
+  }
+
+  // Ungrouped tracks → one <trk> per track
+  for (const t of ungrouped) {
     const pts = t.coords.map(c => {
       const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
       return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
     }).join('\n');
-    return `    <trkseg>\n${pts}\n    </trkseg>`;
-  }).join('\n');
-  const trkXml = tracks.length ? `  <trk>\n    <name>All tracks</name>\n${segs}\n  </trk>` : '';
+    trkFragments.push(`  <trk>\n    <name>${escapeXml(t.name)}</name>\n    <trkseg>\n${pts}\n    </trkseg>\n  </trk>`);
+  }
+
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="slope-editor">
 ${wptXml}
-${trkXml}
+${trkFragments.join('\n')}
 </gpx>`;
   downloadFile('all-tracks.gpx', gpx, 'application/gpx+xml');
 }

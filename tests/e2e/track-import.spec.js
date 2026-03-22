@@ -121,17 +121,21 @@ test.describe('Track Import', () => {
     expect(info.statsText).toContain('3 pts');
   });
 
-  test('GPX import — multi-segment creates multiple tracks', async ({ mapPage: page }) => {
+  test('GPX import — multi-segment creates grouped tracks', async ({ mapPage: page }) => {
     await importFile(page, 'multi.gpx', MULTI_SEG_GPX);
     await page.waitForTimeout(300);
 
     const count = await getTrackCount(page);
     expect(count).toBe(2);
 
+    // Should show a group header
+    await expect(page.locator('.track-group-header')).toHaveCount(1);
+
+    // Segments should be nested
+    await expect(page.locator('.track-item-nested')).toHaveCount(2);
+
     const info0 = await getTrackInfo(page, 0);
     const info1 = await getTrackInfo(page, 1);
-    expect(info0.name).toContain('Multi Seg');
-    expect(info1.name).toContain('Multi Seg');
     expect(info0.statsText).toContain('2 pts');
     expect(info1.statsText).toContain('2 pts');
   });
@@ -230,6 +234,24 @@ test.describe('Track Import', () => {
 
     const wptCount = await evalInScope(page, 'waypoints.length');
     expect(wptCount).toBe(2);
+  });
+
+  test('Multi-segment group — collapse/expand', async ({ mapPage: page }) => {
+    await importFile(page, 'multi.gpx', MULTI_SEG_GPX);
+    await page.waitForTimeout(300);
+
+    // Initially expanded
+    await expect(page.locator('.track-item-nested')).toHaveCount(2);
+
+    // Click group header to collapse
+    await page.locator('.track-group-header').click();
+    await page.waitForTimeout(100);
+    await expect(page.locator('.track-item-nested')).toHaveCount(0);
+
+    // Click again to expand
+    await page.locator('.track-group-header').click();
+    await page.waitForTimeout(100);
+    await expect(page.locator('.track-item-nested')).toHaveCount(2);
   });
 
   test('GPX with extensions — round-trip preserves extensions', async ({ mapPage: page }) => {
