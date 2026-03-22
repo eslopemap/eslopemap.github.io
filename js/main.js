@@ -784,6 +784,7 @@ Object.defineProperties(window, {
   mapReady:            { get() { return tracksState.mapReady; } },
   map:                 { get() { return map; } },
   tracks:              { get() { return tracksState.tracks; } },
+  waypoints:           { get() { return tracksState.waypoints; } },
   activeTrackId:       { get() { return tracksState.activeTrackId; } },
   editingTrackId:      { get() { return tracksState.editingTrackId; } },
   selectedVertexIndex: { get() { return tracksState.selectedVertexIndex; } },

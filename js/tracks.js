@@ -12,6 +12,7 @@ let map, state;
 let updateProfileFn = () => {};  // wired by initTracks
 
 const tracks = [];
+const waypoints = [];
 let activeTrackId = null;
 let trackColorIdx = 0;
 let mapReady = false;
@@ -267,6 +268,83 @@ function ensureProfileHoverLayer() {
   }
 }
 
+// ---- Waypoint map layer ----
+
+const WAYPOINT_SOURCE_ID = 'waypoints';
+const WAYPOINT_CIRCLE_LAYER_ID = 'waypoint-circles';
+const WAYPOINT_LABEL_LAYER_ID = 'waypoint-labels';
+
+function waypointGeoJSON() {
+  return {
+    type: 'FeatureCollection',
+    features: waypoints.map(wp => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: wp.coords.slice(0, 2) },
+      properties: { name: wp.name || '', sym: wp.sym || '' },
+    })),
+  };
+}
+
+function ensureWaypointLayer() {
+  if (!map.getSource(WAYPOINT_SOURCE_ID)) {
+    map.addSource(WAYPOINT_SOURCE_ID, {
+      type: 'geojson',
+      data: waypointGeoJSON(),
+    });
+  }
+  if (!map.getLayer(WAYPOINT_CIRCLE_LAYER_ID)) {
+    map.addLayer({
+      id: WAYPOINT_CIRCLE_LAYER_ID,
+      type: 'circle',
+      source: WAYPOINT_SOURCE_ID,
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#f59e0b',
+        'circle-stroke-color': '#fff',
+        'circle-stroke-width': 2,
+      },
+    });
+  }
+  if (!map.getLayer(WAYPOINT_LABEL_LAYER_ID)) {
+    map.addLayer({
+      id: WAYPOINT_LABEL_LAYER_ID,
+      type: 'symbol',
+      source: WAYPOINT_SOURCE_ID,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': 12,
+        'text-offset': [0, 1.5],
+        'text-anchor': 'top',
+        'text-font': ['Noto Sans Bold'],
+      },
+      paint: {
+        'text-color': '#1e293b',
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 1.5,
+      },
+    });
+  }
+}
+
+function refreshWaypointSource() {
+  const src = map.getSource(WAYPOINT_SOURCE_ID);
+  if (src) src.setData(waypointGeoJSON());
+}
+
+function addWaypoints(newWaypoints) {
+  for (const wp of newWaypoints) {
+    waypoints.push({
+      id: 'wpt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      name: wp.name,
+      coords: wp.coords,
+      sym: wp.sym,
+      desc: wp.desc,
+      comment: wp.comment,
+    });
+  }
+  if (waypoints.length) refreshWaypointSource();
+}
+
 function removeTrackFromMap(t) {
   if (map.getLayer(trackPtsLayerId(t))) map.removeLayer(trackPtsLayerId(t));
   if (map.getLayer(trackLineLayerId(t))) map.removeLayer(trackLineLayerId(t));
@@ -497,6 +575,7 @@ export function getTracksState() {
   const es = getEditState();
   return {
     tracks,
+    waypoints,
     get activeTrackId() { return activeTrackId; },
     get editingTrackId() { return es.editingTrackId; },
     get selectedVertexIndex() { return es.selectedVertexIndex; },
@@ -587,6 +666,8 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     createTrack,
     getActiveTrack,
     getTracks: () => tracks,
+    getWaypoints: () => waypoints,
+    addWaypoints,
     fitToTrack,
   });
 
@@ -594,6 +675,7 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   map.on('load', () => {
     mapReady = true;
     ensureProfileHoverLayer();
+    ensureWaypointLayer();
     for (const t of tracks) {
       if (!map.getSource(trackSourceId(t))) addTrackToMap(t);
     }

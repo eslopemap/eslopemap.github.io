@@ -10,7 +10,7 @@
 
 const {
   test, expect, getTrackCount, getTrackItemCount, getTrackInfo,
-  importFile,
+  importFile, evalInScope,
 } = require('./helpers');
 
 // --- Test fixtures ---
@@ -191,5 +191,69 @@ test.describe('Track Import', () => {
     expect(count).toBe(2);
 
     await expect(page.locator('.track-item')).toHaveCount(2);
+  });
+
+  test('GPX import with waypoints — waypoints are parsed', async ({ mapPage: page }) => {
+    const gpxWithWpt = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test">
+  <wpt lat="45.83" lon="6.86"><ele>1500</ele><name>Summit</name><sym>Flag</sym></wpt>
+  <wpt lat="45.84" lon="6.87"><ele>1600</ele><name>Hut</name></wpt>
+  <trk>
+    <name>Trail</name>
+    <trkseg>
+      <trkpt lat="45.83" lon="6.86"><ele>1500</ele></trkpt>
+      <trkpt lat="45.84" lon="6.87"><ele>1600</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>`;
+    await importFile(page, 'wpt.gpx', gpxWithWpt);
+    await page.waitForTimeout(300);
+
+    const trackCount = await getTrackCount(page);
+    expect(trackCount).toBe(1);
+
+    const wptCount = await evalInScope(page, 'waypoints.length');
+    expect(wptCount).toBe(2);
+
+    const wptName = await evalInScope(page, 'waypoints[0].name');
+    expect(wptName).toBe('Summit');
+  });
+
+  test('GPX with waypoints only (no tracks) — waypoints imported', async ({ mapPage: page }) => {
+    const gpxWptOnly = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test">
+  <wpt lat="45.83" lon="6.86"><name>Point A</name></wpt>
+  <wpt lat="45.84" lon="6.87"><name>Point B</name></wpt>
+</gpx>`;
+    await importFile(page, 'only-wpt.gpx', gpxWptOnly);
+    await page.waitForTimeout(300);
+
+    const wptCount = await evalInScope(page, 'waypoints.length');
+    expect(wptCount).toBe(2);
+  });
+
+  test('GPX with extensions — round-trip preserves extensions', async ({ mapPage: page }) => {
+    const gpxWithExt = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="garmin">
+  <trk>
+    <name>Ext Track</name>
+    <trkseg>
+      <trkpt lat="45.83" lon="6.86"><ele>1500</ele>
+        <extensions><hr>120</hr><cad>80</cad></extensions>
+      </trkpt>
+      <trkpt lat="45.84" lon="6.87"><ele>1600</ele>
+        <extensions><hr>125</hr><cad>82</cad></extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>`;
+    await importFile(page, 'ext.gpx', gpxWithExt);
+    await page.waitForTimeout(300);
+
+    const trackCount = await getTrackCount(page);
+    expect(trackCount).toBe(1);
+
+    const info = await getTrackInfo(page, 0);
+    expect(info.name).toBe('Ext Track');
   });
 });

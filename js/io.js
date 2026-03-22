@@ -113,11 +113,17 @@ export function importFileContent(filename, text) {
   const baseName = filename.replace(/\.[^.]+$/, '');
 
   if (filename.endsWith('.gpx')) {
-    const { tracks: parsed } = parseGPXTracks(text, baseName);
-    if (!parsed.length) { console.warn('No tracks found in', filename); return; }
-    for (const { name, coords } of parsed) {
+    const result = parseGPXTracks(text, baseName);
+    if (!result.tracks.length && !result.waypoints.length) {
+      console.warn('No tracks or waypoints found in', filename);
+      return;
+    }
+    for (const { name, coords } of result.tracks) {
       const t = tracksFns.createTrack(name, coords);
       tracksFns.fitToTrack(t);
+    }
+    if (result.waypoints.length && tracksFns.addWaypoints) {
+      tracksFns.addWaypoints(result.waypoints);
     }
   } else {
     const coordsList = parseGeoJSON(text);
@@ -172,9 +178,23 @@ function exportActiveGeoJSON() {
   downloadFile(t.name + '.geojson', JSON.stringify(gj, null, 2), 'application/geo+json');
 }
 
+function buildWaypointsGPXFragment(waypoints) {
+  if (!waypoints || !waypoints.length) return '';
+  return waypoints.map(wp => {
+    const ele = wp.coords[2] != null ? `\n    <ele>${wp.coords[2]}</ele>` : '';
+    const name = wp.name ? `\n    <name>${escapeXml(wp.name)}</name>` : '';
+    const sym = wp.sym ? `\n    <sym>${escapeXml(wp.sym)}</sym>` : '';
+    const desc = wp.desc ? `\n    <desc>${escapeXml(wp.desc)}</desc>` : '';
+    const cmt = wp.comment ? `\n    <cmt>${escapeXml(wp.comment)}</cmt>` : '';
+    return `  <wpt lat="${wp.coords[1]}" lon="${wp.coords[0]}">${ele}${name}${sym}${desc}${cmt}\n  </wpt>`;
+  }).join('\n');
+}
+
 function exportAllGPX() {
   const tracks = tracksFns.getTracks();
-  if (!tracks.length) return;
+  const wpts = tracksFns.getWaypoints ? tracksFns.getWaypoints() : [];
+  if (!tracks.length && !wpts.length) return;
+  const wptXml = buildWaypointsGPXFragment(wpts);
   const segs = tracks.map(t => {
     const pts = t.coords.map(c => {
       const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
@@ -182,12 +202,11 @@ function exportAllGPX() {
     }).join('\n');
     return `    <trkseg>\n${pts}\n    </trkseg>`;
   }).join('\n');
+  const trkXml = tracks.length ? `  <trk>\n    <name>All tracks</name>\n${segs}\n  </trk>` : '';
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="slope-editor">
-  <trk>
-    <name>All tracks</name>
-${segs}
-  </trk>
+${wptXml}
+${trkXml}
 </gpx>`;
   downloadFile('all-tracks.gpx', gpx, 'application/gpx+xml');
 }
