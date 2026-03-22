@@ -254,7 +254,7 @@ export function initIO(deps) {
 
   const dropOverlay = document.getElementById('drop-overlay');
 
-  // Drag & drop import
+  // Drag & drop import (with directory support)
   let dragCounter = 0;
   document.addEventListener('dragenter', (e) => {
     e.preventDefault();
@@ -270,10 +270,27 @@ export function initIO(deps) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   });
-  document.addEventListener('drop', (e) => {
+  document.addEventListener('drop', async (e) => {
     e.preventDefault();
     dragCounter = 0;
     dropOverlay.classList.remove('visible');
+    // Try directory entries first (webkitGetAsEntry)
+    const items = e.dataTransfer.items;
+    if (items && items.length) {
+      const entries = [];
+      for (const item of items) {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
+      }
+      if (entries.some(en => en.isDirectory)) {
+        for (const entry of entries) {
+          if (entry.isDirectory) await readDirectoryEntries(entry);
+          else if (entry.isFile) await readFileEntry(entry);
+        }
+        return;
+      }
+    }
+    // Fall back to files
     for (const file of e.dataTransfer.files) {
       const reader = new FileReader();
       reader.onload = () => importFileContent(file.name, reader.result);
@@ -285,4 +302,104 @@ export function initIO(deps) {
   document.getElementById('export-gpx-btn').addEventListener('click', exportActiveGPX);
   document.getElementById('export-geojson-btn').addEventListener('click', exportActiveGeoJSON);
   document.getElementById('export-all-gpx-btn').addEventListener('click', exportAllGPX);
+
+  // Open folder button
+  const openFolderBtn = document.getElementById('open-folder-btn');
+  if (openFolderBtn) {
+    openFolderBtn.addEventListener('click', openFolder);
+  }
+
+  // Save to folder button (only if File System Access API available)
+  const saveFolderBtn = document.getElementById('save-folder-btn');
+  if (saveFolderBtn) {
+    if ('showDirectoryPicker' in window) {
+      saveFolderBtn.addEventListener('click', saveToFolder);
+    } else {
+      saveFolderBtn.style.display = 'none';
+    }
+  }
+}
+
+// ---- Directory support (progressive) ----
+
+const FILE_PATTERN = /\.(gpx|geojson|json)$/i;
+
+/** Tier 1: File System Access API (Chrome/Edge — read+write) */
+async function openDirectoryPicker() {
+  const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (handle.kind === 'file' && FILE_PATTERN.test(name)) {
+      const file = await handle.getFile();
+      const text = await file.text();
+      importFileContent(name, text);
+    }
+  }
+}
+
+/** Tier 2: <input webkitdirectory> fallback (all modern browsers — read only) */
+function openDirectoryInput() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.webkitdirectory = true;
+  input.multiple = true;
+  input.accept = '.gpx,.geojson,.json';
+  input.addEventListener('change', () => {
+    for (const file of input.files) {
+      if (FILE_PATTERN.test(file.name)) {
+        file.text().then(text => importFileContent(file.name, text));
+      }
+    }
+  });
+  input.click();
+}
+
+/** Open folder: use best available API */
+async function openFolder() {
+  if ('showDirectoryPicker' in window) {
+    try { await openDirectoryPicker(); return; } catch (e) {
+      if (e.name === 'AbortError') return; // user cancelled
+      console.warn('showDirectoryPicker failed, falling back:', e);
+    }
+  }
+  openDirectoryInput();
+}
+
+/** Save all tracks to a folder (Tier 1 only — File System Access API) */
+async function saveToFolder() {
+  const tracks = tracksFns.getTracks();
+  if (!tracks.length) return;
+  const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+  for (const t of tracks) {
+    const safeName = t.name.replace(/[^a-z0-9._-]/gi, '_');
+    const fileHandle = await dirHandle.getFileHandle(safeName + '.gpx', { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(buildTrackGPXString(t.name, t.coords));
+    await writable.close();
+  }
+}
+
+/** Tier 3: Read directory entries from drag & drop */
+async function readDirectoryEntries(dirEntry) {
+  const reader = dirEntry.createReader();
+  const entries = await new Promise((resolve) => {
+    reader.readEntries(resolve);
+  });
+  for (const entry of entries) {
+    if (entry.isFile && FILE_PATTERN.test(entry.name)) {
+      await readFileEntry(entry);
+    } else if (entry.isDirectory) {
+      await readDirectoryEntries(entry);
+    }
+  }
+}
+
+function readFileEntry(entry) {
+  return new Promise((resolve) => {
+    entry.file((file) => {
+      file.text().then(text => {
+        importFileContent(file.name, text);
+        resolve();
+      });
+    });
+  });
 }
