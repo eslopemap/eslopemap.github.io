@@ -119,6 +119,7 @@ Also persist settings (basemap, mode, opacity, cursorInfoMode, etc.) so the user
 - **[FileSaver.js](https://github.com/nicolo-ribaudo/FileSaver.js)** — cross-browser file save (current `downloadFile` is fine for modern browsers).
 - **[Preact](https://preactjs.com/)** (`esm.sh/preact`) — if the UI grows complex enough to justify a component model. 3 KB, JSX-free `htm` tagged template alternative available.
 - **[nanostores](https://github.com/nanostores/nanostores)** (`esm.sh/nanostores`) — tiny reactive state (300 bytes) that works without a framework.
+- **[nanostores/persistent](https://github.com/nanostores/persistent)** - smart store for Nano Stores to keep data in localStorage and synchronize changes between browser tabs.
 
 ### 8. Testing
 

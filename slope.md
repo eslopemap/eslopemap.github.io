@@ -21,7 +21,8 @@
 - **DEM tile grid** — debug overlay toggle for visible DEM tile coverage
 
 ## Track Editor
-- **Drag & drop import** — GPX (tracks, segments, routes with names) and GeoJSON files, with visual drop overlay
+- **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
+- **Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
 - **Top-right track workspace** — compact floating panel for track management and export
 - **Draw mode** — pen button in the track header; creates a new track and enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
@@ -38,7 +39,11 @@
 - **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode)
 - **Mobile vertex editing** — mobile-friendly mode is default on mobile (📱 toggle); crosshair at center, tap inserts at center, tap vertex then pan to reposition. Desktop-style mode also available (tap=click, long-press-drag=move vertex). On localhost, the 📱 toggle is shown on desktop for debugging.
 - **Delete last point** — 🗑️ button in toolbar to remove the last point; also Ctrl/Cmd+Z
-- **Export** — active track as GPX or GeoJSON; all tracks as a single GPX with multiple segments
+- **Export** — active track as GPX or GeoJSON; all tracks as GPX preserving group structure (grouped → one `<trk>` per group with `<trkseg>` per segment); includes `<wpt>` elements
+- **Directory export** — 'Save to folder…' button for File System Access browsers; writes one GPX per track
+- **GPX waypoints** — `<wpt>` elements parsed from GPX via gpxjs; rendered as amber circles with text labels on the map; included in 'Export All GPX'
+- **Two-level nesting** — multi-segment GPX tracks import as grouped tracks; panel shows collapsible group header with aggregate stats and nested segments
+- **localStorage persistence** — tracks and settings auto-save to localStorage with 300ms debounce; restored on page reload; 'Clear saved data' button in advanced settings
 
 ## Profile
 - **Elevation profile** — bottom panel showing elevation (m), track slope (°), and terrain slope (°) vs distance (km), with dual Y-axes and a zero-line
@@ -62,22 +67,28 @@
 - **Localhost debug** — mobile-friendly mode toggle (📱) shown on desktop when served from localhost
 
 ## Module structure
-- **slope.html** (168 lines) — shell with HTML markup, CDN script tags, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
-- **css/main.css** (508 lines) — all styles
-- **js/main.js** (~740 lines) — entry point: creates map, imports all modules, wires settings event handlers, exposes window getters for tests
-- **js/constants.js** (~200 lines) — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers
-- **js/dem.js** (~580 lines) — DEM tile processing, elevation sampling (`queryLoadedElevationAtLngLat`, `sampleElevationFromDEMData`), WebGL hybrid border layer with GLSL shaders
-- **js/ui.js** (~400 lines) — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, tile grid visibility, Nominatim search
-- **js/tracks.js** (~1300 lines) — track editor: CRUD, vertex editing, import/export (GPX/GeoJSON), drag/drop, desktop drag vertices, mobile editing, track stats
-- **js/profile.js** (~260 lines) — Chart.js elevation profile, profile-to-map hover linkage
-- **js/state.js** (~34 lines) — reactive Proxy store (`createStore`) + `STATE_DEFAULTS`
-- **js/utils.js** (~114 lines) — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
+- **slope.html** — shell with HTML markup, CDN script tags, importmap for `@we-gold/gpxjs`, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
+- **css/main.css** — all styles including track group nesting
+- **js/main.js** — entry point: creates map, imports all modules, wires settings event handlers, persistence, exposes window getters for tests
+- **js/constants.js** — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers
+- **js/dem.js** — DEM tile processing, elevation sampling, WebGL hybrid border layer with GLSL shaders
+- **js/ui.js** — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, Nominatim search
+- **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer
+- **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, draw/undo buttons
+- **js/io.js** — import/export (GPX via gpxjs, GeoJSON), drag-drop, directory import/export, file generation
+- **js/persist.js** — localStorage persistence for tracks and settings (thin wrapper, no deps)
+- **js/profile.js** — Chart.js elevation profile, profile-to-map hover linkage
+- **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS`
+- **js/utils.js** — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
 
 ### Dependency flow
 - `constants.js` ← `utils.js` (pure, no DOM)
 - `dem.js` ← `utils.js`, `constants.js` (no DOM except for fallback tile fetch)
 - `ui.js` ← `constants.js`, `utils.js` (DOM access for settings UI)
-- `tracks.js` ← `utils.js`, `constants.js`, `dem.js`, `ui.js` (full DOM + map access)
+- `persist.js` — standalone (localStorage only)
+- `io.js` ← `utils.js`, `@we-gold/gpxjs` (GPX parsing/serialization)
+- `track-edit.js` ← `ui.js` (cursor tooltip)
+- `tracks.js` ← `utils.js`, `constants.js`, `dem.js`, `track-edit.js`, `io.js`, `persist.js`
 - `profile.js` ← `utils.js`, `dem.js`, `ui.js` (Chart.js + DOM)
 - `main.js` ← all modules (orchestrator)
 - `state.js` — standalone, imported by `main.js` which creates the store and passes it to modules
@@ -101,12 +112,14 @@
 4. DEM analysis overlay (`Slope` / `Aspect`) or `Color relief`
 5. Contour lines
 6. Track lines, vertices, hover-insert marker, and profile-hover marker
+7. Waypoint circles and labels
 
 ## Detailed behaviour
 
 ### Startup
 1. Parse URL hash for `lng`, `lat`, `zoom`, `basemap`, `mode`, `opacity`, `terrain`, `exaggeration`, `bearing`, `pitch`. Missing keys fall back to Mont Blanc area at zoom 12, slope mode, 0.45 opacity.
-2. Build the MapLibre map with all sources (OSM, OTM, IGN, SwissTopo vector, Kartverket, OpenSkiMap, DEM raster-dem, contour vector tiles).
+2. Load persisted settings from localStorage (URL hash takes priority over persisted values).
+3. Build the MapLibre map with all sources (OSM, OTM, IGN, SwissTopo vector, Kartverket, OpenSkiMap, DEM raster-dem, contour vector tiles).
 3. Style layers are defined inline: basemap raster/vector, OpenSkiMap fill/line/symbol, hillshade, color-relief, contours, and a custom WebGL layer for slope/aspect.
 4. On `map.on('load')`: apply basemap selection, terrain state, debug grid, global-state properties, add the custom hybrid border layer, contour layers, and wire up elevation sampling.
 5. Call `updateCursorInfoVisibility()` to set initial cursor-info display mode.
@@ -126,7 +139,8 @@
 Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, OpenSkiMap overlay, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. Also shows internal/fallback tile counts.
 
 ### Track editor — state model
-- `tracks[]` — array of `{id, name, color, coords, _statsCache}`.
+- `tracks[]` — array of `{id, name, color, coords, _statsCache, groupId, groupName, segmentLabel}`.
+- `waypoints[]` — array of `{id, name, coords, sym, desc, comment}`.
 - `activeTrackId` — currently selected track (wider line, profile shown, start/end markers).
 - `editingTrackId` — track whose vertices are fully interactive (mid vertices visible, drag/hover-insert enabled). Set when user clicks the ✎ edit button in the track list, or the ✏ draw button to create a new track. There is no separate draw mode — editing a new or existing track uses the same unified editing state.
 - `editingIsNewTrack` — boolean. True when editingTrackId was set by creating a new track via the draw button. Controls auto-cleanup on exit (new tracks with < 2 points are removed).
@@ -181,5 +195,7 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 - `hashchange` event reads the hash back and updates map + state + UI controls.
 
 ### GPX / GeoJSON import
-- Drag & drop or programmatic. GPX parser extracts `<trk>/<trkseg>/<trkpt>` and `<rte>/<rtept>` elements. GeoJSON parser extracts `LineString` and `MultiLineString` geometries.
+- Drag & drop, directory import, or programmatic. GPX parser uses `@we-gold/gpxjs` library for parsing, extracting tracks, routes, and waypoints. Multi-segment tracks are split back into separate grouped tracks using segment point counts from the XML. GeoJSON parser extracts `LineString` and `MultiLineString` geometries.
 - Imported tracks are elevation-enriched from the DEM source and fitted to bounds.
+- Each imported track stores `_gpxParsed` reference to the parsed GPX document for future round-trip export.
+- Waypoints from GPX `<wpt>` elements are stored in a global array and rendered as a map symbol layer.
