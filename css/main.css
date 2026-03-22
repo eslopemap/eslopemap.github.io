@@ -1,0 +1,508 @@
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    #map { position: relative; width: 100%; height: 100%; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+    #controls-wrapper {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    #controls-toggle {
+      background: rgba(255,255,255,0.94);
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #controls-toggle:hover { background: rgba(240,240,240,0.97); }
+
+    #search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    #search-icon {
+      background: rgba(255,255,255,0.94);
+      border: none;
+      border-radius: 8px;
+      padding: 6px 8px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      font-size: 15px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    #search-icon:hover { background: rgba(240,240,240,0.97); }
+    #search-input {
+      width: 0;
+      opacity: 0;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 0 8px 8px 0;
+      background: rgba(255,255,255,0.94);
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      transition: width 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+    }
+    #search-box.expanded #search-input {
+      width: 200px;
+      opacity: 1;
+      padding: 6px 8px;
+    }
+    #search-box.expanded #search-icon {
+      border-radius: 8px 0 0 8px;
+      box-shadow: none;
+    }
+    #search-results {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 4px;
+      background: rgba(255,255,255,0.97);
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      max-height: 240px;
+      overflow-y: auto;
+      font-size: 12px;
+      z-index: 20;
+    }
+    #search-results.visible { display: block; }
+    .search-result {
+      padding: 7px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      line-height: 1.3;
+    }
+    .search-result:last-child { border-bottom: none; }
+    .search-result:hover { background: rgba(0,0,0,0.05); }
+    .search-result-name { font-weight: 600; }
+    .search-result-detail { opacity: 0.6; font-size: 11px; }
+
+    .panel-surface {
+      background: rgba(255,255,255,0.6);
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+
+    .panel-padded {
+      padding: 7px 9px;
+    }
+
+    #controls {
+      min-width: 180px;
+      font-size: 13px;
+      max-height: calc(100vh - 60px - var(--bottom-overlay-bottom));
+      overflow-y: auto;
+    }
+    #controls.collapsed { display: none; }
+
+    #advanced-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      padding: 4px 0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      opacity: 0.7;
+      width: 100%;
+      color: inherit;
+    }
+    #advanced-toggle:hover { opacity: 1; }
+    #advanced-toggle .arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
+    #advanced-toggle .arrow.open { transform: rotate(90deg); }
+    #advanced-section { display: none; }
+    #advanced-section.open { display: block; }
+
+    #legend {
+      position: absolute;
+      left: 10px;
+      bottom: var(--bottom-overlay-bottom);
+      z-index: 10;
+      min-width: 260px;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    #legend.cursor-only .ramp,
+    #legend.cursor-only .labels {
+      display: none;
+    }
+    #legend.cursor-only #cursor-info {
+      margin-top: 0;
+    }
+
+    .row { margin: 6px 0; }
+    .legend-title { font-weight: 700; margin-bottom: 6px; }
+    .ramp {
+      height: 12px;
+      border-bottom: 1px solid rgba(0,0,0,0.4);
+      margin: 6px 0 4px;
+    }
+    .labels { display: flex; justify-content: space-between; opacity: 0.85; position: relative; }
+    .legend-ticks { position: absolute; top: -5px; left: 0; right: 0; height: 5px; display: flex; justify-content: space-between; pointer-events: none; }
+    .legend-ticks span { width: 1px; height: 8px; background: rgba(0,0,0,0.25); }
+    #cursor-info { margin-top: 6px; font-size: 11px; opacity: 0.85; }
+    #cursor-info code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; }
+    #status { font-size: 12px; opacity: 0.85; }
+    #status code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; }
+
+    /* Track editor */
+    .tb-btn {
+      background: rgba(255,255,255,0.94);
+      border: none;
+      border-radius: 8px;
+      padding: 6px 8px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      font-size: 15px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .tb-btn:hover { background: rgba(240,240,240,0.97); }
+    .tb-btn.active { background: #4a90d9; color: #fff; box-shadow: 0 1px 6px rgba(74,144,217,0.5); }
+    .tb-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+      color: rgba(0,0,0,0.45);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .tb-btn:disabled:hover { background: rgba(255,255,255,0.94); }
+
+    #track-panel-shell {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 11;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    #track-panel-shell.visible {
+      padding: 8px 10px 10px;
+      align-items: stretch;
+      gap: 0;
+    }
+    #track-tool-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    #draw-btn,
+    #tracks-btn {
+      position: static;
+      z-index: auto;
+    }
+    #track-panel {
+      position: static;
+      z-index: auto;
+      background: transparent;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
+      font-size: 12px;
+      min-width: 180px;
+      max-height: 50vh;
+      overflow-y: auto;
+      display: none;
+    }
+    #track-panel.visible { display: block; }
+    .track-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    #track-panel h3 { margin: 0; font-size: 13px; }
+    #track-panel .track-panel-header #profile-toggle-btn {
+      margin-left: auto;
+    }
+    #track-panel .track-panel-header #track-tool-row {
+      flex-shrink: 0;
+    }
+    #profile-toggle-btn {
+      background: rgba(74,144,217,0.12);
+      color: #245480;
+      border: none;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #profile-toggle-btn:hover { background: rgba(74,144,217,0.18); }
+    #profile-toggle-btn.active { background: #4a90d9; color: #fff; }
+    #profile-toggle-btn:disabled { opacity: 0.45; cursor: default; }
+    .track-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      cursor: pointer;
+    }
+    .track-item:last-child { border-bottom: none; }
+    .track-item.active { font-weight: 700; }
+    .track-item .track-color {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .track-item .track-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .track-stats { font-size: 10px; opacity: 0.65; margin-left: 14px; }
+    .track-item .track-del {
+      background: none; border: none; cursor: pointer; font-size: 13px; opacity: 0.5; padding: 0 2px;
+    }
+    .track-item .track-del:hover { opacity: 1; }
+    .track-export-bar { display: flex; gap: 4px; margin-top: 6px; }
+    .track-export-bar button {
+      flex: 1;
+      background: #4a90d9;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .track-export-bar button:hover { background: #3a7bc8; }
+
+    #drop-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(74,144,217,0.25);
+      border: 3px dashed #4a90d9;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 700;
+      color: #2a5a8a;
+      pointer-events: none;
+    }
+    #drop-overlay.visible { display: flex; }
+
+    #mobile-move-hint {
+      display: none;
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    #mobile-move-hint.visible { display: block; }
+
+    :root {
+      --bottom-overlay-bottom: 12px;
+      --bottom-right-surface: rgba(255,255,255,0.28);
+      --bottom-right-surface-hover: rgba(255,255,255,0.62);
+    }
+    body.profile-open {
+      --bottom-overlay-bottom: 148px;
+    }
+    .maplibregl-ctrl-bottom-right {
+      right: 10px;
+      bottom: var(--bottom-overlay-bottom);
+    }
+    .maplibregl-ctrl-bottom-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group,
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+      margin: 0;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+      background: var(--bottom-right-surface);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      width: fit-content;
+      max-width: none;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group > button,
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl button {
+      background: transparent;
+      width: 40px;
+      height: 40px;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group > button:hover,
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl button:hover {
+      background: rgba(255,255,255,0.14);
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group + .maplibregl-ctrl-group {
+      margin-top: 0;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-geolocate {
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl-scale {
+      align-self: flex-end;
+      background: var(--bottom-right-surface);
+      border-radius: 8px;
+      padding: 3px 8px;
+      min-width: 0;
+      text-align: center;
+      color: rgba(0,0,0,0.8);
+      box-sizing: border-box;
+    }
+
+    /* Elevation profile */
+    #profile-panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      border-top: 1px solid rgba(0,0,0,0.12);
+      height: 140px;
+      display: none;
+    }
+    #profile-panel.visible { display: block; }
+    #profile-panel canvas { width: 100% !important; }
+    #profile-close {
+      position: absolute;
+      top: 2px;
+      right: 6px;
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      opacity: 0.5;
+      z-index: 1;
+      line-height: 1;
+    }
+    #profile-close:hover { opacity: 1; }
+
+    /* Cursor tooltip (follows mouse) */
+    #cursor-tooltip {
+      position: fixed;
+      z-index: 30;
+      pointer-events: none;
+      background: rgba(255,255,255,0.92);
+      border-radius: 6px;
+      padding: 3px 7px;
+      font-size: 11px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      white-space: nowrap;
+      display: none;
+    }
+    #cursor-tooltip.visible { display: block; }
+    #cursor-tooltip code { background: rgba(0,0,0,0.05); padding: 1px 3px; border-radius: 2px; }
+
+    /* Mobile crosshair (appears on tap) */
+    #mobile-crosshair {
+      position: fixed;
+      z-index: 25;
+      pointer-events: none;
+      display: none;
+      width: 0; height: 0;
+    }
+    #mobile-crosshair.visible { display: block; }
+    #mobile-crosshair::before,
+    #mobile-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(0,0,0,0.55);
+    }
+    #mobile-crosshair::before { width: 1px; height: 24px; left: 0; top: -12px; }
+    #mobile-crosshair::after { width: 24px; height: 1px; left: -12px; top: 0; }
+
+    /* Draw-mode crosshair (center of screen, mobile) */
+    #draw-crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      z-index: 15;
+      pointer-events: none;
+      display: none;
+      width: 0; height: 0;
+    }
+    #draw-crosshair.visible { display: block; }
+    #draw-crosshair::before,
+    #draw-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(74,144,217,0.7);
+    }
+    #draw-crosshair::before { width: 2px; height: 30px; left: -1px; top: -15px; }
+    #draw-crosshair::after { width: 30px; height: 2px; left: -15px; top: -1px; }
+
+    /* Toast notification */
+    #toast {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(0,0,0,0.78);
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    #toast.visible { opacity: 1; }
+
+    /* Track edit button in track list */
+    .track-item .track-edit {
+      background: none; border: none; cursor: pointer;
+      font-size: 12px; opacity: 0.5; padding: 0 2px;
+    }
+    .track-item .track-edit:hover { opacity: 1; }
+    .track-item .track-edit.active { opacity: 1; color: #4a90d9; }
+
+    /* Undo-last-point button */
+    #undo-btn { font-size: 14px; }
+    /* Mobile-friendly mode button */
+    #mobile-mode-btn { font-size: 14px; }
+    #mobile-mode-btn.active { background: #4a90d9; color: #fff; }
+    /* On-map insert popup near selected vertex */
+    .vertex-insert-popup { cursor: pointer; }
+    .vertex-insert-popup .insert-popup-btn {
+      background: rgba(255,255,255,0.94);
+      border: 1.5px solid #4a90d9;
+      border-radius: 50%;
+      width: 24px; height: 24px;
+      font-size: 16px; font-weight: 700;
+      color: #4a90d9;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+      line-height: 1;
+    }
+    .vertex-insert-popup .insert-popup-btn:hover,
+    .vertex-insert-popup .insert-popup-btn.active {
+      background: #4a90d9; color: #fff;
+    }
+    /* end track editor */

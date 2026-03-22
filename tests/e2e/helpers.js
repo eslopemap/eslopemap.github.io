@@ -10,8 +10,10 @@
 // • python3 http.server — `npx serve` crashed mid-suite (ERR_CONNECTION_REFUSED
 //   after ~3 tests). Python's stdlib server is rock-solid. See playwright.config.js.
 //
-// • Indirect eval — app variables are `let`/`const` inside a <script> block,
-//   NOT on `window`. We use `(0, eval)('varName')` to read them from page.evaluate().
+// • ES module + window getters — app code is a <script type="module">, so all
+//   variables are module-scoped. js/main.js exposes key vars (tracks, activeTrackId,
+//   etc.) via Object.defineProperties(window, ...) with getters. Tests read them
+//   through (0, eval)('varName') which resolves through the global scope.
 //
 // • force:true on map clicks — the #controls-wrapper overlay intercepts pointer
 //   events at many positions. `force: true` bypasses Playwright's actionability
