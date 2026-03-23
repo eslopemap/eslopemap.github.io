@@ -238,7 +238,7 @@ export function enterEditMode(tId) {
   tracksFns.renderTrackList();
   syncUndoBtn();
   if (mobileFriendlyMode) {
-    drawCrosshair.classList.add('visible');
+    drawCrosshair.classList.add('visible', 'editing');
     showToast('Tap anywhere to add a point at center', 3000);
   }
 }
@@ -251,7 +251,8 @@ export function exitEditMode() {
   removeInsertPopup();
   drawBtn.classList.remove('active');
   setDefaultMapCursor();
-  drawCrosshair.classList.remove('visible');
+  drawCrosshair.classList.remove('editing');
+  if (!isMobile) drawCrosshair.classList.remove('visible');
   if (mobileSelectedVertex) cancelMobileMove();
   const t = editingTrackId ? tracksFns.findTrack(editingTrackId) : null;
   if (wasNewTrack && t && t.coords.length < 2) {
@@ -337,10 +338,11 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     mobileFriendlyMode = !mobileFriendlyMode;
     mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
     if (mobileFriendlyMode && editingTrackId) {
-      drawCrosshair.classList.add('visible');
+      drawCrosshair.classList.add('visible', 'editing');
       showToast('Tap anywhere to add a point at center', 3000);
     } else {
-      drawCrosshair.classList.remove('visible');
+      drawCrosshair.classList.remove('editing');
+      if (!isMobile) drawCrosshair.classList.remove('visible');
       if (mobileSelectedVertex) cancelMobileMove();
     }
     syncUndoBtn();

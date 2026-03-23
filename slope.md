@@ -53,9 +53,9 @@
 
 ## UX
 - **Settings toggle** — top-left `🌍 Settings` button with auto-collapse when you start dragging the map
-- **Elevation & slope display** — configurable via dropdown: `At cursor` (floating tooltip near pointer, default), `Corner` (fixed in legend panel), `No` (hidden)
-- **Mobile crosshair** — tapping the map on mobile shows a crosshair at tap location with elevation/slope info; disappears on pan
-- **Mobile draw crosshair** — entering draw mode on mobile shows a center cross and a toast hint
+- **Elevation & slope display** — configurable via dropdown: `At cursor` (floating tooltip near pointer, default on desktop), `Corner` (fixed in legend panel, default on mobile), `No` (hidden)
+- **Mobile center crosshair** — a small '+' crosshair is always shown at the center of the screen on mobile, continuously updating the corner elevation & slope info as the map moves. During track editing, the crosshair becomes larger and blue.
+- **Mobile tap crosshair** — tapping the map on mobile shows a crosshair at tap location with elevation/slope info; disappears on pan
 - **Track panel header layout** — when open, the header row is `Tracks`, `Profile`, draw button, close button; track details stay below
 - **Panel styling** — controls, legend, profile, and the open track panel share the same translucent blurred panel surface
 - **Bottom-right controls** — native MapLibre bottom-right stack with navigation, geolocate, ruler, and attribution
@@ -133,7 +133,7 @@
 - **At cursor** (default): a small `#cursor-tooltip` div positioned at `clientX+15, clientY+15` shows elevation and slope. Updated every frame via `requestAnimationFrame`. On profile hover, it repositions to the hovered vertex's screen coordinates.
 - **Corner**: the `#cursor-info` element inside the legend panel shows the values (original behaviour).
 - **No**: both hidden.
-- On mobile: a `#mobile-crosshair` is shown at the tap point with the tooltip. Hidden on drag.
+- On mobile: a permanent center crosshair (`#draw-crosshair`) always shows elevation & slope in the `#cursor-info` corner display, updated on `map.move`. A `#mobile-crosshair` also appears at tap points with the tooltip. Cursor info defaults to `corner` mode on mobile.
 
 ### Settings panel
 Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, OpenSkiMap overlay, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. Also shows internal/fallback tile counts.

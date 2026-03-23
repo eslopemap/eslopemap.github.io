@@ -450,7 +450,7 @@
     #mobile-crosshair::before { width: 1px; height: 24px; left: 0; top: -12px; }
     #mobile-crosshair::after { width: 24px; height: 1px; left: -12px; top: 0; }
 
-    /* Draw-mode crosshair (center of screen, mobile) */
+    /* Center crosshair (always visible on mobile, also used in draw mode) */
     #draw-crosshair {
       position: absolute;
       top: 50%; left: 50%;
@@ -464,10 +464,15 @@
     #draw-crosshair::after {
       content: '';
       position: absolute;
-      background: rgba(74,144,217,0.7);
+      background: rgba(0,0,0,0.45);
     }
-    #draw-crosshair::before { width: 2px; height: 30px; left: -1px; top: -15px; }
-    #draw-crosshair::after { width: 30px; height: 2px; left: -15px; top: -1px; }
+    #draw-crosshair::before { width: 1px; height: 20px; left: 0; top: -10px; }
+    #draw-crosshair::after { width: 20px; height: 1px; left: -10px; top: 0; }
+    /* Thicker blue crosshair when actively editing a track */
+    #draw-crosshair.editing::before,
+    #draw-crosshair.editing::after { background: rgba(74,144,217,0.7); }
+    #draw-crosshair.editing::before { width: 2px; height: 30px; left: -1px; top: -15px; }
+    #draw-crosshair.editing::after { width: 30px; height: 2px; left: -15px; top: -1px; }
 
     /* Toast notification */
     #toast {

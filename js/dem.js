@@ -1,14 +1,6 @@
-// DEM tile processing, elevation sampling, and WebGL hybrid border layer.
+// Elevation sampling from DEM tiles.
 
-import {
-  normalizeTileX, tileToLngLatBounds, mercatorVertsForTile,
-  decodeTerrarium, encodeTerrarium,
-} from './utils.js';
-
-import {
-  DEM_SOURCE_ID, DEM_MAX_Z, CORE_DIM, PAD_STRIDE, MAX_STEP_STOPS,
-  PARSED_RAMPS, demTileUrl,
-} from './constants.js';
+import { DEM_SOURCE_ID, DEM_MAX_Z } from './constants.js';
 
 // ---- Elevation sampling ----
 

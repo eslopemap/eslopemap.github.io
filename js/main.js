@@ -137,6 +137,13 @@ if (persisted) {
   if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
 }
 
+// On mobile, default to corner cursor-info mode (center crosshair acts as pointer)
+const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+if (isMobile && !(persisted && persisted.cursorInfoMode != null)) {
+  state.cursorInfoMode = 'corner';
+  document.getElementById('cursorInfoMode').value = 'corner';
+}
+
 // Debounced settings save
 let _settingsSaveTimer = 0;
 function scheduleSettingsSave() {
@@ -659,9 +666,22 @@ map.on('load', () => {
   // Elevation sampling on mousemove
   const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const mobileCrosshair = document.getElementById('mobile-crosshair');
+  const drawCrosshair = document.getElementById('draw-crosshair');
   let cursorRaf = 0;
   let lastPointerLngLat = null;
   let lastPointerScreenXY = null;
+
+  // On mobile, always show center crosshair and update elevation from map center
+  if (isMobile) {
+    drawCrosshair.classList.add('visible');
+    updateCursorInfoVisibility(state);
+    map.on('move', () => {
+      lastPointerLngLat = map.getCenter();
+      const canvas = map.getCanvas();
+      lastPointerScreenXY = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+      if (!cursorRaf) cursorRaf = requestAnimationFrame(updateCursorElevation);
+    });
+  }
   const updateCursorElevation = () => {
     cursorRaf = 0;
     if (!lastPointerLngLat) {
