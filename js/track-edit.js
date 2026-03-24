@@ -507,6 +507,8 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
     map.on('mousedown', (e) => {
       if (!editingTrackId) return;
+      // Ignore right-click — let map handle pan/rotate naturally
+      if (e.originalEvent.button !== 0) return;
 
       const hit = hitTestVertex(e.point);
       if (hit && hit.index != null) {
@@ -683,6 +685,11 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       cancelMobileMove();
     });
   }
+
+  // Suppress context menu during track editing so right-click = pan
+  map.getCanvas().addEventListener('contextmenu', (e) => {
+    if (editingTrackId) e.preventDefault();
+  });
 
   // Update insert preview on map move (for mobile-friendly crosshair mode)
   map.on('move', () => {
