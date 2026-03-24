@@ -29,7 +29,12 @@ const isLocalhost = location.hostname === 'localhost' || location.hostname === '
 let mobileFriendlyMode = isMobile;
 
 // DOM refs (resolved at init)
-let drawBtn, undoBtn, mobileModeBtn, mobileHint, drawCrosshair, toastEl;
+let drawBtn, undoBtn, rectDeleteBtn, mobileModeBtn, mobileHint, drawCrosshair, toastEl;
+
+// Rectangle delete state
+let rectDeleteMode = false;
+let rectStart = null;  // {x, y} screen coords
+let rectOverlay = null;
 
 let toastTimer = 0;
 function showToast(msg, durationMs) {
@@ -214,6 +219,8 @@ function syncUndoBtn() {
   const t = tracksFns.getActiveTrack();
   const show = t && t.coords.length > 0 && isTrackEditing(t.id);
   undoBtn.style.display = show ? '' : 'none';
+  rectDeleteBtn.style.display = show ? '' : 'none';
+  rectDeleteBtn.classList.toggle('active', rectDeleteMode);
   mobileModeBtn.style.display = ((isMobile || isLocalhost) && show) ? '' : 'none';
   mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
   tracksFns.updateVertexHighlight(editingTrackId, selectedVertexIndex);
@@ -271,6 +278,7 @@ export function enterEditMode(tId) {
   editingTrackId = tId;
   selectedVertexIndex = null;
   insertAfterIdx = null;
+  rectDeleteMode = false;
   map.getCanvas().style.cursor = 'crosshair';
   drawBtn.classList.add('active');
   tracksFns.updateVertexHighlight(editingTrackId, selectedVertexIndex);
@@ -287,6 +295,7 @@ export function exitEditMode() {
   editingIsNewTrack = false;
   selectedVertexIndex = null;
   insertAfterIdx = null;
+  rectDeleteMode = false;
   removeInsertPopup();
   drawBtn.classList.remove('active');
   setDefaultMapCursor();
@@ -354,6 +363,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
   drawBtn = document.getElementById('draw-btn');
   undoBtn = document.getElementById('undo-btn');
+  rectDeleteBtn = document.getElementById('rect-delete-btn');
   mobileModeBtn = document.getElementById('mobile-mode-btn');
   mobileHint = document.getElementById('mobile-move-hint');
   toastEl = document.getElementById('toast');
@@ -367,6 +377,17 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
   undoBtn.addEventListener('click', () => {
     deleteCurrentVertex();
+  });
+
+  rectDeleteBtn.addEventListener('click', () => {
+    rectDeleteMode = !rectDeleteMode;
+    rectDeleteBtn.classList.toggle('active', rectDeleteMode);
+    if (rectDeleteMode) {
+      map.getCanvas().style.cursor = 'crosshair';
+      showToast('Draw rectangle to delete points inside', 2500);
+    } else {
+      map.getCanvas().style.cursor = 'crosshair';
+    }
   });
 
   mobileModeBtn.addEventListener('click', () => {
@@ -391,6 +412,9 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }
 
     if (editingTrackId) {
+      // Don't add points while in rectangle delete mode
+      if (rectDeleteMode) return;
+
       const t = tracksFns.findTrack(editingTrackId);
       if (!t) return;
 
@@ -466,6 +490,14 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
   });
 
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && rectDeleteMode) {
+      rectDeleteMode = false;
+      if (rectOverlay) rectOverlay.style.display = 'none';
+      rectStart = null;
+      map.dragPan.enable();
+      syncUndoBtn();
+      return;
+    }
     if (e.key === 'Escape' && editingTrackId) exitEditMode();
     if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
     if ((e.key === 'Delete' || e.key === 'Backspace') && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
@@ -510,6 +542,24 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       // Ignore right-click — let map handle pan/rotate naturally
       if (e.originalEvent.button !== 0) return;
 
+      // Rectangle delete mode
+      if (rectDeleteMode) {
+        e.preventDefault();
+        rectStart = { x: e.originalEvent.clientX, y: e.originalEvent.clientY };
+        if (!rectOverlay) {
+          rectOverlay = document.createElement('div');
+          rectOverlay.className = 'rect-delete-overlay';
+          document.body.appendChild(rectOverlay);
+        }
+        rectOverlay.style.left = rectStart.x + 'px';
+        rectOverlay.style.top = rectStart.y + 'px';
+        rectOverlay.style.width = '0';
+        rectOverlay.style.height = '0';
+        rectOverlay.style.display = 'block';
+        map.dragPan.disable();
+        return;
+      }
+
       const hit = hitTestVertex(e.point);
       if (hit && hit.index != null) {
         e.preventDefault();
@@ -546,6 +596,17 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     });
 
     map.on('mousemove', (e) => {
+      // Rectangle delete drawing
+      if (rectStart && rectOverlay) {
+        const cx = e.originalEvent.clientX;
+        const cy = e.originalEvent.clientY;
+        rectOverlay.style.left = Math.min(rectStart.x, cx) + 'px';
+        rectOverlay.style.top = Math.min(rectStart.y, cy) + 'px';
+        rectOverlay.style.width = Math.abs(cx - rectStart.x) + 'px';
+        rectOverlay.style.height = Math.abs(cy - rectStart.y) + 'px';
+        return;
+      }
+
       if (dragVertexInfo) {
         const t = tracksFns.findTrack(dragVertexInfo.trackId);
         if (!t) return;
@@ -593,11 +654,75 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       }
     });
 
-    map.on('mouseup', () => {
+    map.on('mouseup', (e) => {
+      // Complete rectangle delete
+      if (rectStart && rectOverlay) {
+        const endX = e.originalEvent.clientX;
+        const endY = e.originalEvent.clientY;
+        const x1 = Math.min(rectStart.x, endX);
+        const y1 = Math.min(rectStart.y, endY);
+        const x2 = Math.max(rectStart.x, endX);
+        const y2 = Math.max(rectStart.y, endY);
+
+        // Hide and clean up overlay
+        rectOverlay.style.display = 'none';
+        rectStart = null;
+        map.dragPan.enable();
+
+        // Only delete if rectangle is reasonably sized (not accidental click)
+        if (x2 - x1 > 5 && y2 - y1 > 5) {
+          const t = editingTrackId ? tracksFns.findTrack(editingTrackId) : null;
+          if (t && t.coords.length) {
+            const canvas = map.getCanvas();
+            const rect = canvas.getBoundingClientRect();
+            // Convert screen coords to map pixel coords
+            const mapX1 = x1 - rect.left, mapY1 = y1 - rect.top;
+            const mapX2 = x2 - rect.left, mapY2 = y2 - rect.top;
+
+            const indicesToDelete = [];
+            for (let i = 0; i < t.coords.length; i++) {
+              const pt = map.project([t.coords[i][0], t.coords[i][1]]);
+              if (pt.x >= mapX1 && pt.x <= mapX2 && pt.y >= mapY1 && pt.y <= mapY2) {
+                indicesToDelete.push(i);
+              }
+            }
+
+            if (indicesToDelete.length > 0) {
+              // Delete in reverse order to preserve indices
+              for (let i = indicesToDelete.length - 1; i >= 0; i--) {
+                t.coords.splice(indicesToDelete[i], 1);
+              }
+              selectedVertexIndex = null;
+              insertAfterIdx = null;
+              tracksFns.onTrackCoordsChanged(t);
+              if (t.coords.length === 0) tracksFns.deleteTrack(t.id);
+              showToast(`Deleted ${indicesToDelete.length} point${indicesToDelete.length > 1 ? 's' : ''}`, 2000);
+              syncUndoBtn();
+            }
+          }
+        }
+        // Exit rect delete mode after operation
+        rectDeleteMode = false;
+        syncUndoBtn();
+        suppressNextMapClick = true;
+        return;
+      }
+
       finishVertexDrag();
     });
 
-    window.addEventListener('mouseup', finishVertexDrag);
+    window.addEventListener('mouseup', (e) => {
+      // Also handle rect delete cancel if mouse released outside map
+      if (rectStart && rectOverlay) {
+        rectOverlay.style.display = 'none';
+        rectStart = null;
+        rectDeleteMode = false;
+        map.dragPan.enable();
+        syncUndoBtn();
+        return;
+      }
+      finishVertexDrag();
+    });
   }
 
   // Mobile: vertex interaction

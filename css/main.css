@@ -499,6 +499,8 @@
 
     /* Undo-last-point button */
     #undo-btn { font-size: 14px; }
+    /* Rectangle delete button */
+    #rect-delete-btn { font-size: 14px; }
     /* Draw new track button */
     #draw-btn { font-size: 18px; font-weight: 700; line-height: 1; }
     /* Mobile-friendly mode button */
@@ -521,5 +523,15 @@
     .vertex-insert-popup .insert-popup-btn:hover,
     .vertex-insert-popup .insert-popup-btn.active {
       background: #4a90d9; color: #fff;
+    }
+
+    /* Rectangle delete overlay */
+    .rect-delete-overlay {
+      position: fixed;
+      border: 2px dashed #e74c3c;
+      background: rgba(231, 76, 60, 0.15);
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
     }
     /* end track editor */
