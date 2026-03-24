@@ -2,7 +2,7 @@
 // Editing interaction is in track-edit.js, import/export in io.js.
 
 import { haversineKm } from './utils.js';
-import { DEM_MAX_Z, DEM_SOURCE_ID, CORE_DIM, TRACK_COLORS } from './constants.js';
+import { DEM_MAX_Z, DEM_HD_SOURCE_ID, TRACK_COLORS } from './constants.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
@@ -58,7 +58,7 @@ function elevationAt(lngLat) {
 function representativeTrackSampleSpacingMeters(coords, totalDistMeters) {
   if (!coords.length) return 4;
   const meanLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
-  const nominal = (40075016.7 / Math.pow(2, DEM_MAX_Z) / CORE_DIM) * Math.max(0.25, Math.cos(meanLat * Math.PI / 180));
+  const nominal = (40075016.7 / Math.pow(2, DEM_MAX_Z) / 512) * Math.max(0.25, Math.cos(meanLat * Math.PI / 180));
   return Math.max(2, nominal, totalDistMeters / 2000);
 }
 
@@ -740,7 +740,7 @@ export function initTracks(mapRef, stateRef, updateProfile) {
 
   // Re-enrich when new DEM tiles load
   map.on('data', (e) => {
-    if (e.sourceId === DEM_SOURCE_ID && e.dataType === 'source' && tracks.length) {
+    if (e.sourceId === DEM_HD_SOURCE_ID && e.dataType === 'source' && tracks.length) {
       invalidateAllTrackStats();
       setTimeout(() => {
         enrichAllTracks();

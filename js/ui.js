@@ -2,8 +2,8 @@
 
 import {
   BASEMAP_LAYER_GROUPS, BASEMAP_DEFAULT_VIEW, OPENSKIMAP_LAYER_IDS,
-  ALL_BASEMAP_LAYER_IDS, DEM_SOURCE_ID, DEM_MAX_Z, SLOPE_RELIEF_CROSSFADE_Z,
-  ANALYSIS_COLOR, PARSED_RAMPS, ANALYSIS_RANGE, COLOR_RELIEF_STOPS,
+  ALL_BASEMAP_LAYER_IDS, DEM_TERRAIN_SOURCE_ID, DEM_MAX_Z, SLOPE_RELIEF_CROSSFADE_Z,
+  ANALYSIS_COLOR, COLOR_RELIEF_STOPS,
   rampToLegendCss, interpolateStopsToLegendCss,
 } from './constants.js';
 
@@ -79,7 +79,7 @@ export function applyOpenSkiMapOverlay(map, state) {
 
 export function applyTerrainState(map, state) {
   if (state.terrain3d) {
-    map.setTerrain({source: DEM_SOURCE_ID, exaggeration: state.terrainExaggeration});
+    map.setTerrain({source: DEM_TERRAIN_SOURCE_ID, exaggeration: state.terrainExaggeration});
   } else {
     map.setTerrain(null);
   }
@@ -125,29 +125,60 @@ export function updateLegend(state, map) {
 
 // ---- Mode state ----
 
-export function computeEffectiveSlopeOpacity(state, map) {
-  if (state.mode !== 'slope+relief') {
-    state.effectiveSlopeOpacity = state.slopeOpacity;
+export function applyModeState(map, state) {
+  const blendMode = state.multiplyBlend ? 'multiply' : 'normal';
+
+  if (!state.mode) {
+    if (map.getLayer('analysis')) map.setLayoutProperty('analysis', 'visibility', 'none');
+    if (map.getLayer('analysis-relief')) map.setLayoutProperty('analysis-relief', 'visibility', 'none');
     return;
   }
-  const z = map.getZoom();
-  const t = Math.max(0, Math.min(1, z - (SLOPE_RELIEF_CROSSFADE_Z - 1)));
-  state.effectiveSlopeOpacity = state.slopeOpacity * t;
-}
 
-export function applyModeState(map, state) {
-  computeEffectiveSlopeOpacity(state, map);
-  if (map.getLayer('dem-color-relief')) {
-    if (state.mode === 'slope+relief') {
-      map.setLayoutProperty('dem-color-relief', 'visibility', 'visible');
-      map.setPaintProperty('dem-color-relief', 'color-relief-opacity',
-        ['interpolate', ['linear'], ['zoom'],
-          SLOPE_RELIEF_CROSSFADE_Z - 1, state.slopeOpacity,
-          SLOPE_RELIEF_CROSSFADE_Z, 0
-        ]);
-    } else {
-      map.setLayoutProperty('dem-color-relief', 'visibility', state.mode === 'color-relief' ? 'visible' : 'none');
-      map.setPaintProperty('dem-color-relief', 'color-relief-opacity', state.slopeOpacity);
+  if (state.mode === 'slope+relief') {
+    // Show only the layer relevant to current zoom; hide the other entirely
+    // to avoid rendering a fully-transparent terrain-analysis layer.
+    const zoom = map.getZoom();
+    const showSlope = zoom >= SLOPE_RELIEF_CROSSFADE_Z - 1;
+    const showRelief = zoom < SLOPE_RELIEF_CROSSFADE_Z;
+    if (map.getLayer('analysis')) {
+      map.setLayoutProperty('analysis', 'visibility', showSlope ? 'visible' : 'none');
+      if (showSlope) {
+        map.setPaintProperty('analysis', 'terrain-analysis-attribute', 'slope');
+        map.setPaintProperty('analysis', 'terrain-analysis-color', ANALYSIS_COLOR.slope);
+        map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+          ['interpolate', ['linear'], ['zoom'],
+            SLOPE_RELIEF_CROSSFADE_Z - 1, 0,
+            SLOPE_RELIEF_CROSSFADE_Z, state.slopeOpacity
+          ]);
+        map.setPaintProperty('analysis', 'blend-mode', blendMode);
+      }
+    }
+    if (map.getLayer('analysis-relief')) {
+      map.setLayoutProperty('analysis-relief', 'visibility', showRelief ? 'visible' : 'none');
+      if (showRelief) {
+        map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity',
+          ['interpolate', ['linear'], ['zoom'],
+            SLOPE_RELIEF_CROSSFADE_Z - 1, state.slopeOpacity,
+            SLOPE_RELIEF_CROSSFADE_Z, 0
+          ]);
+        map.setPaintProperty('analysis-relief', 'blend-mode', blendMode);
+      }
+    }
+  } else if (state.mode === 'slope' || state.mode === 'aspect') {
+    if (map.getLayer('analysis')) {
+      map.setLayoutProperty('analysis', 'visibility', 'visible');
+      map.setPaintProperty('analysis', 'terrain-analysis-attribute', state.mode);
+      map.setPaintProperty('analysis', 'terrain-analysis-color', ANALYSIS_COLOR[state.mode]);
+      map.setPaintProperty('analysis', 'terrain-analysis-opacity', state.slopeOpacity);
+      map.setPaintProperty('analysis', 'blend-mode', blendMode);
+    }
+    if (map.getLayer('analysis-relief')) map.setLayoutProperty('analysis-relief', 'visibility', 'none');
+  } else if (state.mode === 'color-relief') {
+    if (map.getLayer('analysis')) map.setLayoutProperty('analysis', 'visibility', 'none');
+    if (map.getLayer('analysis-relief')) {
+      map.setLayoutProperty('analysis-relief', 'visibility', 'visible');
+      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity', state.slopeOpacity);
+      map.setPaintProperty('analysis-relief', 'blend-mode', blendMode);
     }
   }
 }
@@ -262,11 +293,6 @@ export function syncViewToUrl(map, state) {
   params.set('pitch', pitch.toFixed(2));
   const hash = `#${params.toString()}`;
   window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`);
-}
-
-export function updateStatus(state) {
-  document.getElementById('internalCount').textContent = String(state.internalCount);
-  document.getElementById('fallbackCount').textContent = String(state.fallbackCount);
 }
 
 // ---- Tile grid ----

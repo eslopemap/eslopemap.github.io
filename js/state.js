@@ -21,14 +21,11 @@ export const STATE_DEFAULTS = {
   hillshadeOpacity: 0.10,
   hillshadeMethod: 'igor',
   slopeOpacity: 0.45,
-  effectiveSlopeOpacity: 0.45,
   showContours: true,
   showOpenSkiMap: false,
   showTileGrid: false,
   cursorInfoMode: 'cursor',
   multiplyBlend: true,
   terrain3d: false,
-  terrainExaggeration: 1.4,
-  internalCount: 0,
-  fallbackCount: 0
+  terrainExaggeration: 1.4
 };

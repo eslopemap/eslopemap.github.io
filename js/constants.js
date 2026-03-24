@@ -1,14 +1,11 @@
 // Pure constants and config — no DOM, no map, no state dependencies.
 
 import { cssColorToRgb01 } from './utils.js';
-
-export const DEM_TILE_URL_TEMPLATE = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
 export const MAX_STEP_STOPS = 16;
-export const DEM_SOURCE_ID = 'dem';
-export const DEM_MAX_Z = 14;
+export const DEM_TERRAIN_SOURCE_ID = 'dem-terrain';
+export const DEM_HD_SOURCE_ID = 'dem-hd';
+export const DEM_MAX_Z = 14;  // could go up to 15
 export const SLOPE_RELIEF_CROSSFADE_Z = 11;
-export const CORE_DIM = 512;
-export const PAD_STRIDE = CORE_DIM + 2;
 
 export const TRACK_COLORS = ['#e040fb','#ff5252','#00e676','#ffab00','#2979ff','#00e5ff','#ff6e40','#d500f9'];
 
@@ -65,13 +62,6 @@ export const ANALYSIS_RANGE = {
   aspect: [0, 360],
   'color-relief': [-250, 8000]
 };
-
-export function demTileUrl(z, x, y) {
-  return DEM_TILE_URL_TEMPLATE
-    .replace('{z}', String(z))
-    .replace('{x}', String(x))
-    .replace('{y}', String(y));
-}
 
 export function parseStepRamp(expression, expectedInput) {
   if (!Array.isArray(expression) || expression[0] !== 'step') {

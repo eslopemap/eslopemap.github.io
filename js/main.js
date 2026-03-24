@@ -1,22 +1,23 @@
 // Entry point: creates map, imports modules, wires events.
 
 import {
-  DEM_SOURCE_ID, DEM_MAX_Z, ANALYSIS_COLOR, BASEMAP_LAYER_GROUPS,
+  DEM_HD_SOURCE_ID, DEM_MAX_Z, ANALYSIS_COLOR,
+  DEM_TERRAIN_SOURCE_ID,
 } from './constants.js';
 
 import { createStore, STATE_DEFAULTS } from './state.js';
 
 import {
-  parseHashParams, syncViewToUrl, updateStatus, updateLegend,
+  parseHashParams, syncViewToUrl, updateLegend,
   applyBasemapSelection, applyContourVisibility, applyOpenSkiMapOverlay,
-  applyTerrainState, applyModeState, computeEffectiveSlopeOpacity,
+  applyTerrainState, applyModeState,
   basemapOpacityExpr, setGlobalStatePropertySafe, updateCursorInfoVisibility,
   setCursorInfo, showCursorTooltipAt, hideCursorTooltip,
   getVisibleTriplesForMap, initSearch,
 } from './ui.js';
 
 import {
-  queryLoadedElevationAtLngLat, createHybridBorderLayer,
+  queryLoadedElevationAtLngLat,
 } from './dem.js';
 
 import { initTracks, getTracksState } from './tracks.js';
@@ -234,13 +235,25 @@ const map = new maplibregl.Map({
         tileSize: 256,
         attribution: '&copy; Kartverket'
       },
-      dem: {
+      // Separate raster-dem sources for terrain and
+      // hillshade/analysis on purpose: in current MapLibre,
+      // one source means one shared TileManager, and terrain changes shared DEM
+      // tile selection/preparation toward coarser tiles for performance. A
+      // larger shared tile cache does not isolate those different behaviors.
+      [DEM_TERRAIN_SOURCE_ID]: {
         type: 'raster-dem',
         tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
         tileSize: 512,
         maxzoom: DEM_MAX_Z,
         encoding: 'terrarium'
-      }
+      },
+      [DEM_HD_SOURCE_ID]: {
+        type: 'raster-dem',
+        tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+        tileSize: 512,
+        maxzoom: DEM_MAX_Z,
+        encoding: 'terrarium'
+      },
     },
     layers: [
       {
@@ -379,13 +392,39 @@ const map = new maplibregl.Map({
       {
         id: 'dem-loader',
         type: 'hillshade',
-        source: DEM_SOURCE_ID,
+        source: DEM_HD_SOURCE_ID,
         paint: {
           'hillshade-method': state.hillshadeMethod,
           'hillshade-exaggeration': ['coalesce', ['global-state', 'hillshadeOpacity'], 0.35],
           'hillshade-shadow-color': '#000000',
           'hillshade-highlight-color': '#ffffff',
           'hillshade-accent-color': '#000000',
+        }
+      },
+      // Terrain analysis layers — must be right after dem-loader for 3D terrain compatibility.
+      // Start hidden; applyModeState() sets visibility on load.
+      {
+        id: 'analysis',
+        type: 'terrain-analysis',
+        source: DEM_HD_SOURCE_ID,
+        layout: { visibility: 'none' },
+        paint: {
+          'terrain-analysis-attribute': 'slope',
+          'terrain-analysis-opacity': state.slopeOpacity,
+          'terrain-analysis-color': ANALYSIS_COLOR.slope,
+          'blend-mode': state.multiplyBlend ? 'multiply' : 'normal'
+        }
+      },
+      {
+        id: 'analysis-relief',
+        type: 'terrain-analysis',
+        source: DEM_HD_SOURCE_ID,
+        layout: { visibility: 'none' },
+        paint: {
+          'terrain-analysis-attribute': 'elevation',
+          'terrain-analysis-opacity': state.slopeOpacity,
+          'terrain-analysis-color': ANALYSIS_COLOR['color-relief'],
+          'blend-mode': state.multiplyBlend ? 'multiply' : 'normal'
         }
       }
     ]
@@ -529,7 +568,7 @@ document.getElementById('showTileGrid').addEventListener('change', (e) => {
 
 document.getElementById('multiplyBlend').addEventListener('change', (e) => {
   state.multiplyBlend = Boolean(e.target.checked);
-  map.triggerRepaint();
+  applyModeState(map, state);
   scheduleSettingsSave();
 });
 
@@ -582,7 +621,6 @@ map.getCanvas().addEventListener('mousedown', (e) => {
 }, {capture: true});
 
 updateLegend(state, map);
-updateStatus(state);
 updateCursorInfoVisibility(state);
 
 // ---- Map load ----
@@ -600,16 +638,13 @@ map.on('load', () => {
     syncViewToUrl(map, state);
     if (state.showTileGrid) updateDebugGridSource(map);
   });
-  map.on('zoom', () => {
-    if (state.mode === 'slope+relief') {
-      computeEffectiveSlopeOpacity(state, map);
-      map.triggerRepaint();
-    }
-  });
   map.on('zoomend', () => {
     syncViewToUrl(map, state);
     if (state.showTileGrid) updateDebugGridSource(map);
-    if (state.mode === 'slope+relief') updateLegend(state, map);
+    if (state.mode === 'slope+relief') {
+      applyModeState(map, state);
+      updateLegend(state, map);
+    }
   });
   map.on('rotateend', () => {
     syncViewToUrl(map, state);
@@ -617,20 +652,8 @@ map.on('load', () => {
   map.on('pitchend', () => {
     syncViewToUrl(map, state);
   });
-  const hybridLayer = createHybridBorderLayer(state, getVisibleTriplesForMap, () => updateStatus(state));
-  map.addLayer(hybridLayer);
-  map.addLayer({
-    id: 'dem-color-relief',
-    type: 'color-relief',
-    source: DEM_SOURCE_ID,
-    layout: {
-      visibility: (state.mode === 'color-relief' || state.mode === 'slope+relief') ? 'visible' : 'none'
-    },
-    paint: {
-      'color-relief-opacity': state.slopeOpacity,
-      'color-relief-color': ANALYSIS_COLOR['color-relief']
-    }
-  });
+  // Terrain analysis layers are in the initial style (right after dem-loader)
+  // — just apply the mode state to set correct visibility/opacity
   applyModeState(map, state);
 
   // Contour lines
@@ -736,28 +759,6 @@ map.on('load', () => {
       hideCursorTooltip();
     });
   }
-
-  // Tile border fix: invalidate cached internal textures when new DEM tiles load
-  let borderFixTimer = 0;
-  const flushInternalTextures = () => {
-    borderFixTimer = 0;
-    const gl = map.painter && map.painter.context && map.painter.context.gl;
-    if (gl) {
-      for (const entry of hybridLayer.internalTextures.values()) {
-        if (entry.texture) gl.deleteTexture(entry.texture);
-      }
-    }
-    hybridLayer.internalTextures.clear();
-    map.triggerRepaint();
-  };
-
-  map.on('data', (e) => {
-    if (e.sourceId === DEM_SOURCE_ID && e.dataType === 'source') {
-      if (!borderFixTimer) {
-        borderFixTimer = setTimeout(flushInternalTextures, 100);
-      }
-    }
-  });
 });
 
 // ---- Hashchange navigation ----
@@ -814,3 +815,5 @@ Object.defineProperties(window, {
   profileChart:        { get() { return getProfileChart(); } },
   profileClosed:       { get() { return tracksState.profileClosed; } },
 });
+
+

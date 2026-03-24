@@ -3,9 +3,10 @@
 ## Map & Visualization
 - **Analysis modes** — `Slope + Color relief` (default), `Slope`, `Aspect`, `Color relief`, and an empty `none` mode that disables the DEM analysis overlay entirely
 - **Slope + Color relief mode** — hybrid mode showing slope analysis at zoom ≥ 14 and color-relief below, with a one-zoom-level crossfade
-- **Slope / Aspect overlay** — custom WebGL layer using Horn's algorithm on raster-DEM tiles, with configurable opacity and color ramp
-- **Color relief** — DEM color ramp mode rendered with the built-in `color-relief` layer
+- **Slope / Aspect overlay** — built-in `terrain-analysis` layer type from `@eslopemap/maplibre-gl`, with configurable opacity and color ramp
+- **Color relief** — built-in `terrain-analysis` layer with `elevation` attribute
 - **Hillshade** — multiple methods (`standard`, `basic`, `combined`, `multidirectional`, `igor`), configurable opacity
+- **3D terrain compatibility** — hillshade and the debug `color-relief` fallback each use their own duplicated raster-dem source so they stay independent from the terrain-analysis / `setTerrain()` DEM path
 - **Contour lines** — generated client-side from DEM via `maplibre-contour`, auto-shown for OSM only (other basemaps have their own contours), manual toggle available
 - **Multiply blend** — optional compositing mode for the DEM analysis overlay on the basemap
 - **3D terrain** — toggle with configurable exaggeration
@@ -71,7 +72,7 @@
 - **css/main.css** — all styles including track group nesting
 - **js/main.js** — entry point: creates map, imports all modules, wires settings event handlers, persistence, exposes window getters for tests
 - **js/constants.js** — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers
-- **js/dem.js** — DEM tile processing, elevation sampling, WebGL hybrid border layer with GLSL shaders
+- **js/dem.js** — Elevation sampling from loaded DEM tiles (cursor elevation & slope)
 - **js/ui.js** — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, Nominatim search
 - **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer
 - **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, draw/undo buttons
@@ -83,7 +84,7 @@
 
 ### Dependency flow
 - `constants.js` ← `utils.js` (pure, no DOM)
-- `dem.js` ← `utils.js`, `constants.js` (no DOM except for fallback tile fetch)
+- `dem.js` ← `constants.js` (no DOM)
 - `ui.js` ← `constants.js`, `utils.js` (DOM access for settings UI)
 - `persist.js` — standalone (localStorage only)
 - `io.js` ← `utils.js`, `@we-gold/gpxjs` (GPX parsing/serialization)
@@ -97,9 +98,9 @@
 
 - **Contour initialization order** — contour visibility must be re-applied after the contour layers are added, otherwise first-load state can disagree with the checkbox
 - **Contour/basemap coupling** — contour lines are auto-enabled only for OSM; switching basemaps intentionally resets the contour checkbox unless you change the logic
-- **`Mode: none` behavior** — empty mode disables the custom DEM analysis render path and hides the legend ramp/labels, but keeps cursor info visible
-- **Color relief split path** — `color-relief` is rendered via a separate MapLibre layer, not the custom WebGL analysis layer used for slope/aspect; in `slope+relief` mode both layers are active with zoom-dependent opacity expressions providing the crossfade
-- **Slope + Color relief mode** — this hybrid mode uses a threshold zoom ≥ `SLOPE_RELIEF_CROSSFADE_Z` ; color-relief opacity uses a MapLibre zoom interpolation expression, while the WebGL slope opacity is pre-computed in `state.effectiveSlopeOpacity` (via `computeEffectiveSlopeOpacity`) so `render()` stays mode-agnostic; legend switches dynamically at the zoom threshold
+- **`Mode: none` behavior** — empty mode hides both `terrain-analysis` layers and the legend ramp/labels, but keeps cursor info visible
+- **Color relief split path** — both slope/aspect and color-relief use the built-in `terrain-analysis` layer type from `@eslopemap/maplibre-gl`; in `slope+relief` mode two `terrain-analysis` layers are active with zoom-dependent opacity expressions providing the crossfade
+- **Slope + Color relief mode** — this hybrid mode uses a threshold zoom ≥ `SLOPE_RELIEF_CROSSFADE_Z`; both terrain-analysis layers use MapLibre zoom interpolation expressions for their opacity; legend switches dynamically at the zoom threshold
 - **Track button state** — `tracks-btn` must be explicitly synced on startup so the disabled state matches the empty track list before any interaction
 - **Native attribution control** — when adding attribution manually in the bottom-right stack, the map must be created with `attributionControl: false` to avoid duplicate attribution UI
 - **editingTrackId vs activeTrackId** — `activeTrackId` controls selection (wider line, profile); `editingTrackId` controls which track's vertices are interactive; when creating a new track via the draw button, `editingIsNewTrack` is set for auto-cleanup
@@ -120,14 +121,13 @@
 1. Parse URL hash for `lng`, `lat`, `zoom`, `basemap`, `mode`, `opacity`, `terrain`, `exaggeration`, `bearing`, `pitch`. Missing keys fall back to Mont Blanc area at zoom 12, slope mode, 0.45 opacity.
 2. Load persisted settings from localStorage (URL hash takes priority over persisted values).
 3. Build the MapLibre map with all sources (OSM, OTM, IGN, SwissTopo vector, Kartverket, OpenSkiMap, DEM raster-dem, contour vector tiles).
-3. Style layers are defined inline: basemap raster/vector, OpenSkiMap fill/line/symbol, hillshade, color-relief, contours, and a custom WebGL layer for slope/aspect.
-4. On `map.on('load')`: apply basemap selection, terrain state, debug grid, global-state properties, add the custom hybrid border layer, contour layers, and wire up elevation sampling.
+3. Style layers are defined inline: basemap raster/vector, OpenSkiMap fill/line/symbol, hillshade, and contours.
+4. On `map.on('load')`: apply basemap selection, terrain state, debug grid, global-state properties, add the `terrain-analysis` layers for slope/aspect and color-relief, contour layers, and wire up elevation sampling.
 5. Call `updateCursorInfoVisibility()` to set initial cursor-info display mode.
 
 ### DEM analysis rendering
-- The custom WebGL layer `dem-analysis-hybrid-border` renders slope or aspect per visible tile. For each tile it checks MapLibre's internal DEM tile manager first (which has proper padded borders for derivative accuracy). If no internal tile exists, it fetches the raw DEM tile as a fallback, decodes Terrarium encoding, pads to a 514×514 Float32 array, and backfills border pixels from loaded neighbours.
-- Horn's 3×3 derivative kernel is computed in the fragment shader; the slope/aspect scalar is mapped to a step colour ramp uploaded as uniforms.
-- The `color-relief` mode uses a separate MapLibre built-in layer rather than the custom shader.
+- Two built-in `terrain-analysis` layers (`analysis` for slope/aspect, `analysis-relief` for elevation) from `@eslopemap/maplibre-gl` replace the old custom WebGL shader. The layer type natively supports `['slope']`, `['aspect']`, and `['elevation']` attribute expressions, step/interpolate color ramps, and blend modes.
+- `applyModeState()` switches attributes, colors, visibility, opacity, and blend mode via `setPaintProperty()`.
 
 ### Cursor elevation & slope
 - **At cursor** (default): a small `#cursor-tooltip` div positioned at `clientX+15, clientY+15` shows elevation and slope. Updated every frame via `requestAnimationFrame`. On profile hover, it repositions to the hovered vertex's screen coordinates.
@@ -136,7 +136,7 @@
 - On mobile: a permanent center crosshair (`#draw-crosshair`) always shows elevation & slope in the `#cursor-info` corner display, updated on `map.move`. A `#mobile-crosshair` also appears at tap points with the tooltip. Cursor info defaults to `corner` mode on mobile.
 
 ### Settings panel
-Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, OpenSkiMap overlay, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. Also shows internal/fallback tile counts.
+Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, OpenSkiMap overlay, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. The debug color-relief layer is suppressed while 3D terrain is active.
 
 ### Track editor — state model
 - `tracks[]` — array of `{id, name, color, coords, _statsCache, groupId, groupName, segmentLabel}`.
