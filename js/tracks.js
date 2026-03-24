@@ -375,7 +375,7 @@ function syncProfileToggleButton() {
   profileToggleBtn.disabled = !canShow;
   const isVisible = canShow && profilePanel.classList.contains('visible') && !profileClosed;
   profileToggleBtn.classList.toggle('active', isVisible);
-  profileToggleBtn.textContent = isVisible ? 'Profile' : 'Show Profile';
+  profileToggleBtn.title = isVisible ? 'Hide profile' : 'Elevation profile';
 }
 
 function syncTrackPanelShell() {

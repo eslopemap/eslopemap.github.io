@@ -303,6 +303,12 @@ export function initIO(deps) {
   document.getElementById('export-geojson-btn').addEventListener('click', exportActiveGeoJSON);
   document.getElementById('export-all-gpx-btn').addEventListener('click', exportAllGPX);
 
+  // Open file button
+  const openFileBtn = document.getElementById('open-file-btn');
+  if (openFileBtn) {
+    openFileBtn.addEventListener('click', openFile);
+  }
+
   // Open folder button
   const openFolderBtn = document.getElementById('open-folder-btn');
   if (openFolderBtn) {
@@ -341,6 +347,22 @@ function openDirectoryInput() {
   const input = document.createElement('input');
   input.type = 'file';
   input.webkitdirectory = true;
+  input.multiple = true;
+  input.accept = '.gpx,.geojson,.json';
+  input.addEventListener('change', () => {
+    for (const file of input.files) {
+      if (FILE_PATTERN.test(file.name)) {
+        file.text().then(text => importFileContent(file.name, text));
+      }
+    }
+  });
+  input.click();
+}
+
+/** Open single file(s): use file picker */
+function openFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
   input.multiple = true;
   input.accept = '.gpx,.geojson,.json';
   input.addEventListener('change', () => {
