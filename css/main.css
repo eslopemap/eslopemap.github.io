@@ -501,6 +501,19 @@
     .track-item .track-edit:hover { opacity: 1; }
     .track-item .track-edit.active { opacity: 1; color: #4a90d9; }
 
+    /* Inline track rename input */
+    .track-name-input {
+      width: 100%;
+      font-size: 12px;
+      font-family: inherit;
+      border: 1px solid #4a90d9;
+      border-radius: 3px;
+      padding: 1px 4px;
+      outline: none;
+      background: #fff;
+      box-sizing: border-box;
+    }
+
     /* Undo-last-point button */
     #undo-btn { font-size: 14px; }
     /* Mobile-friendly mode button */

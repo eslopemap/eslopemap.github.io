@@ -270,8 +270,14 @@ export function exitEditMode() {
 export function startNewTrack() {
   if (editingTrackId) exitEditMode();
   editingIsNewTrack = true;
-  const t = tracksFns.createNewTrack();
+  const defaultName = 'Track ' + (tracksFns.getTrackCount() + 1);
+  const t = tracksFns.createNewTrack(defaultName);
   enterEditMode(t.id);
+  // Show inline rename input for the newly created track
+  requestAnimationFrame(() => {
+    const nameEl = document.querySelector(`.track-name[data-track-id="${t.id}"]`);
+    if (nameEl) tracksFns.startTrackRename(t.id, nameEl);
+  });
 }
 
 function cancelMobileMove() {

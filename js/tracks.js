@@ -456,6 +456,10 @@ function trackStats(t) {
 // Collapsed groups (persisted as a Set of groupIds)
 const collapsedGroups = new Set();
 
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function buildTrackItemHTML(t) {
   const s = t.coords.length >= 2 ? trackStats(t) : null;
   const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m · ${t.coords.length} pts` : `${t.coords.length} pts`;
@@ -463,8 +467,9 @@ function buildTrackItemHTML(t) {
     ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Max slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
     : '';
   const editActive = isTrackEditing(t.id);
+  const displayName = escapeHtml(t.segmentLabel || t.name);
   return `<span class="track-color" style="background:${t.color}"></span>` +
-    `<span class="track-name">${t.segmentLabel || t.name}` +
+    `<span class="track-name" data-track-id="${t.id}">${displayName}` +
     (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
     (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
     `</span>` +
@@ -524,6 +529,13 @@ function renderTrackList() {
         else collapsedGroups.add(t.groupId);
         renderTrackList();
       });
+      const groupNameEl = header.querySelector('.track-name');
+      if (groupNameEl) {
+        groupNameEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          startGroupRename(t.groupId, groupNameEl);
+        });
+      }
       trackListEl.appendChild(header);
 
       // Group children (segments)
@@ -537,6 +549,13 @@ function renderTrackList() {
             if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
             setActiveTrack(g.id);
           });
+          const nestedNameEl = div.querySelector('.track-name');
+          if (nestedNameEl) {
+            nestedNameEl.addEventListener('dblclick', (e) => {
+              e.stopPropagation();
+              startTrackRename(g.id, nestedNameEl);
+            });
+          }
           div.querySelector('.track-edit').addEventListener('click', () => {
             if (isTrackEditing(g.id)) exitEditMode();
             else { setActiveTrack(g.id); enterEditMode(g.id); }
@@ -556,6 +575,13 @@ function renderTrackList() {
         if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
         setActiveTrack(t.id);
       });
+      const nameEl = div.querySelector('.track-name');
+      if (nameEl) {
+        nameEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          startTrackRename(t.id, nameEl);
+        });
+      }
       div.querySelector('.track-edit').addEventListener('click', () => {
         if (isTrackEditing(t.id)) exitEditMode();
         else { setActiveTrack(t.id); enterEditMode(t.id); }
@@ -654,8 +680,81 @@ function removeIncompleteNewTrack(t) {
   }
 }
 
-function createNewTrack() {
-  return createTrack('Track ' + (tracks.length + 1), []);
+function renameTrack(id, newName) {
+  const t = tracks.find(tr => tr.id === id);
+  if (!t || !newName) return;
+  if (t.segmentLabel) t.segmentLabel = newName;
+  else t.name = newName;
+  renderTrackList();
+  scheduleSave();
+}
+
+function renameGroup(groupId, newName) {
+  if (!newName) return;
+  for (const t of tracks) {
+    if (t.groupId === groupId) t.groupName = newName;
+  }
+  renderTrackList();
+  scheduleSave();
+}
+
+function startTrackRename(trackId, nameEl) {
+  const t = tracks.find(tr => tr.id === trackId);
+  if (!t) return;
+  const currentName = t.segmentLabel || t.name;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'track-name-input';
+  input.value = currentName;
+  // Replace span content with just the input (remove stats lines)
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const val = input.value.trim();
+    if (val && val !== currentName) renameTrack(trackId, val);
+    else renderTrackList();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = currentName; input.blur(); }
+    e.stopPropagation();
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
+function startGroupRename(groupId, nameEl) {
+  const first = tracks.find(t => t.groupId === groupId);
+  if (!first) return;
+  const currentName = first.groupName || 'Group';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'track-name-input';
+  input.value = currentName;
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  const commit = () => {
+    const val = input.value.trim();
+    if (val && val !== currentName) renameGroup(groupId, val);
+    else renderTrackList();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = currentName; input.blur(); }
+    e.stopPropagation();
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
+function createNewTrack(name) {
+  return createTrack(name || ('Track ' + (tracks.length + 1)), []);
 }
 
 // ---- Public API ----
@@ -726,7 +825,10 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   initTrackEdit(mapRef, stateRef, updateProfile, {
     findTrack: (id) => tracks.find(tr => tr.id === id),
     getActiveTrack,
+    getTrackCount: () => tracks.length,
     createNewTrack,
+    renameTrack,
+    startTrackRename,
     deleteTrack,
     removeIncompleteNewTrack,
     onTrackCoordsChanged,
