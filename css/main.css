@@ -499,6 +499,8 @@
 
     /* Undo-last-point button */
     #undo-btn { font-size: 14px; }
+    /* Draw new track button */
+    #draw-btn { font-size: 18px; font-weight: 700; line-height: 1; }
     /* Mobile-friendly mode button */
     #mobile-mode-btn { font-size: 14px; }
     #mobile-mode-btn.active { background: #4a90d9; color: #fff; }
