@@ -221,6 +221,45 @@ function syncUndoBtn() {
   updateInsertPreview();
 }
 
+function deleteCurrentVertex() {
+  const t = tracksFns.getActiveTrack();
+  if (!t || !t.coords.length) return;
+
+  // Determine which index to delete:
+  // 1. Selected vertex, 2. Insertion point, 3. Last point
+  let delIdx;
+  if (selectedVertexIndex != null && selectedVertexIndex < t.coords.length) {
+    delIdx = selectedVertexIndex;
+  } else if (insertAfterIdx != null && insertAfterIdx < t.coords.length) {
+    delIdx = insertAfterIdx;
+  } else {
+    delIdx = t.coords.length - 1;
+  }
+
+  t.coords.splice(delIdx, 1);
+
+  // Adjust selectedVertexIndex
+  if (selectedVertexIndex != null) {
+    if (delIdx < selectedVertexIndex) selectedVertexIndex--;
+    else if (delIdx === selectedVertexIndex) {
+      selectedVertexIndex = t.coords.length > 0
+        ? Math.min(selectedVertexIndex, t.coords.length - 1)
+        : null;
+    }
+  }
+  // Adjust insertAfterIdx
+  if (insertAfterIdx != null) {
+    if (delIdx <= insertAfterIdx) {
+      insertAfterIdx = Math.max(0, insertAfterIdx - 1);
+    }
+    if (t.coords.length === 0) insertAfterIdx = null;
+  }
+
+  tracksFns.onTrackCoordsChanged(t);
+  if (t.coords.length === 0) tracksFns.deleteTrack(t.id);
+  syncUndoBtn();
+}
+
 // ---- Edit mode ----
 
 function setDefaultMapCursor() {
@@ -327,17 +366,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
   });
 
   undoBtn.addEventListener('click', () => {
-    const t = tracksFns.getActiveTrack();
-    if (!t || !t.coords.length) return;
-    t.coords.pop();
-    if (selectedVertexIndex != null && selectedVertexIndex >= t.coords.length) {
-      selectedVertexIndex = t.coords.length > 0 ? t.coords.length - 1 : null;
-    }
-    if (insertAfterIdx != null && insertAfterIdx >= t.coords.length) {
-      insertAfterIdx = t.coords.length > 0 ? t.coords.length - 1 : null;
-    }
-    tracksFns.onTrackCoordsChanged(t);
-    syncUndoBtn();
+    deleteCurrentVertex();
   });
 
   mobileModeBtn.addEventListener('click', () => {
@@ -439,20 +468,14 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && editingTrackId) exitEditMode();
     if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
+    if ((e.key === 'Delete' || e.key === 'Backspace') && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      deleteCurrentVertex();
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
-      const t = tracksFns.getActiveTrack();
-      if (t && t.coords.length > 0) {
-        e.preventDefault();
-        t.coords.pop();
-        if (selectedVertexIndex != null && selectedVertexIndex >= t.coords.length) {
-          selectedVertexIndex = t.coords.length > 0 ? t.coords.length - 1 : null;
-        }
-        if (insertAfterIdx != null && insertAfterIdx >= t.coords.length) {
-          insertAfterIdx = t.coords.length > 0 ? t.coords.length - 1 : null;
-        }
-        tracksFns.onTrackCoordsChanged(t);
-        syncUndoBtn();
-      }
+      e.preventDefault();
+      deleteCurrentVertex();
     }
   });
 
