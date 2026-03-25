@@ -3,6 +3,7 @@
 
 const TRACKS_KEY = 'slope:tracks';
 const SETTINGS_KEY = 'slope:settings';
+const PROFILE_SETTINGS_KEY = 'slope:profile-settings';
 
 // ---- Tracks ----
 
@@ -36,7 +37,7 @@ export function loadTracks() {
 const SETTING_KEYS = [
   'basemap', 'mode', 'slopeOpacity', 'basemapOpacity', 'hillshadeOpacity',
   'hillshadeMethod', 'terrain3d', 'terrainExaggeration', 'multiplyBlend',
-  'showContours', 'showOpenSkiMap', 'cursorInfoMode',
+  'showContours', 'showOpenSkiMap', 'cursorInfoMode', 'pauseThreshold',
 ];
 
 export function saveSettings(state) {
@@ -56,11 +57,27 @@ export function loadSettings() {
   } catch { return null; }
 }
 
+// ---- Profile display settings ----
+
+export function saveProfileSettings(settings) {
+  try {
+    localStorage.setItem(PROFILE_SETTINGS_KEY, JSON.stringify(settings));
+  } catch { /* quota exceeded or private mode */ }
+}
+
+export function loadProfileSettings() {
+  try {
+    const raw = localStorage.getItem(PROFILE_SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 // ---- Clear ----
 
 export function clearAll() {
   try {
     localStorage.removeItem(TRACKS_KEY);
     localStorage.removeItem(SETTINGS_KEY);
+    localStorage.removeItem(PROFILE_SETTINGS_KEY);
   } catch { /* ignore */ }
 }

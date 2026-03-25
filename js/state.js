@@ -27,5 +27,6 @@ export const STATE_DEFAULTS = {
   cursorInfoMode: 'cursor',
   multiplyBlend: true,
   terrain3d: false,
-  terrainExaggeration: 1.4
+  terrainExaggeration: 1.4,
+  pauseThreshold: 5,  // minutes
 };

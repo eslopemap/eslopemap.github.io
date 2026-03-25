@@ -136,6 +136,10 @@ if (persisted) {
   if (persisted.showOpenSkiMap != null) document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
   if (persisted.multiplyBlend != null) document.getElementById('multiplyBlend').checked = state.multiplyBlend;
   if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
+  if (persisted.pauseThreshold != null) {
+    document.getElementById('pauseThreshold').value = String(state.pauseThreshold);
+    document.getElementById('pauseThresholdValue').textContent = state.pauseThreshold;
+  }
 }
 
 // On mobile, default to corner cursor-info mode (center crosshair acts as pointer)
@@ -596,6 +600,13 @@ document.getElementById('terrainExaggeration').addEventListener('input', (e) => 
   }
   syncViewToUrl(map, state);
   map.triggerRepaint();
+  scheduleSettingsSave();
+});
+
+document.getElementById('pauseThreshold').addEventListener('input', (e) => {
+  state.pauseThreshold = Number(e.target.value);
+  document.getElementById('pauseThresholdValue').textContent = state.pauseThreshold;
+  updateProfile();
   scheduleSettingsSave();
 });
 

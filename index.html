@@ -116,6 +116,11 @@
       </div>
 
       <div class="row">
+        <label for="pauseThreshold"><strong>Pause threshold</strong>: <span id="pauseThresholdValue">5</span> min</label><br />
+        <input id="pauseThreshold" type="range" min="1" max="30" step="1" value="5" />
+      </div>
+
+      <div class="row">
         <button id="clear-data-btn" type="button" class="tb-btn" title="Clear saved tracks and settings from localStorage">Clear saved data</button>
       </div>
     </div>
@@ -157,7 +162,30 @@
   <div id="toast"></div>
 
   <div id="profile-panel" class="panel-surface">
-    <button id="profile-close" title="Close">&times;</button>
+    <div id="profile-header">
+      <div id="profile-menu">
+        <button id="profile-menu-btn" class="tb-btn" title="Display settings">⚙</button>
+        <div id="profile-menu-dropdown">
+          <label><input type="checkbox" id="prof-show-elevation" checked /> Elevation</label>
+          <label><input type="checkbox" id="prof-show-trackslope" checked /> Track slope</label>
+          <label><input type="checkbox" id="prof-show-terrainslope" checked /> Terrain slope</label>
+          <label><input type="checkbox" id="prof-show-speed" /> Speed</label>
+          <label><input type="checkbox" id="prof-show-vspeed" /> Vertical speed</label>
+          <label><input type="checkbox" id="prof-show-pauses" checked /> Pauses</label>
+          <hr />
+          <label>X-axis:
+            <select id="prof-x-axis">
+              <option value="distance" selected>Distance</option>
+              <option value="time">Time</option>
+              <option value="time-no-pauses">Time (no pauses)</option>
+              <option value="datetime">Date/Time</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <span id="profile-legend"></span>
+      <button id="profile-close" title="Close">&times;</button>
+    </div>
     <canvas id="profile-canvas"></canvas>
   </div>
 

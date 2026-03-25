@@ -23,10 +23,9 @@
 
 ## Track Editor
 - **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
-- **Single-file import** — 📄 open-file button in toolbar for file picker (alternative to drag-drop)
-- **Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
+- **Single-file  and Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
 - **Top-right track workspace** — compact floating panel for track management and export
-- **Icon-based toolbar** — all toolbar buttons use icons with title tooltips to save space: `+` (new track), 📄 (open file), 📈 (profile), 📍 (track list), plus contextual 🗑️ (delete point) and ⬚ (rectangle delete)
+- **Icon-based toolbar** — all toolbar buttons use icons with title tooltips to save space: `+` (new track), 📄 (open file), 📈 (profile), 📍 (track list), plus contextual ↩ (undo) and ⬚ (rectangle delete)
 - **Draw mode** — `+` button creates a new track with a pre-filled name input; enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
 - **Track rename** — double-click a track name in the panel (or group header) to inline-edit; press Enter to commit, Escape to cancel
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
@@ -40,18 +39,24 @@
 - **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
 - **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
 - **Shift/Ctrl/Meta+click delete** — remove individual track vertices (edit mode only)
-- **Delete from insertion point** — 🗑️ button, Delete key, Backspace, or Ctrl+Z delete the currently selected vertex first, then the insertion-point vertex, then the last point as fallback
-- **Rectangle delete** — ⬚ button in toolbar (visible during editing); drag a rectangle on the map to select all track points inside, then delete them; red dashed feedback overlay, toast notification with count
+- **Delete from insertion point** — Delete key or Backspace deletes the currently selected vertex first, then the insertion-point vertex, then the last point as fallback
+- **Undo stack** — real undo (Ctrl+Z / Cmd+Z / ↩ toolbar button) with coordinate snapshots; captures state before every mutation (add, delete, move, rect-delete); max 50 entries; cleared on enter/exit edit mode
+- **Rectangle delete** — ⬚ button in toolbar (visible during editing); drag a rectangle on the map to select all track points inside, then delete them; red dashed feedback overlay, toast notification with count. On mobile, touch-drag draws the rectangle and a confirmation dialog appears before deleting.
 - **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode); right-click always pans/rotates (never adds points)
 - **Mobile vertex editing** — mobile-friendly mode is default on mobile (📱 toggle); crosshair at center, tap inserts at center, tap vertex then pan to reposition. Desktop-style mode also available (tap=click, long-press-drag=move vertex). On localhost, the 📱 toggle is shown on desktop for debugging.
 - **Export** — active track as GPX or GeoJSON; all tracks as GPX preserving group structure (grouped → one `<trk>` per group with `<trkseg>` per segment); includes `<wpt>` elements
 - **Directory export** — 'Save to folder…' button for File System Access browsers; writes one GPX per track
 - **GPX waypoints** — `<wpt>` elements parsed from GPX via gpxjs; rendered as amber circles with text labels on the map; included in 'Export All GPX'
+- **GPX timestamps** — `<time>` elements parsed from GPX and stored as epoch-ms in `coords[3]`; preserved in export; enables speed/pace computation and time-based profile x-axis
 - **Two-level nesting** — multi-segment GPX tracks import as grouped tracks; panel shows collapsible group header with aggregate stats and nested segments (group names also editable on double-click)
 - **localStorage persistence** — tracks and settings auto-save to localStorage with 300ms debounce; restored on page reload; 'Clear saved data' button in advanced settings
 
 ## Profile
-- **Elevation profile** — bottom panel showing elevation (m), track slope (°), and terrain slope (°) vs distance (km), with dual Y-axes and a zero-line
+- **Elevation profile** — bottom panel showing configurable data curves vs distance or time, with dynamic Y-axes
+- **Profile datasets** — elevation (m), track slope (°), terrain slope (°), horizontal speed (km/h), vertical speed (m/h); each toggled via the ⚙ display menu
+- **X-axis modes** — Distance (km, default), Time (elapsed), Time (no pauses), Date/Time; time modes require GPX timestamps and are auto-disabled for hand-drawn tracks
+- **Pause detection** — pauses detected from GPX timestamps exceeding a configurable threshold (default 5 min, adjustable 1–30 min in Advanced settings); shown as red dots with duration labels on the profile chart
+- **Display settings menu** — ⚙ button in the profile header opens a dropdown with checkboxes for each dataset and an x-axis selector; settings are persisted to localStorage
 - **Reopenable profile** — the track panel includes a profile toggle so closing the chart is not terminal
 - **Profile-to-map hover linkage** — hovering the profile highlights the corresponding track vertex on the map and shows cursor tooltip at the vertex
 - **Hover pan assist** — if the hovered vertex is out of view, the map pans to bring it back on screen
@@ -67,7 +72,7 @@
 - **Legend behavior** — dynamic color ramp for the current mode; in `Mode: none`, the legend collapses to cursor info only
 - **Search** — Nominatim geocoding with collapsible search box
 - **Ctrl/Cmd+drag** — tilt and rotate the map (same as right-click drag)
-- **Toast notifications** — ephemeral messages for mobile edition hints
+- **Toast notifications** — ephemeral messages for track editing hints (mobile mode, rect-delete count, editing stopped on double-click)
 - **PWA installable** — manifest.json with icons at 192, 512, 180 (apple-touch), 32, 16 sizes; SVG favicon with mountain/slope theme
 - **Localhost debug** — mobile-friendly mode toggle (📱) shown on desktop when served from localhost
 
@@ -79,10 +84,10 @@
 - **js/dem.js** — Elevation sampling from loaded DEM tiles (cursor elevation & slope)
 - **js/ui.js** — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, Nominatim search
 - **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer
-- **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, draw/undo buttons
-- **js/io.js** — import/export (GPX via gpxjs, GeoJSON), drag-drop, directory import/export, file generation
-- **js/persist.js** — localStorage persistence for tracks and settings (thin wrapper, no deps)
-- **js/profile.js** — Chart.js elevation profile, profile-to-map hover linkage
+- **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, undo stack, draw/undo buttons
+- **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation
+- **js/persist.js** — localStorage persistence for tracks, settings, and profile display settings (thin wrapper, no deps)
+- **js/profile.js** — Chart.js elevation profile with speed, pause detection, display settings menu, multiple x-axis modes
 - **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS`
 - **js/utils.js** — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
 
@@ -94,7 +99,7 @@
 - `io.js` ← `utils.js`, `@we-gold/gpxjs` (GPX parsing/serialization)
 - `track-edit.js` ← `ui.js` (cursor tooltip)
 - `tracks.js` ← `utils.js`, `constants.js`, `dem.js`, `track-edit.js`, `io.js`, `persist.js`
-- `profile.js` ← `utils.js`, `dem.js`, `ui.js` (Chart.js + DOM)
+- `profile.js` ← `utils.js`, `dem.js`, `ui.js`, `persist.js` (Chart.js + DOM)
 - `main.js` ← all modules (orchestrator)
 - `state.js` — standalone, imported by `main.js` which creates the store and passes it to modules
 
