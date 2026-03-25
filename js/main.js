@@ -233,6 +233,7 @@ const map = new maplibregl.Map({
         type: 'raster',
         tiles: ['https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png'],
         tileSize: 256,
+        maxzoom: 17,
         attribution: '&copy; Kartverket'
       },
       // Separate raster-dem sources for terrain and
