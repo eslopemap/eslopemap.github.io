@@ -31,10 +31,131 @@ let mobileFriendlyMode = isMobile;
 // DOM refs (resolved at init)
 let drawBtn, undoBtn, rectDeleteBtn, mobileModeBtn, mobileHint, drawCrosshair, toastEl;
 
+// ---- Undo stack ----
+// Stores snapshots of {trackId, coords (deep copy), selectedVertexIndex, insertAfterIdx}
+const undoStack = [];
+const MAX_UNDO = 50;
+
+function pushUndo(trackId) {
+  const t = tracksFns.findTrack(trackId);
+  if (!t) return;
+  undoStack.push({
+    trackId,
+    coords: t.coords.map(c => c.slice()),
+    selectedVertexIndex,
+    insertAfterIdx,
+  });
+  if (undoStack.length > MAX_UNDO) undoStack.splice(0, undoStack.length - MAX_UNDO);
+}
+
+function popUndo() {
+  if (!undoStack.length) return false;
+  const snap = undoStack.pop();
+  const t = tracksFns.findTrack(snap.trackId);
+  if (!t) return false;
+  t.coords = snap.coords;
+  selectedVertexIndex = snap.selectedVertexIndex;
+  insertAfterIdx = snap.insertAfterIdx;
+  tracksFns.onTrackCoordsChanged(t);
+  syncUndoBtn();
+  return true;
+}
+
+function clearUndoStack() {
+  undoStack.length = 0;
+}
+
 // Rectangle delete state
 let rectDeleteMode = false;
 let rectStart = null;  // {x, y} screen coords
 let rectOverlay = null;
+
+function ensureRectOverlay() {
+  if (!rectOverlay) {
+    rectOverlay = document.createElement('div');
+    rectOverlay.className = 'rect-delete-overlay';
+    document.body.appendChild(rectOverlay);
+  }
+  return rectOverlay;
+}
+
+function updateRectOverlayPosition(startX, startY, curX, curY) {
+  const ov = ensureRectOverlay();
+  ov.style.left = Math.min(startX, curX) + 'px';
+  ov.style.top = Math.min(startY, curY) + 'px';
+  ov.style.width = Math.abs(curX - startX) + 'px';
+  ov.style.height = Math.abs(curY - startY) + 'px';
+  ov.style.display = 'block';
+}
+
+function completeRectDelete(x1, y1, x2, y2, needsConfirm) {
+  const ov = ensureRectOverlay();
+
+  if (x2 - x1 <= 5 || y2 - y1 <= 5) {
+    ov.style.display = 'none';
+    rectDeleteMode = false;
+    syncUndoBtn();
+    return;
+  }
+
+  const t = editingTrackId ? tracksFns.findTrack(editingTrackId) : null;
+  if (!t || !t.coords.length) {
+    ov.style.display = 'none';
+    rectDeleteMode = false;
+    syncUndoBtn();
+    return;
+  }
+
+  const canvas = map.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const mapX1 = x1 - rect.left, mapY1 = y1 - rect.top;
+  const mapX2 = x2 - rect.left, mapY2 = y2 - rect.top;
+
+  const indicesToDelete = [];
+  for (let i = 0; i < t.coords.length; i++) {
+    const pt = map.project([t.coords[i][0], t.coords[i][1]]);
+    if (pt.x >= mapX1 && pt.x <= mapX2 && pt.y >= mapY1 && pt.y <= mapY2) {
+      indicesToDelete.push(i);
+    }
+  }
+
+  function doDelete() {
+    ov.style.display = 'none';
+    if (indicesToDelete.length > 0) {
+      pushUndo(t.id);
+      for (let i = indicesToDelete.length - 1; i >= 0; i--) {
+        t.coords.splice(indicesToDelete[i], 1);
+      }
+      selectedVertexIndex = null;
+      insertAfterIdx = null;
+      tracksFns.onTrackCoordsChanged(t);
+      if (t.coords.length === 0) tracksFns.deleteTrack(t.id);
+      showToast(`Deleted ${indicesToDelete.length} point${indicesToDelete.length > 1 ? 's' : ''}`, 2000);
+    }
+    rectDeleteMode = false;
+    syncUndoBtn();
+  }
+
+  if (indicesToDelete.length === 0) {
+    ov.style.display = 'none';
+    rectDeleteMode = false;
+    syncUndoBtn();
+    return;
+  }
+
+  if (needsConfirm) {
+    // Keep overlay visible while confirming
+    if (confirm(`Delete ${indicesToDelete.length} point${indicesToDelete.length > 1 ? 's' : ''}?`)) {
+      doDelete();
+    } else {
+      ov.style.display = 'none';
+      rectDeleteMode = false;
+      syncUndoBtn();
+    }
+  } else {
+    doDelete();
+  }
+}
 
 let toastTimer = 0;
 function showToast(msg, durationMs) {
@@ -219,6 +340,7 @@ function syncUndoBtn() {
   const t = tracksFns.getActiveTrack();
   const show = t && t.coords.length > 0 && isTrackEditing(t.id);
   undoBtn.style.display = show ? '' : 'none';
+  undoBtn.disabled = undoStack.length === 0;
   rectDeleteBtn.style.display = show ? '' : 'none';
   rectDeleteBtn.classList.toggle('active', rectDeleteMode);
   mobileModeBtn.style.display = ((isMobile || isLocalhost) && show) ? '' : 'none';
@@ -231,6 +353,8 @@ function syncUndoBtn() {
 function deleteCurrentVertex() {
   const t = tracksFns.getActiveTrack();
   if (!t || !t.coords.length) return;
+
+  pushUndo(t.id);
 
   // Determine which index to delete:
   // 1. Selected vertex, 2. Insertion point, 3. Last point
@@ -279,6 +403,7 @@ export function enterEditMode(tId) {
   selectedVertexIndex = null;
   insertAfterIdx = null;
   rectDeleteMode = false;
+  clearUndoStack();
   map.getCanvas().style.cursor = 'crosshair';
   drawBtn.classList.add('active');
   tracksFns.updateVertexHighlight(editingTrackId, selectedVertexIndex);
@@ -295,6 +420,7 @@ export function exitEditMode() {
   editingIsNewTrack = false;
   selectedVertexIndex = null;
   insertAfterIdx = null;
+  clearUndoStack();
   rectDeleteMode = false;
   removeInsertPopup();
   drawBtn.classList.remove('active');
@@ -376,7 +502,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
   });
 
   undoBtn.addEventListener('click', () => {
-    deleteCurrentVertex();
+    popUndo();
   });
 
   rectDeleteBtn.addEventListener('click', () => {
@@ -421,6 +547,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       if (e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
         const hit = hitTestVertex(e.point);
         if (hit && hit.index != null) {
+          pushUndo(t.id);
           t.coords.splice(hit.index, 1);
           if (selectedVertexIndex != null) {
             if (hit.index < selectedVertexIndex) selectedVertexIndex--;
@@ -438,6 +565,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       const hitPt = hitTestVertex(e.point);
       if (hitPt && hitPt.index != null) {
         if (mobileFriendlyMode) {
+          pushUndo(hitPt.trackId);
           selectedVertexIndex = hitPt.index;
           mobileSelectedVertex = hitPt;
           mobileHint.textContent = 'Drag screen to move point \u00b7 tap elsewhere to deselect';
@@ -468,6 +596,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       }
 
       const ele = elevationAt(insertLngLat);
+      pushUndo(t.id);
       if (insertAfterIdx != null) {
         t.coords.splice(insertAfterIdx + 1, 0, [insertLngLat.lng, insertLngLat.lat, ele]);
         insertAfterIdx++;
@@ -486,6 +615,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     if (editingTrackId) {
       e.preventDefault();
       exitEditMode();
+      showToast('Editing stopped', 2000);
     }
   });
 
@@ -507,7 +637,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
       e.preventDefault();
-      deleteCurrentVertex();
+      popUndo();
     }
   });
 
@@ -546,16 +676,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       if (rectDeleteMode) {
         e.preventDefault();
         rectStart = { x: e.originalEvent.clientX, y: e.originalEvent.clientY };
-        if (!rectOverlay) {
-          rectOverlay = document.createElement('div');
-          rectOverlay.className = 'rect-delete-overlay';
-          document.body.appendChild(rectOverlay);
-        }
-        rectOverlay.style.left = rectStart.x + 'px';
-        rectOverlay.style.top = rectStart.y + 'px';
-        rectOverlay.style.width = '0';
-        rectOverlay.style.height = '0';
-        rectOverlay.style.display = 'block';
+        updateRectOverlayPosition(rectStart.x, rectStart.y, rectStart.x, rectStart.y);
         map.dragPan.disable();
         return;
       }
@@ -564,6 +685,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       if (hit && hit.index != null) {
         e.preventDefault();
         e.originalEvent.stopPropagation();
+        pushUndo(hit.trackId);
         dragVertexInfo = hit;
         dragMoved = false;
         map.dragPan.disable();
@@ -577,6 +699,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
         if (dist < 20) {
           const t = tracksFns.findTrack(editingTrackId);
           if (t) {
+            pushUndo(t.id);
             const ele = elevationAt(hoverInsertInfo.lngLat);
             t.coords.splice(hoverInsertInfo.insertAfter + 1, 0,
               [hoverInsertInfo.lngLat.lng, hoverInsertInfo.lngLat.lat, ele]);
@@ -598,12 +721,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     map.on('mousemove', (e) => {
       // Rectangle delete drawing
       if (rectStart && rectOverlay) {
-        const cx = e.originalEvent.clientX;
-        const cy = e.originalEvent.clientY;
-        rectOverlay.style.left = Math.min(rectStart.x, cx) + 'px';
-        rectOverlay.style.top = Math.min(rectStart.y, cy) + 'px';
-        rectOverlay.style.width = Math.abs(cx - rectStart.x) + 'px';
-        rectOverlay.style.height = Math.abs(cy - rectStart.y) + 'px';
+        updateRectOverlayPosition(rectStart.x, rectStart.y, e.originalEvent.clientX, e.originalEvent.clientY);
         return;
       }
 
@@ -664,46 +782,9 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
         const x2 = Math.max(rectStart.x, endX);
         const y2 = Math.max(rectStart.y, endY);
 
-        // Hide and clean up overlay
-        rectOverlay.style.display = 'none';
         rectStart = null;
         map.dragPan.enable();
-
-        // Only delete if rectangle is reasonably sized (not accidental click)
-        if (x2 - x1 > 5 && y2 - y1 > 5) {
-          const t = editingTrackId ? tracksFns.findTrack(editingTrackId) : null;
-          if (t && t.coords.length) {
-            const canvas = map.getCanvas();
-            const rect = canvas.getBoundingClientRect();
-            // Convert screen coords to map pixel coords
-            const mapX1 = x1 - rect.left, mapY1 = y1 - rect.top;
-            const mapX2 = x2 - rect.left, mapY2 = y2 - rect.top;
-
-            const indicesToDelete = [];
-            for (let i = 0; i < t.coords.length; i++) {
-              const pt = map.project([t.coords[i][0], t.coords[i][1]]);
-              if (pt.x >= mapX1 && pt.x <= mapX2 && pt.y >= mapY1 && pt.y <= mapY2) {
-                indicesToDelete.push(i);
-              }
-            }
-
-            if (indicesToDelete.length > 0) {
-              // Delete in reverse order to preserve indices
-              for (let i = indicesToDelete.length - 1; i >= 0; i--) {
-                t.coords.splice(indicesToDelete[i], 1);
-              }
-              selectedVertexIndex = null;
-              insertAfterIdx = null;
-              tracksFns.onTrackCoordsChanged(t);
-              if (t.coords.length === 0) tracksFns.deleteTrack(t.id);
-              showToast(`Deleted ${indicesToDelete.length} point${indicesToDelete.length > 1 ? 's' : ''}`, 2000);
-              syncUndoBtn();
-            }
-          }
-        }
-        // Exit rect delete mode after operation
-        rectDeleteMode = false;
-        syncUndoBtn();
+        completeRectDelete(x1, y1, x2, y2, false);
         suppressNextMapClick = true;
         return;
       }
@@ -725,14 +806,25 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     });
   }
 
-  // Mobile: vertex interaction
+  // Mobile: vertex interaction + rect delete
   if (isMobile) {
     let touchLongPressTimer = null;
     let touchStartPt = null;
     let mobileDragVertex = null;
 
     map.getCanvas().addEventListener('touchstart', (e) => {
-      if (!editingTrackId || mobileFriendlyMode) return;
+      if (!editingTrackId) return;
+
+      // Rectangle delete on mobile
+      if (rectDeleteMode && e.touches.length === 1) {
+        const touch = e.touches[0];
+        rectStart = { x: touch.clientX, y: touch.clientY };
+        updateRectOverlayPosition(rectStart.x, rectStart.y, rectStart.x, rectStart.y);
+        map.dragPan.disable();
+        return;
+      }
+
+      if (mobileFriendlyMode) return;
       if (e.touches.length !== 1) return;
       const touch = e.touches[0];
       const rect = map.getCanvas().getBoundingClientRect();
@@ -741,6 +833,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       const hit = hitTestVertex(pt);
       if (hit && hit.index != null) {
         touchLongPressTimer = setTimeout(() => {
+          pushUndo(hit.trackId);
           mobileDragVertex = { ...hit, screenX: touch.clientX, screenY: touch.clientY };
           map.dragPan.disable();
           showToast('Drag to move point', 1500);
@@ -749,6 +842,14 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }, { passive: true });
 
     map.getCanvas().addEventListener('touchmove', (e) => {
+      // Rect delete drawing on mobile
+      if (rectDeleteMode && rectStart && e.touches.length === 1) {
+        const touch = e.touches[0];
+        updateRectOverlayPosition(rectStart.x, rectStart.y, touch.clientX, touch.clientY);
+        e.preventDefault();
+        return;
+      }
+
       if (touchLongPressTimer && touchStartPt) {
         const touch = e.touches[0];
         const rect = map.getCanvas().getBoundingClientRect();
@@ -776,7 +877,23 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       }
     }, { passive: false });
 
-    map.getCanvas().addEventListener('touchend', () => {
+    map.getCanvas().addEventListener('touchend', (e) => {
+      // Rect delete completion on mobile (with confirm)
+      if (rectDeleteMode && rectStart) {
+        const touch = e.changedTouches[0];
+        const endX = touch.clientX;
+        const endY = touch.clientY;
+        const x1 = Math.min(rectStart.x, endX);
+        const y1 = Math.min(rectStart.y, endY);
+        const x2 = Math.max(rectStart.x, endX);
+        const y2 = Math.max(rectStart.y, endY);
+        rectStart = null;
+        map.dragPan.enable();
+        completeRectDelete(x1, y1, x2, y2, true);
+        suppressNextMapClick = true;
+        return;
+      }
+
       if (touchLongPressTimer) {
         clearTimeout(touchLongPressTimer);
         touchLongPressTimer = null;
