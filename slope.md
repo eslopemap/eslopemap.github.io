@@ -23,9 +23,12 @@
 
 ## Track Editor
 - **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
+- **Single-file import** — 📄 open-file button in toolbar for file picker (alternative to drag-drop)
 - **Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
 - **Top-right track workspace** — compact floating panel for track management and export
-- **Draw mode** — pen button in the track header; creates a new track and enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
+- **Icon-based toolbar** — all toolbar buttons use icons with title tooltips to save space: `+` (new track), 📄 (open file), 📈 (profile), 📍 (track list), plus contextual 🗑️ (delete point) and ⬚ (rectangle delete)
+- **Draw mode** — `+` button creates a new track with a pre-filled name input; enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
+- **Track rename** — double-click a track name in the panel (or group header) to inline-edit; press Enter to commit, Escape to cancel
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
 - **Multi-track management** — color-coded tracks with selection, deletion (with confirmation), export actions, and active-track emphasis
 - **Select vs Edit** — selecting a track widens the line and shows the profile; clicking the edit button (✎) enters edit mode with fully interactive vertices. No separate draw mode — editing new and existing tracks uses the same unified editing state.
@@ -36,14 +39,15 @@
 - **Elevation enrichment** — all track points (imported and drawn) are enriched from the same DEM source and re-enriched when new DEM tiles load
 - **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
 - **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
-- **Ctrl/Shift/Meta+click delete** — remove individual track vertices (edit mode only)
-- **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode)
+- **Shift/Ctrl/Meta+click delete** — remove individual track vertices (edit mode only)
+- **Delete from insertion point** — 🗑️ button, Delete key, Backspace, or Ctrl+Z delete the currently selected vertex first, then the insertion-point vertex, then the last point as fallback
+- **Rectangle delete** — ⬚ button in toolbar (visible during editing); drag a rectangle on the map to select all track points inside, then delete them; red dashed feedback overlay, toast notification with count
+- **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode); right-click always pans/rotates (never adds points)
 - **Mobile vertex editing** — mobile-friendly mode is default on mobile (📱 toggle); crosshair at center, tap inserts at center, tap vertex then pan to reposition. Desktop-style mode also available (tap=click, long-press-drag=move vertex). On localhost, the 📱 toggle is shown on desktop for debugging.
-- **Delete last point** — 🗑️ button in toolbar to remove the last point; also Ctrl/Cmd+Z
 - **Export** — active track as GPX or GeoJSON; all tracks as GPX preserving group structure (grouped → one `<trk>` per group with `<trkseg>` per segment); includes `<wpt>` elements
 - **Directory export** — 'Save to folder…' button for File System Access browsers; writes one GPX per track
 - **GPX waypoints** — `<wpt>` elements parsed from GPX via gpxjs; rendered as amber circles with text labels on the map; included in 'Export All GPX'
-- **Two-level nesting** — multi-segment GPX tracks import as grouped tracks; panel shows collapsible group header with aggregate stats and nested segments
+- **Two-level nesting** — multi-segment GPX tracks import as grouped tracks; panel shows collapsible group header with aggregate stats and nested segments (group names also editable on double-click)
 - **localStorage persistence** — tracks and settings auto-save to localStorage with 300ms debounce; restored on page reload; 'Clear saved data' button in advanced settings
 
 ## Profile
