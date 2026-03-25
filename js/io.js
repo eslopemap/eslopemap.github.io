@@ -32,7 +32,11 @@ export function parseGPXTracks(text, baseName) {
     const gpxTrack = parsed.tracks[ti];
 
     if (segs.length <= 1) {
-      const coords = gpxTrack.points.map(p => [p.longitude, p.latitude, p.elevation]);
+      const coords = gpxTrack.points.map(p => {
+        const c = [p.longitude, p.latitude, p.elevation];
+        if (p.time) c.push(p.time.getTime());
+        return c;
+      });
       if (coords.length) {
         result.tracks.push({ name: trkName, coords, _gpxParsed: parsed, _gpxTrackIdx: ti });
       }
@@ -43,7 +47,11 @@ export function parseGPXTracks(text, baseName) {
       for (let si = 0; si < segs.length; si++) {
         const segPtCount = segs[si].querySelectorAll('trkpt').length;
         const segPoints = gpxTrack.points.slice(offset, offset + segPtCount);
-        const coords = segPoints.map(p => [p.longitude, p.latitude, p.elevation]);
+        const coords = segPoints.map(p => {
+          const c = [p.longitude, p.latitude, p.elevation];
+          if (p.time) c.push(p.time.getTime());
+          return c;
+        });
         if (coords.length) {
           result.tracks.push({
             name: `${trkName} seg${si + 1}`,
@@ -153,7 +161,8 @@ function escapeXml(s) {
 function buildTrackGPXString(name, coords) {
   const pts = coords.map(c => {
     const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-    return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
+    const time = c[3] != null ? `<time>${new Date(c[3]).toISOString()}</time>` : '';
+    return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}${time}</trkpt>`;
   }).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="slope-editor">
@@ -223,7 +232,8 @@ function exportAllGPX() {
     const segs = group.map(t => {
       const pts = t.coords.map(c => {
         const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-        return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
+        const time = c[3] != null ? `<time>${new Date(c[3]).toISOString()}</time>` : '';
+        return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}${time}</trkpt>`;
       }).join('\n');
       return `    <trkseg>\n${pts}\n    </trkseg>`;
     }).join('\n');
@@ -234,7 +244,8 @@ function exportAllGPX() {
   for (const t of ungrouped) {
     const pts = t.coords.map(c => {
       const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-      return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}</trkpt>`;
+      const time = c[3] != null ? `<time>${new Date(c[3]).toISOString()}</time>` : '';
+      return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}${time}</trkpt>`;
     }).join('\n');
     trkFragments.push(`  <trk>\n    <name>${escapeXml(t.name)}</name>\n    <trkseg>\n${pts}\n    </trkseg>\n  </trk>`);
   }
