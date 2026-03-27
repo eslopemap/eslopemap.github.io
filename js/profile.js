@@ -2,7 +2,7 @@
 // Features: elevation, track slope, terrain slope, horizontal speed, vertical speed,
 // pause detection, multiple x-axis modes, display settings menu.
 
-import { haversineKm } from './utils.js';
+import { haversineKm, smoothArray } from './utils.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { showCursorTooltipAt, hideCursorTooltip } from './ui.js';
 import { saveProfileSettings, loadProfileSettings } from './persist.js';
@@ -131,7 +131,7 @@ export function closeProfile(markClosed) {
 
 // ---- Profile data computation ----
 
-function computeProfile(coords, pauseThresholdMin) {
+function computeProfile(coords, pauseThresholdMin, smoothingRadius = 0) {
   const n = coords.length;
   const distances = [0];    // cumulative km
   const elevations = [];
@@ -195,7 +195,14 @@ function computeProfile(coords, pauseThresholdMin) {
     }
   }
 
-  return { distances, elevations, slopes, terrainSlopes, speeds, vSpeeds, timestamps, pauses, cumulativeTime, cumulativeTimeNoPauses, hasTime };
+  return {
+    distances, elevations,
+    slopes: smoothArray(slopes, smoothingRadius),
+    terrainSlopes: smoothArray(terrainSlopes, smoothingRadius),
+    speeds: smoothArray(speeds, smoothingRadius),
+    vSpeeds: smoothArray(vSpeeds, smoothingRadius),
+    timestamps, pauses, cumulativeTime, cumulativeTimeNoPauses, hasTime,
+  };
 }
 
 function formatDuration(sec) {
@@ -279,9 +286,10 @@ export function updateProfile() {
   }
 
   const pauseThreshold = state.pauseThreshold || 5;
+  const smoothingRadius = state.profileSmoothing || 0;
   currentProfileSourceIndices = target.sourceIndices;
   syncProfileFilterUi(target.filterLabel);
-  const profile = computeProfile(coords, pauseThreshold);
+  const profile = computeProfile(coords, pauseThreshold, smoothingRadius);
   const xAxis = profile.hasTime ? display.xAxis : 'distance';
   const labels = buildXLabels(profile, xAxis);
   const unit = xAxisUnit(xAxis);

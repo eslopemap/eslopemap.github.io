@@ -81,12 +81,18 @@ export function encodeTerrarium(elevation, out, byteIndex) {
 }
 
 // ---- Color utilities ----
-const colorCanvas = document.createElement('canvas');
-colorCanvas.width = 1;
-colorCanvas.height = 1;
-const colorCtx = colorCanvas.getContext('2d', {willReadFrequently: true});
+let colorCanvas, colorCtx;
+function ensureColorCanvas() {
+  if (!colorCanvas) {
+    colorCanvas = document.createElement('canvas');
+    colorCanvas.width = 1;
+    colorCanvas.height = 1;
+    colorCtx = colorCanvas.getContext('2d', {willReadFrequently: true});
+  }
+}
 
 export function cssColorToRgb01(color) {
+  ensureColorCanvas();
   colorCtx.clearRect(0, 0, 1, 1);
   colorCtx.fillStyle = '#000000';
   colorCtx.fillStyle = color;
@@ -111,4 +117,30 @@ export function parseBooleanParam(value) {
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return null;
+}
+
+// ---- Data smoothing ----
+
+/**
+ * Symmetric moving-average smooth. Null-safe: nulls in the input
+ * stay null in the output and do not contribute to neighbors.
+ * @param {(number|null)[]} data
+ * @param {number} radius  half-window size (0 = no smoothing)
+ * @returns {(number|null)[]}
+ */
+export function smoothArray(data, radius) {
+  if (!data || radius < 1) return data;
+  const n = data.length;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    if (data[i] == null) { out[i] = null; continue; }
+    let sum = 0, count = 0;
+    const lo = Math.max(0, i - radius);
+    const hi = Math.min(n - 1, i + radius);
+    for (let j = lo; j <= hi; j++) {
+      if (data[j] != null) { sum += data[j]; count++; }
+    }
+    out[i] = count > 0 ? sum / count : null;
+  }
+  return out;
 }

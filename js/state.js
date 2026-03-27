@@ -29,6 +29,7 @@ export const STATE_DEFAULTS = {
   terrain3d: false,
   terrainExaggeration: 1.4,
   pauseThreshold: 5,  // minutes
+  profileSmoothing: 3,  // moving-average half-window radius (0 = off)
 };
 
 // ---- Workspace tree UI state (not persisted in settings) ----

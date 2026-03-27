@@ -144,6 +144,10 @@ if (persisted) {
     document.getElementById('pauseThreshold').value = String(state.pauseThreshold);
     document.getElementById('pauseThresholdValue').textContent = state.pauseThreshold;
   }
+  if (persisted.profileSmoothing != null) {
+    document.getElementById('profileSmoothing').value = String(state.profileSmoothing);
+    document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
+  }
 }
 
 // On mobile, default to corner cursor-info mode (center crosshair acts as pointer)
@@ -930,6 +934,13 @@ document.getElementById('terrainExaggeration').addEventListener('input', (e) => 
 document.getElementById('pauseThreshold').addEventListener('input', (e) => {
   state.pauseThreshold = Number(e.target.value);
   document.getElementById('pauseThresholdValue').textContent = state.pauseThreshold;
+  updateProfile();
+  scheduleSettingsSave();
+});
+
+document.getElementById('profileSmoothing').addEventListener('input', (e) => {
+  state.profileSmoothing = Number(e.target.value);
+  document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
   updateProfile();
   scheduleSettingsSave();
 });
