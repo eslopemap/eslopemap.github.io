@@ -27,7 +27,13 @@ export function parseGPXTracks(text, baseName) {
   for (let ti = 0; ti < trkEls.length && ti < parsed.tracks.length; ti++) {
     const trkEl = trkEls[ti];
     const nameEl = trkEl.querySelector(':scope > name');
+    const descEl = trkEl.querySelector(':scope > desc');
+    const cmtEl = trkEl.querySelector(':scope > cmt');
+    const typeEl = trkEl.querySelector(':scope > type');
     const trkName = nameEl ? nameEl.textContent.trim() : baseName;
+    const trkDesc = descEl ? descEl.textContent.trim() : '';
+    const trkCmt = cmtEl ? cmtEl.textContent.trim() : '';
+    const trkType = typeEl ? typeEl.textContent.trim() : '';
     const segs = trkEl.querySelectorAll('trkseg');
     const gpxTrack = parsed.tracks[ti];
 
@@ -38,7 +44,16 @@ export function parseGPXTracks(text, baseName) {
         return c;
       });
       if (coords.length) {
-        result.tracks.push({ name: trkName, coords, _gpxParsed: parsed, _gpxTrackIdx: ti });
+        result.tracks.push({
+          name: trkName,
+          coords,
+          desc: trkDesc,
+          cmt: trkCmt,
+          trkType,
+          sourceKind: 'track',
+          _gpxParsed: parsed,
+          _gpxTrackIdx: ti,
+        });
       }
     } else {
       // gpxjs concatenates all segments; split back using per-segment point counts
@@ -56,6 +71,10 @@ export function parseGPXTracks(text, baseName) {
           result.tracks.push({
             name: `${trkName} seg${si + 1}`,
             coords,
+            desc: trkDesc,
+            cmt: trkCmt,
+            trkType,
+            sourceKind: 'track',
             _gpxParsed: parsed,
             _gpxTrackIdx: ti,
             _segmentIndex: si,
@@ -72,10 +91,23 @@ export function parseGPXTracks(text, baseName) {
   // Routes
   for (let i = 0; i < parsed.routes.length; i++) {
     const gr = parsed.routes[i];
+    const rteEl = xml.querySelectorAll('rte')[i];
+    const descEl = rteEl?.querySelector(':scope > desc');
+    const cmtEl = rteEl?.querySelector(':scope > cmt');
+    const typeEl = rteEl?.querySelector(':scope > type');
     const name = gr.name || baseName;
     const coords = gr.points.map(p => [p.longitude, p.latitude, p.elevation]);
     if (coords.length) {
-      result.tracks.push({ name, coords, _gpxParsed: parsed, _gpxRouteIdx: i });
+      result.tracks.push({
+        name,
+        coords,
+        desc: descEl ? descEl.textContent.trim() : '',
+        cmt: cmtEl ? cmtEl.textContent.trim() : '',
+        rteType: typeEl ? typeEl.textContent.trim() : '',
+        sourceKind: 'route',
+        _gpxParsed: parsed,
+        _gpxRouteIdx: i,
+      });
     }
   }
 
@@ -132,6 +164,11 @@ export function importFileContent(filename, text) {
     }
     for (const trk of result.tracks) {
       const t = tracksFns.createTrack(trk.name, trk.coords, {
+        desc: trk.desc,
+        cmt: trk.cmt,
+        trkType: trk.trkType,
+        rteType: trk.rteType,
+        sourceKind: trk.sourceKind,
         groupId: trk.groupId,
         groupName: trk.groupName,
         segmentLabel: trk.segmentLabel,
@@ -160,6 +197,246 @@ function escapeXml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function sanitizeFileStem(name, fallback = 'export') {
+  const normalized = String(name || fallback).trim().replace(/[\\/:*?"<>|]+/g, '_');
+  return normalized || fallback;
+}
+
+function findTrackById(id) {
+  if (!id) return null;
+  if (typeof tracksFns.findTrackById === 'function') return tracksFns.findTrackById(id);
+  return tracksFns.getTracks?.().find(track => track.id === id) || null;
+}
+
+function findWaypointById(id) {
+  if (!id) return null;
+  if (typeof tracksFns.findWaypointById === 'function') return tracksFns.findWaypointById(id);
+  return tracksFns.getWaypoints?.().find(waypoint => waypoint.id === id) || null;
+}
+
+function buildTrackEntryFromTrack(track, override = {}) {
+  return {
+    name: override.name ?? track.name ?? 'Track',
+    desc: override.desc ?? track.desc ?? '',
+    cmt: override.cmt ?? track.cmt ?? '',
+    type: override.type ?? track.trkType ?? '',
+    segments: override.segments ?? [track.coords || []],
+  };
+}
+
+function buildRouteEntryFromTrack(track, override = {}) {
+  return {
+    name: override.name ?? track.name ?? 'Route',
+    desc: override.desc ?? track.desc ?? '',
+    cmt: override.cmt ?? track.cmt ?? '',
+    type: override.type ?? track.rteType ?? '',
+    coords: override.coords ?? track.coords ?? [],
+  };
+}
+
+function buildWaypointEntryFromWaypoint(waypoint, override = {}) {
+  return {
+    name: override.name ?? waypoint.name ?? '',
+    desc: override.desc ?? waypoint.desc ?? '',
+    cmt: override.cmt ?? waypoint.comment ?? waypoint.cmt ?? '',
+    sym: override.sym ?? waypoint.sym ?? '',
+    type: override.type ?? waypoint.wptType ?? '',
+    coords: override.coords ?? waypoint.coords ?? null,
+  };
+}
+
+function extendBounds(bounds, coord) {
+  if (!coord || coord.length < 2 || !Number.isFinite(coord[0]) || !Number.isFinite(coord[1])) return bounds;
+  if (!bounds) {
+    return {
+      minLon: coord[0],
+      minLat: coord[1],
+      maxLon: coord[0],
+      maxLat: coord[1],
+    };
+  }
+  bounds.minLon = Math.min(bounds.minLon, coord[0]);
+  bounds.minLat = Math.min(bounds.minLat, coord[1]);
+  bounds.maxLon = Math.max(bounds.maxLon, coord[0]);
+  bounds.maxLat = Math.max(bounds.maxLat, coord[1]);
+  return bounds;
+}
+
+function collectBoundsAndTime(payload) {
+  let bounds = null;
+  let earliestTime = null;
+  const visitCoord = (coord) => {
+    bounds = extendBounds(bounds, coord);
+    if (coord?.[3] != null) {
+      earliestTime = earliestTime == null ? coord[3] : Math.min(earliestTime, coord[3]);
+    }
+  };
+
+  for (const track of payload.tracks) {
+    for (const segment of track.segments || []) {
+      for (const coord of segment || []) visitCoord(coord);
+    }
+  }
+  for (const route of payload.routes) {
+    for (const coord of route.coords || []) visitCoord(coord);
+  }
+  for (const waypoint of payload.waypoints) {
+    if (waypoint.coords) visitCoord(waypoint.coords);
+  }
+
+  return { bounds, earliestTime };
+}
+
+function buildMetadataFragment(payload) {
+  const { bounds, earliestTime } = collectBoundsAndTime(payload);
+  const lines = [
+    '  <metadata>',
+    `    <name>${escapeXml(payload.name || 'Export')}</name>`,
+    `    <desc>${escapeXml(payload.desc || '')}</desc>`,
+    `    <time>${new Date(earliestTime ?? Date.now()).toISOString()}</time>`,
+  ];
+  if (bounds) {
+    lines.push(`    <bounds minlat="${bounds.minLat}" minlon="${bounds.minLon}" maxlat="${bounds.maxLat}" maxlon="${bounds.maxLon}" />`);
+  }
+  lines.push('  </metadata>');
+  return lines.join('\n');
+}
+
+function buildTrackPointFragment(coord, tagName) {
+  const ele = coord[2] != null ? `<ele>${coord[2]}</ele>` : '';
+  const time = coord[3] != null ? `<time>${new Date(coord[3]).toISOString()}</time>` : '';
+  return `      <${tagName} lat="${coord[1]}" lon="${coord[0]}">${ele}${time}</${tagName}>`;
+}
+
+function buildTrackFragment(entry) {
+  const segments = (entry.segments || []).map((segment) => {
+    const pts = segment.map(coord => buildTrackPointFragment(coord, 'trkpt')).join('\n');
+    return `    <trkseg>\n${pts}\n    </trkseg>`;
+  }).join('\n');
+  return [
+    '  <trk>',
+    `    <name>${escapeXml(entry.name || 'Track')}</name>`,
+    `    <cmt>${escapeXml(entry.cmt || '')}</cmt>`,
+    `    <desc>${escapeXml(entry.desc || '')}</desc>`,
+    `    <type>${escapeXml(entry.type || '')}</type>`,
+    segments,
+    '  </trk>',
+  ].join('\n');
+}
+
+function buildRouteFragment(entry) {
+  const pts = (entry.coords || []).map(coord => buildTrackPointFragment(coord, 'rtept')).join('\n');
+  return [
+    '  <rte>',
+    `    <name>${escapeXml(entry.name || 'Route')}</name>`,
+    `    <cmt>${escapeXml(entry.cmt || '')}</cmt>`,
+    `    <desc>${escapeXml(entry.desc || '')}</desc>`,
+    `    <type>${escapeXml(entry.type || '')}</type>`,
+    pts,
+    '  </rte>',
+  ].join('\n');
+}
+
+function buildWaypointFragment(entry) {
+  if (!entry.coords) return '';
+  const ele = entry.coords[2] != null ? `\n    <ele>${entry.coords[2]}</ele>` : '';
+  return [
+    `  <wpt lat="${entry.coords[1]}" lon="${entry.coords[0]}">${ele}`,
+    `    <name>${escapeXml(entry.name || '')}</name>`,
+    `    <cmt>${escapeXml(entry.cmt || '')}</cmt>`,
+    `    <desc>${escapeXml(entry.desc || '')}</desc>`,
+    `    <sym>${escapeXml(entry.sym || '')}</sym>`,
+    `    <type>${escapeXml(entry.type || '')}</type>`,
+    '  </wpt>',
+  ].join('\n');
+}
+
+function buildGpxDocument(payload) {
+  const fragments = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<gpx version="1.1" creator="slope-editor">',
+    buildMetadataFragment(payload),
+  ];
+
+  for (const waypoint of payload.waypoints) {
+    const fragment = buildWaypointFragment(waypoint);
+    if (fragment) fragments.push(fragment);
+  }
+  for (const route of payload.routes) fragments.push(buildRouteFragment(route));
+  for (const track of payload.tracks) fragments.push(buildTrackFragment(track));
+
+  fragments.push('</gpx>');
+  return fragments.join('\n');
+}
+
+function buildPayloadFromNode(node) {
+  const payload = {
+    name: node?.name || 'Export',
+    desc: node?.desc || '',
+    tracks: [],
+    routes: [],
+    waypoints: [],
+  };
+
+  function visit(current) {
+    if (!current) return;
+    if (current.type === 'file' || current.type === 'folder') {
+      for (const child of current.children || []) visit(child);
+      return;
+    }
+    if (current.type === 'track') {
+      const segments = (current._legacyTrackIds || [])
+        .map(id => findTrackById(id))
+        .filter(Boolean)
+        .map(track => track.coords || []);
+      const firstTrack = findTrackById(current._legacyTrackIds?.[0]);
+      if (segments.length && firstTrack) {
+        payload.tracks.push(buildTrackEntryFromTrack(firstTrack, {
+          name: current.name,
+          desc: current.desc,
+          cmt: current.cmt,
+          type: current.trkType,
+          segments,
+        }));
+      }
+      return;
+    }
+    if (current.type === 'route') {
+      const routeTrack = findTrackById(current._legacyTrackId);
+      if (routeTrack) {
+        payload.routes.push(buildRouteEntryFromTrack(routeTrack, {
+          name: current.name,
+          desc: current.desc,
+          cmt: current.cmt,
+          type: current.rteType,
+        }));
+      }
+      return;
+    }
+    if (current.type === 'waypoint') {
+      const waypoint = findWaypointById(current._waypointId) || current;
+      payload.waypoints.push(buildWaypointEntryFromWaypoint(waypoint, {
+        name: current.name,
+        desc: current.desc,
+        cmt: current.cmt,
+        sym: current.sym,
+        type: current.wptType,
+        coords: current.coords || waypoint.coords,
+      }));
+    }
+  }
+
+  visit(node);
+  return payload;
+}
+
+export function exportNodeGPX(node) {
+  const payload = buildPayloadFromNode(node);
+  if (!payload.tracks.length && !payload.routes.length && !payload.waypoints.length) return false;
+  downloadFile(`${sanitizeFileStem(payload.name)}.gpx`, buildGpxDocument(payload), 'application/gpx+xml');
+  return true;
+}
+
 function buildTrackGPXString(name, coords) {
   const pts = coords.map(c => {
     const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
@@ -180,7 +457,16 @@ ${pts}
 function exportActiveGPX() {
   const t = tracksFns.getActiveTrack();
   if (!t || !t.coords.length) return;
-  downloadFile(t.name + '.gpx', buildTrackGPXString(t.name, t.coords), 'application/gpx+xml');
+  const payload = {
+    name: t.name || 'Track',
+    desc: t.desc || '',
+    tracks: [],
+    routes: [],
+    waypoints: [],
+  };
+  if ((t.sourceKind || 'track') === 'route') payload.routes.push(buildRouteEntryFromTrack(t));
+  else payload.tracks.push(buildTrackEntryFromTrack(t));
+  downloadFile(`${sanitizeFileStem(payload.name)}.gpx`, buildGpxDocument(payload), 'application/gpx+xml');
 }
 
 function exportActiveGeoJSON() {
@@ -213,51 +499,40 @@ function exportAllGPX() {
   const tracks = tracksFns.getTracks();
   const wpts = tracksFns.getWaypoints ? tracksFns.getWaypoints() : [];
   if (!tracks.length && !wpts.length) return;
-  const wptXml = buildWaypointsGPXFragment(wpts);
+  const payload = {
+    name: 'All tracks',
+    desc: '',
+    tracks: [],
+    routes: [],
+    waypoints: wpts.map(waypoint => buildWaypointEntryFromWaypoint(waypoint)),
+  };
+  const groupedTracks = new Map();
 
-  // Group tracks by groupId for proper <trk>/<trkseg> structure
-  const trkFragments = [];
-  const grouped = new Map();
-  const ungrouped = [];
-  for (const t of tracks) {
-    if (t.groupId) {
-      if (!grouped.has(t.groupId)) grouped.set(t.groupId, []);
-      grouped.get(t.groupId).push(t);
-    } else {
-      ungrouped.push(t);
+  for (const track of tracks) {
+    if ((track.sourceKind || 'track') === 'route') {
+      payload.routes.push(buildRouteEntryFromTrack(track));
+      continue;
     }
+    if (track.groupId) {
+      if (!groupedTracks.has(track.groupId)) groupedTracks.set(track.groupId, []);
+      groupedTracks.get(track.groupId).push(track);
+      continue;
+    }
+    payload.tracks.push(buildTrackEntryFromTrack(track));
   }
 
-  // Grouped tracks → one <trk> per group with multiple <trkseg>
-  for (const [, group] of grouped) {
-    const name = group[0].groupName || group[0].name;
-    const segs = group.map(t => {
-      const pts = t.coords.map(c => {
-        const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-        const time = c[3] != null ? `<time>${new Date(c[3]).toISOString()}</time>` : '';
-        return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}${time}</trkpt>`;
-      }).join('\n');
-      return `    <trkseg>\n${pts}\n    </trkseg>`;
-    }).join('\n');
-    trkFragments.push(`  <trk>\n    <name>${escapeXml(name)}</name>\n${segs}\n  </trk>`);
+  for (const [, grouped] of groupedTracks) {
+    const first = grouped[0];
+    payload.tracks.push(buildTrackEntryFromTrack(first, {
+      name: first.groupName || first.name,
+      desc: first.desc || '',
+      cmt: first.cmt || '',
+      type: first.trkType || '',
+      segments: grouped.map(track => track.coords || []),
+    }));
   }
 
-  // Ungrouped tracks → one <trk> per track
-  for (const t of ungrouped) {
-    const pts = t.coords.map(c => {
-      const ele = c[2] != null ? `<ele>${c[2]}</ele>` : '';
-      const time = c[3] != null ? `<time>${new Date(c[3]).toISOString()}</time>` : '';
-      return `      <trkpt lat="${c[1]}" lon="${c[0]}">${ele}${time}</trkpt>`;
-    }).join('\n');
-    trkFragments.push(`  <trk>\n    <name>${escapeXml(t.name)}</name>\n    <trkseg>\n${pts}\n    </trkseg>\n  </trk>`);
-  }
-
-  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="slope-editor">
-${wptXml}
-${trkFragments.join('\n')}
-</gpx>`;
-  downloadFile('all-tracks.gpx', gpx, 'application/gpx+xml');
+  downloadFile('all-tracks.gpx', buildGpxDocument(payload), 'application/gpx+xml');
 }
 
 // ---- Init: wire drag-drop + export buttons ----

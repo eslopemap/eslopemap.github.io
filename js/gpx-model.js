@@ -58,6 +58,7 @@ export function createWaypointNode(name, opts) {
     desc: opts?.desc || '', cmt: opts?.cmt || '',
     sym: opts?.sym || '', wptType: opts?.wptType || '',
     coords: opts?.coords || null,
+    _waypointId: opts?._waypointId || null,
   };
 }
 
@@ -125,10 +126,25 @@ export function buildTreeFromLegacy(tracks, waypoints) {
   const groupMap = new Map();  // groupId → fileNode + trackNode
 
   for (const t of tracks) {
+    if ((t.sourceKind || 'track') === 'route') {
+      const fileNode = createFileNode(t.name, { desc: t.desc || '' });
+      const routeNode = createRouteNode(t.name, {
+        desc: t.desc || '',
+        cmt: t.cmt || '',
+        rteType: t.rteType || '',
+        _legacyTrackId: t.id,
+      });
+      fileNode.children.push(routeNode);
+      workspace.children.push(fileNode);
+      continue;
+    }
     if (t.groupId) {
       if (!groupMap.has(t.groupId)) {
         const fileNode = createFileNode(t.groupName || t.name);
         const trackNode = createTrackNode(t.groupName || t.name, {
+          desc: t.desc || '',
+          cmt: t.cmt || '',
+          trkType: t.trkType || '',
           _legacyTrackIds: [],
         });
         fileNode.children.push(trackNode);
@@ -140,8 +156,11 @@ export function buildTreeFromLegacy(tracks, waypoints) {
       trackNode.children.push(segNode);
       trackNode._legacyTrackIds.push(t.id);
     } else {
-      const fileNode = createFileNode(t.name);
+      const fileNode = createFileNode(t.name, { desc: t.desc || '' });
       const trackNode = createTrackNode(t.name, {
+        desc: t.desc || '',
+        cmt: t.cmt || '',
+        trkType: t.trkType || '',
         _legacyTrackIds: [t.id],
       });
       fileNode.children.push(trackNode);
@@ -154,6 +173,7 @@ export function buildTreeFromLegacy(tracks, waypoints) {
     workspace.children.push(createWaypointNode(wp.name, {
       desc: wp.desc, cmt: wp.comment, sym: wp.sym,
       coords: wp.coords,
+      _waypointId: wp.id,
     }));
   }
 
