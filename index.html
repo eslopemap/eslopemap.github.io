@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="manifest" href="manifest.json" />
 
-  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.3/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="css/main.css" />
   <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/maplibre-contour@0.0.5/dist/index.min.js"></script>
@@ -45,6 +45,7 @@
     <div class="row">
       <label for="basemap"><strong>Basemap</strong></label><br />
       <select id="basemap">
+        <option value="none">None (white)</option>
         <option value="osm" selected>OSM</option>
         <option value="otm">OTM</option>
         <option value="ign-plan">IGN plan (FR)</option>
@@ -140,9 +141,17 @@
       <button id="mobile-mode-btn" class="tb-btn" title="Mobile-friendly edit mode" style="display:none">📱</button>
       <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩</button>
       <button id="rect-delete-btn" class="tb-btn" title="Delete points in rectangle" style="display:none">⬚</button>
-      <button id="draw-btn" class="tb-btn" title="Draw new track">&#43;</button>
+      <button id="draw-btn" class="tb-btn" title="New track">&#43;</button>
       <button id="open-file-btn" class="tb-btn" title="Open GPX/GeoJSON file">📄</button>
+      <button id="open-folder-btn" class="tb-btn" title="Open GPX folder">📁</button>
       <button id="profile-toggle-btn" class="tb-btn" title="Elevation profile" disabled>📈</button>
+      <button id="active-actions-btn" class="tb-btn" title="Workspace actions">⋮</button>
+      <button id="selection-mode-btn" class="tb-btn" title="Rectangle selection (R)" disabled style="display:none">▣</button>
+      <button id="densify-btn" class="tb-btn op-btn" title="Add intermediate points" disabled style="display:none">＋•</button>
+      <button id="simplify-btn" class="tb-btn op-btn" title="Simplify active span" disabled style="display:none">≈</button>
+      <button id="split-btn" class="tb-btn op-btn" title="Split active track or selection" disabled style="display:none">✂</button>
+      <button id="merge-btn" class="tb-btn op-btn" title="Merge grouped tracks or segments" disabled style="display:none">⇄</button>
+      <button id="convert-route-btn" class="tb-btn op-btn" title="Convert route to track" disabled style="display:none">⇢</button>
       <button id="tracks-btn" class="tb-btn" title="Track list" disabled>📍</button>
     </div>
     <div id="track-panel">
@@ -151,12 +160,11 @@
       </div>
       <div id="track-list"></div>
       <div class="track-export-bar">
-        <button id="export-gpx-btn">Export GPX</button>
-        <button id="export-geojson-btn">Export GeoJSON</button>
-        <button id="export-all-gpx-btn">Export All</button>
+        <button id="export-gpx-btn">Export active GPX</button>
+        <button id="export-geojson-btn">Export active GeoJSON</button>
+        <button id="export-all-gpx-btn">Export all GPX</button>
       </div>
       <div class="track-export-bar">
-        <button id="open-folder-btn">Open folder…</button>
         <button id="save-folder-btn">Save to folder…</button>
       </div>
     </div>
@@ -192,6 +200,8 @@
         </div>
       </div>
       <span id="profile-legend"></span>
+      <span id="profile-filter-badge"></span>
+      <button id="profile-filter-reset" class="tb-btn" title="Show full track" style="display:none">Full</button>
       <button id="profile-close" title="Close">&times;</button>
     </div>
     <canvas id="profile-canvas"></canvas>

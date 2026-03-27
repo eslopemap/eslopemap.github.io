@@ -160,6 +160,7 @@ export function interpolateStopsToLegendCss(stops) {
 }
 
 export const BASEMAP_LAYER_GROUPS = {
+  'none': [],
   'osm': ['basemap-osm'],
   'otm': ['basemap-otm'],
   'ign-plan': ['basemap-ign'],

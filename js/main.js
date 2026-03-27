@@ -25,7 +25,9 @@ import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
 import { loadSettings, saveSettings, clearAll as clearPersistedData } from './persist.js';
 import { initShortcuts, registerShortcut } from './shortcuts.js';
-import { openInfoEditor } from './gpx-tree.js';
+import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
+import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection } from './selection-tools.js';
+import { describeOperationConsequence } from './track-ops.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 
@@ -207,6 +209,7 @@ const map = new maplibregl.Map({
         type: 'raster',
         tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
         tileSize: 256,
+        maxzoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
       },
       otm: {
@@ -217,22 +220,26 @@ const map = new maplibregl.Map({
           'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'
         ],
         tileSize: 256,
+        maxzoom: 17,
         attribution: '&copy; OpenStreetMap contributors, OpenTopoMap'
       },
       ignplan: {
         type: 'raster',
         tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'],
         tileSize: 256,
+        maxzoom: 18,
         attribution: '&copy; IGN France'
       },
       swisstopo: {
         type: 'vector',
         tiles: ['https://vectortiles.geo.admin.ch/tiles/ch.swisstopo.base.vt/v1.0.0/{z}/{x}/{y}.pbf'],
+        maxzoom: 14,
         attribution: '&copy; swisstopo'
       },
       openskimap: {
         type: 'vector',
         tiles: ['https://tiles.openskimap.org/openskimap/{z}/{x}/{y}.pbf'],
+        maxzoom: 14,
         attribution: '&copy; OpenSkiMap, OpenStreetMap contributors'
       },
       kartverket: {
@@ -496,6 +503,192 @@ initSearch(map);
 initTracks(map, state, updateProfile);
 const tracksState = getTracksState();
 initProfile(map, state, tracksState);
+initSelectionTools(map, {
+  getActiveTrack: () => tracksState.getActiveTrack(),
+  onSelectionChanged: (selectionSpan) => {
+    tracksState.setSelectionSpan(selectionSpan);
+    syncOperationState();
+  },
+  onModeChanged: () => syncOperationState(),
+  isSelectionBlocked: () => !tracksState.getActiveTrack(),
+  keepSelectionCursor: () => Boolean(tracksState.editingTrackId),
+  onAction: (action) => {
+    if (action === 'simplify') simplifyBtn.click();
+    else if (action === 'densify') densifyBtn.click();
+    else if (action === 'split') splitBtn.click();
+  },
+});
+
+// Wire rectangle selection check into track-edit so vertex-adding is suppressed during rect selection
+tracksState.wireRectangleSelectionCheck(isRectangleModeActive);
+
+const selectionModeBtn = document.getElementById('selection-mode-btn');
+const densifyBtn = document.getElementById('densify-btn');
+const simplifyBtn = document.getElementById('simplify-btn');
+const splitBtn = document.getElementById('split-btn');
+const mergeBtn = document.getElementById('merge-btn');
+const convertRouteBtn = document.getElementById('convert-route-btn');
+const activeActionsBtn = document.getElementById('active-actions-btn');
+const trackToolRow = document.getElementById('track-tool-row');
+
+function getActiveGroupTrackIds() {
+  const activeTrack = tracksState.getActiveTrack();
+  if (!activeTrack?.groupId) return [];
+  return tracksState.tracks.filter(track => track.groupId === activeTrack.groupId).map(track => track.id);
+}
+
+function showOperationError(result) {
+  if (result?.ok !== false || !result.error) return;
+  window.alert(result.error);
+}
+
+function syncOperationState() {
+  const activeTrack = tracksState.getActiveTrack();
+  const selectionSpan = tracksState.selectionSpan;
+  const selectionContext = Boolean(selectionSpan?.ok && activeTrack && selectionSpan.trackId === activeTrack.id);
+  const activeGroupTrackIds = getActiveGroupTrackIds();
+  const canMergeGrouped = activeGroupTrackIds.length > 1;
+  const isRoute = (activeTrack?.sourceKind || 'track') === 'route';
+  const selectionBlocked = !activeTrack;
+
+  if (selectionBlocked && isRectangleModeActive()) {
+    setRectangleMode(false);
+  }
+  if (!selectionSpan?.ok) {
+    setActionPreview('');
+  }
+
+  trackToolRow.classList.toggle('selection-context', selectionContext);
+
+  if (activeActionsBtn) {
+    activeActionsBtn.disabled = false;
+    activeActionsBtn.title = activeTrack ? 'Actions for the selected item' : 'Workspace actions';
+  }
+
+  selectionModeBtn.disabled = selectionBlocked;
+  selectionModeBtn.classList.toggle('active', isRectangleModeActive());
+
+  densifyBtn.disabled = !activeTrack || isRoute;
+  simplifyBtn.disabled = !activeTrack || isRoute;
+  splitBtn.disabled = !activeTrack || isRoute;
+  mergeBtn.disabled = !canMergeGrouped;
+  convertRouteBtn.disabled = !isRoute;
+
+  for (const button of [densifyBtn, simplifyBtn, splitBtn, mergeBtn, convertRouteBtn]) {
+    button.classList.remove('selection-eligible', 'selection-dimmed');
+  }
+
+  if (selectionContext) {
+    for (const button of [densifyBtn, simplifyBtn, splitBtn]) {
+      if (!button.disabled) button.classList.add('selection-eligible');
+    }
+    for (const button of [mergeBtn, convertRouteBtn]) {
+      if (!button.disabled) button.classList.add('selection-dimmed');
+    }
+  }
+}
+
+activeActionsBtn?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const rect = activeActionsBtn.getBoundingClientRect();
+  openCurrentContextMenu(rect.left, rect.bottom + 2);
+});
+
+function promptSimplifyOptions() {
+  const raw = window.prompt('Simplify tolerance in meters. Append ",dp" to use Douglas-Peucker.', '12');
+  if (raw == null) return null;
+  const [toleranceText, modeText] = raw.split(',').map(part => part.trim()).filter(Boolean);
+  const horizontalTolerance = Number(toleranceText || raw);
+  if (!Number.isFinite(horizontalTolerance) || horizontalTolerance <= 0) {
+    window.alert('Enter a positive tolerance in meters.');
+    return null;
+  }
+  return {
+    horizontalTolerance,
+    method: modeText?.toLowerCase() === 'dp' ? 'douglas-peucker' : 'visvalingam',
+  };
+}
+
+function promptSplitOptions() {
+  const selectionSpan = tracksState.selectionSpan;
+  const defaultMode = selectionSpan?.ok && selectionSpan.pointCount === 1 ? 'point' : 'track';
+  const raw = window.prompt('Split mode: point, track, or segment', defaultMode);
+  if (raw == null) return null;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'point') return { mode: 'at-point' };
+  if (normalized === 'segment') return { mode: 'extract-segment' };
+  if (normalized === 'track') return { mode: 'extract-track' };
+  window.alert('Use one of: point, track, segment.');
+  return null;
+}
+
+selectionModeBtn?.addEventListener('click', () => {
+  if (!tracksState.getActiveTrack() || tracksState.editingTrackId) return;
+  toggleRectangleMode();
+  syncOperationState();
+});
+
+densifyBtn?.addEventListener('click', () => {
+  const result = tracksState.densifyActiveTrackSpan({ maxGapMeters: 5 });
+  showOperationError(result);
+  syncOperationState();
+});
+
+simplifyBtn?.addEventListener('click', () => {
+  const options = promptSimplifyOptions();
+  if (!options) return;
+  const result = tracksState.simplifyActiveTrackSpan(options);
+  showOperationError(result);
+  syncOperationState();
+});
+
+splitBtn?.addEventListener('click', () => {
+  const options = promptSplitOptions();
+  if (!options) return;
+  const result = tracksState.splitActiveTrackSpan(options);
+  showOperationError(result);
+  clearSelection();
+  syncOperationState();
+});
+
+mergeBtn?.addEventListener('click', () => {
+  const activeGroupTrackIds = getActiveGroupTrackIds();
+  if (activeGroupTrackIds.length < 2) {
+    window.alert('Activate a grouped track with at least two sibling segments to merge.');
+    return;
+  }
+  const result = tracksState.mergeSelectedTracks(activeGroupTrackIds, {
+    mode: 'single-segment',
+    name: tracksState.getActiveTrack()?.groupName || tracksState.getActiveTrack()?.name || 'Track',
+  });
+  showOperationError(result);
+  clearSelection();
+  syncOperationState();
+});
+
+convertRouteBtn?.addEventListener('click', () => {
+  const replace = window.confirm('Replace the route instead of creating a sibling track?');
+  const result = tracksState.convertActiveRouteToTrack({ replace });
+  showOperationError(result);
+  syncOperationState();
+});
+
+const previewBindings = [
+  [selectionModeBtn, () => describeOperationConsequence('rectangle-selection', { selectionSpan: tracksState.selectionSpan })],
+  [densifyBtn, () => describeOperationConsequence('densify', { selectionSpan: tracksState.selectionSpan })],
+  [simplifyBtn, () => describeOperationConsequence('simplify', { selectionSpan: tracksState.selectionSpan })],
+  [splitBtn, () => describeOperationConsequence('split', { selectionSpan: tracksState.selectionSpan })],
+  [mergeBtn, () => describeOperationConsequence('merge', { trackCount: getActiveGroupTrackIds().length, mode: 'single-segment' })],
+  [convertRouteBtn, () => describeOperationConsequence('route-to-track', { replace: false })],
+];
+
+for (const [button, describe] of previewBindings) {
+  button?.addEventListener('mouseenter', () => setActionPreview(describe()));
+  button?.addEventListener('mouseleave', () => setActionPreview(''));
+  button?.addEventListener('focus', () => setActionPreview(describe()));
+  button?.addEventListener('blur', () => setActionPreview(''));
+}
+syncOperationState();
 
 // ---- Init shortcuts ----
 initShortcuts();
@@ -536,6 +729,11 @@ registerShortcut({ key: 'n', handler: () => {
 // E — edit active track
 registerShortcut({ key: 'e', handler: () => {
   document.getElementById('rail-edit-btn')?.click();
+}});
+
+// R — toggle rectangle selection
+registerShortcut({ key: 'r', handler: () => {
+  document.getElementById('selection-mode-btn')?.click();
 }});
 
 // Ctrl/Cmd+I — Info editor for active track
@@ -579,9 +777,11 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
   railEditBtn?.addEventListener('click', () => {
     const t = tracksState.getActiveTrack();
     if (!t) return;
-    // Find the edit button for this track in the existing panel and click it
-    const editBtns = document.querySelectorAll(`.track-edit[data-id="${t.id}"]`);
-    if (editBtns.length) editBtns[0].click();
+    if (tracksState.editingTrackId === t.id) {
+      tracksState.exitEditMode();
+    } else {
+      tracksState.enterEditForTrack(t.id);
+    }
     syncRailState();
   });
 
@@ -592,7 +792,7 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
 
   // Rect delete — delegates to existing rect-delete
   railRectBtn?.addEventListener('click', () => {
-    document.getElementById('rect-delete-btn')?.click();
+    document.getElementById('selection-mode-btn')?.click();
   });
 
   // Mobile mode — delegates to existing mobile-mode
@@ -606,11 +806,13 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
     railEditBtn.disabled = !t;
     railEditBtn.classList.toggle('active', Boolean(tracksState.editingTrackId));
     railUndoBtn.style.display = tracksState.editingTrackId ? '' : 'none';
-    railRectBtn.disabled = !tracksState.editingTrackId;
+    railRectBtn.disabled = !t;
+    railRectBtn.classList.toggle('active', isRectangleModeActive());
 
     // Mobile btn visibility
     const mobileBtn = document.getElementById('mobile-mode-btn');
     railMobileBtn.style.display = mobileBtn?.style.display === 'none' ? 'none' : '';
+    syncOperationState();
   }
 
   // Sync rail state on interval (lightweight)

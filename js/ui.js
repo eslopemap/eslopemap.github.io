@@ -31,7 +31,7 @@ export function basemapOpacityExpr(multiplier = 1) {
 // ---- Basemap / contour / terrain ----
 
 export function applyBasemapSelection(map, state, flyIfOutside) {
-  const activeList = BASEMAP_LAYER_GROUPS[state.basemap] || BASEMAP_LAYER_GROUPS.osm;
+  const activeList = BASEMAP_LAYER_GROUPS[state.basemap] || [];
   const active = new Set(activeList);
   for (const layerId of ALL_BASEMAP_LAYER_IDS) {
     setLayerVisibilitySafe(map, layerId, active.has(layerId));
@@ -60,7 +60,7 @@ export function applyBasemapSelection(map, state, flyIfOutside) {
   }
 
   const shouldShowContours = (state.basemap === 'osm');
-  state.showContours = shouldShowContours;
+  if (state.basemap !== 'none') state.showContours = shouldShowContours;
   const contourCb = document.getElementById('showContours');
   if (contourCb) contourCb.checked = shouldShowContours;
   applyContourVisibility(map, state);
