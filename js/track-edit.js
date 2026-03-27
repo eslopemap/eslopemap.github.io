@@ -433,6 +433,11 @@ export function exitEditMode() {
     tracksFns.removeIncompleteNewTrack(t);
   } else if (t) {
     updateProfileFn();
+    if (wasNewTrack) {
+      requestAnimationFrame(() => {
+        tracksFns.openInfoForTrack?.(t.id, { preferFile: true });
+      });
+    }
   }
   editingTrackId = null;
   clearHoverInsertMarker();
@@ -447,11 +452,6 @@ export function startNewTrack() {
   const defaultName = 'Track ' + (tracksFns.getTrackCount() + 1);
   const t = tracksFns.createNewTrack(defaultName);
   enterEditMode(t.id);
-  // Show inline rename input for the newly created track
-  requestAnimationFrame(() => {
-    const nameEl = document.querySelector(`.track-name[data-track-id="${t.id}"]`);
-    if (nameEl) tracksFns.startTrackRename(t.id, nameEl);
-  });
 }
 
 function cancelMobileMove() {
@@ -538,8 +538,9 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }
 
     if (editingTrackId) {
-      // Don't add points while in rectangle delete mode
+      // Don't add points while in rectangle delete or rectangle selection mode
       if (rectDeleteMode) return;
+      if (tracksFns.isRectangleSelectionActive?.()) return;
 
       const t = tracksFns.findTrack(editingTrackId);
       if (!t) return;

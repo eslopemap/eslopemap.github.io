@@ -14,6 +14,8 @@ const profileCanvas = document.getElementById('profile-canvas');
 let profileChart = null;
 let hoveredProfileTrackId = null;
 let hoveredProfileVertexIndex = null;
+let currentProfileSourceIndices = [];
+let currentProfileFilterLabel = '';
 
 // ---- Display settings (persisted) ----
 const displayDefaults = {
@@ -78,15 +80,16 @@ function ensureVertexInView(lngLat) {
 
 function setProfileHoverVertex(index) {
   const t = tracksState.getActiveTrack();
-  if (!t || index == null || index < 0 || index >= t.coords.length) {
+  const sourceIndex = index != null ? currentProfileSourceIndices[index] : null;
+  if (!t || sourceIndex == null || sourceIndex < 0 || sourceIndex >= t.coords.length) {
     clearProfileHoverVertex();
     hideCursorTooltip();
     return;
   }
-  if (hoveredProfileTrackId === t.id && hoveredProfileVertexIndex === index) return;
+  if (hoveredProfileTrackId === t.id && hoveredProfileVertexIndex === sourceIndex) return;
   hoveredProfileTrackId = t.id;
-  hoveredProfileVertexIndex = index;
-  const coord = t.coords[index];
+  hoveredProfileVertexIndex = sourceIndex;
+  const coord = t.coords[sourceIndex];
   const src = map.getSource(tracksState.PROFILE_HOVER_SOURCE_ID);
   if (src) {
     src.setData({
@@ -230,12 +233,45 @@ function xAxisUnit(xAxis) {
   }
 }
 
+function getProfileTarget() {
+  const track = tracksState.getActiveTrack();
+  if (!track) return null;
+  const selectionSpan = tracksState.selectionSpan;
+  if (selectionSpan?.ok && selectionSpan.trackId === track.id && selectionSpan.pointCount >= 2) {
+    return {
+      track,
+      coords: selectionSpan.coords,
+      sourceIndices: selectionSpan.sourceIndices,
+      filterLabel: `${selectionSpan.trackName} · ${selectionSpan.rangeLabel}`,
+    };
+  }
+  return {
+    track,
+    coords: track.coords,
+    sourceIndices: Array.from({ length: track.coords.length }, (_unused, index) => index),
+    filterLabel: '',
+  };
+}
+
+function syncProfileFilterUi(filterLabel) {
+  const badge = document.getElementById('profile-filter-badge');
+  const resetBtn = document.getElementById('profile-filter-reset');
+  currentProfileFilterLabel = filterLabel || '';
+  badge.textContent = filterLabel || '';
+  badge.classList.toggle('visible', Boolean(filterLabel));
+  resetBtn.style.display = filterLabel ? '' : 'none';
+}
+
 // ---- Chart building ----
 
 export function updateProfile() {
-  const t = tracksState.getActiveTrack();
-  if (!t || t.coords.length < 2 || tracksState.profileClosed) {
-    if (!t || t.coords.length < 2) {
+  const target = getProfileTarget();
+  const t = target?.track || null;
+  const coords = target?.coords || [];
+  if (!t || coords.length < 2 || tracksState.profileClosed) {
+    syncProfileFilterUi('');
+    currentProfileSourceIndices = [];
+    if (!t || coords.length < 2) {
       closeProfile(false);
     }
     tracksState.syncProfileToggleButton();
@@ -243,7 +279,9 @@ export function updateProfile() {
   }
 
   const pauseThreshold = state.pauseThreshold || 5;
-  const profile = computeProfile(t.coords, pauseThreshold);
+  currentProfileSourceIndices = target.sourceIndices;
+  syncProfileFilterUi(target.filterLabel);
+  const profile = computeProfile(coords, pauseThreshold);
   const xAxis = profile.hasTime ? display.xAxis : 'distance';
   const labels = buildXLabels(profile, xAxis);
   const unit = xAxisUnit(xAxis);
@@ -492,6 +530,11 @@ export function initProfile(mapRef, stateRef, tracksStateRef) {
 
   document.getElementById('profile-close').addEventListener('click', () => {
     closeProfile(true);
+  });
+
+  document.getElementById('profile-filter-reset').addEventListener('click', () => {
+    tracksState.clearSelectionSpan();
+    updateProfile();
   });
 
   const profileToggleBtn = document.getElementById('profile-toggle-btn');

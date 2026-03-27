@@ -7,6 +7,7 @@ import {
   walkNodes, findNodeById, findParentOf, buildTreeFromLegacy,
 } from './gpx-model.js';
 import { saveWorkspace, loadWorkspace } from './persist.js';
+import { exportNodeGPX } from './io.js';
 
 let workspace = createWorkspaceModel();
 let treeState = {
@@ -21,6 +22,8 @@ let _trackListEl = null;
 let _contextMenuEl = null;
 let _infoOverlayEl = null;
 let _scheduleSave = null;
+let _workspaceMenuBtn = null;
+let _clipboard = null;
 
 // Node type icons
 const NODE_ICONS = {
@@ -63,22 +66,36 @@ export function initGpxTree(deps) {
     }
   });
 
+  ensureWorkspaceMenuButton();
+
   // Build initial tree from legacy tracks
   rebuildTree();
 }
 
 export function getWorkspace() { return workspace; }
 
+export function findNodeForTrackId(trackId, options) {
+  const preferFile = options?.preferFile === true;
+  let match = null;
+  walkNodes(workspace.children, (node) => {
+    if (match) return;
+    if (node._legacyTrackId === trackId || node._legacyTrackIds?.includes(trackId)) {
+      match = node;
+    }
+  });
+  if (!match) return null;
+  if (!preferFile) return match;
+  const parent = findParentOf(workspace.children, match.id);
+  return parent?.type === 'file' ? parent : match;
+}
+
 export function rebuildTree() {
   const tracks = _deps.getTracks();
   const waypoints = _deps.getWaypoints();
-  workspace = buildTreeFromLegacy(tracks, waypoints);
-
-  // Restore persisted workspace metadata if available
   const saved = loadWorkspace();
-  if (saved?.children) {
-    mergePersistedMetadata(workspace.children, saved.children);
-  }
+  workspace = saved?.children
+    ? restoreWorkspace(saved, tracks, waypoints)
+    : buildTreeFromLegacy(tracks, waypoints);
 
   // Auto-expand all
   walkNodes(workspace.children, n => {
@@ -86,30 +103,71 @@ export function rebuildTree() {
   });
 }
 
-function mergePersistedMetadata(liveNodes, savedNodes) {
-  // Match saved nodes by position/type and restore metadata fields
-  for (let i = 0; i < liveNodes.length && i < savedNodes.length; i++) {
-    const live = liveNodes[i];
-    const saved = savedNodes[i];
-    if (live.type !== saved.type) continue;
-    // Restore editable metadata
-    if (saved.desc) live.desc = saved.desc;
-    if (saved.cmt) live.cmt = saved.cmt;
-    if (saved.trkType) live.trkType = saved.trkType;
-    if (saved.rteType) live.rteType = saved.rteType;
-    if (saved.wptType) live.wptType = saved.wptType;
-    if (saved.sym) live.sym = saved.sym;
-    // Recurse into children
-    if (live.children && saved.children) {
-      mergePersistedMetadata(live.children, saved.children);
+function restoreWorkspace(savedWorkspace, tracks, waypoints) {
+  const trackIds = new Set(tracks.map(track => track.id));
+  const waypointIds = new Set(waypoints.map(wp => wp.id));
+  const referencedTrackIds = new Set();
+  const referencedWaypointIds = new Set();
+
+  function cloneSavedNode(node) {
+    const clone = { ...node };
+    if (node.children) clone.children = [];
+
+    if (node._legacyTrackId) {
+      if (!trackIds.has(node._legacyTrackId)) return null;
+      referencedTrackIds.add(node._legacyTrackId);
     }
+    if (node._legacyTrackIds?.length) {
+      clone._legacyTrackIds = node._legacyTrackIds.filter(id => trackIds.has(id));
+      clone._legacyTrackIds.forEach(id => referencedTrackIds.add(id));
+      if (!clone._legacyTrackIds.length && node.type === 'track') return null;
+    }
+    if (node._waypointId) {
+      if (!waypointIds.has(node._waypointId)) return null;
+      referencedWaypointIds.add(node._waypointId);
+    }
+
+    if (node.children?.length) {
+      for (const child of node.children) {
+        const clonedChild = cloneSavedNode(child);
+        if (clonedChild) clone.children.push(clonedChild);
+      }
+    }
+
+    if ((clone.type === 'file' || clone.type === 'folder') && clone.children && clone.children.length === 0) {
+      return clone;
+    }
+    return clone;
   }
+
+  const restored = createWorkspaceModel();
+  for (const child of savedWorkspace.children || []) {
+    const cloned = cloneSavedNode(child);
+    if (cloned) restored.children.push(cloned);
+  }
+
+  const orphanTracks = tracks.filter(track => !referencedTrackIds.has(track.id));
+  const orphanWaypoints = waypoints.filter(wp => !referencedWaypointIds.has(wp.id));
+  if (orphanTracks.length || orphanWaypoints.length) {
+    const fallback = buildTreeFromLegacy(orphanTracks, orphanWaypoints);
+    restored.children.push(...fallback.children);
+  }
+
+  return restored;
+}
+
+function ensureWorkspaceMenuButton() {
+  _workspaceMenuBtn = document.getElementById('active-actions-btn');
 }
 
 export function renderGpxTree() {
   if (!_trackListEl) return;
   _trackListEl.innerHTML = '';
   renderNodeList(workspace.children, _trackListEl, 0);
+  requestAnimationFrame(() => {
+    const activeRow = _trackListEl.querySelector('.tree-row.active');
+    if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 export function syncTreeSelection() {
@@ -165,6 +223,39 @@ export function openNodeContextMenu(nodeId, x, y) {
   });
 }
 
+export function openCurrentContextMenu(x, y) {
+  const nodeId = treeState.selectedNodeId || findNodeForTrackId(_deps.getActiveTrackId?.())?.id || null;
+  if (nodeId) openNodeContextMenu(nodeId, x, y);
+  else openWorkspaceContextMenu(x, y);
+}
+
+function openWorkspaceContextMenu(x, y) {
+  treeState.contextMenu = { nodeId: null, x, y };
+  _contextMenuEl.innerHTML = '';
+  const items = getWorkspaceContextMenuItems();
+  for (const item of items) {
+    if (item.separator) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-separator';
+      _contextMenuEl.appendChild(sep);
+      continue;
+    }
+    const btn = document.createElement('button');
+    btn.className = 'ctx-item';
+    btn.textContent = item.label;
+    if (item.disabled) btn.disabled = true;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeContextMenu();
+      item.action();
+    });
+    _contextMenuEl.appendChild(btn);
+  }
+  _contextMenuEl.style.left = x + 'px';
+  _contextMenuEl.style.top = y + 'px';
+  _contextMenuEl.classList.add('visible');
+}
+
 export function openInfoEditor(nodeId) {
   const node = findNodeById(workspace.children, nodeId);
   if (!node) return;
@@ -210,8 +301,87 @@ function getContextMenuItems(node) {
         label: '🔎 Zoom to',
         action: () => _deps.fitToTrackById(legacyId),
       });
+      if (node.type === 'route') {
+        items.push({
+          label: '⇢ Convert to track',
+          action: () => _deps.convertRouteById?.(legacyId, { replace: false }),
+        });
+        items.push({
+          label: '⇢ Convert and replace',
+          action: () => _deps.convertRouteById?.(legacyId, { replace: true }),
+        });
+      } else {
+        items.push({
+          label: '≈ Simplify…',
+          action: () => _deps.simplifyTrackById?.(legacyId),
+        });
+        items.push({
+          label: '＋ Add intermediate points',
+          action: () => _deps.densifyTrackById?.(legacyId),
+        });
+        items.push({
+          label: '✂ Split',
+          action: () => _deps.splitTrackById?.(legacyId),
+        });
+      }
     }
   }
+
+  if (node.type === 'file') {
+    items.push({ separator: true });
+    items.push({
+      label: '＋ New file',
+      action: () => addSiblingFile(node),
+    });
+    items.push({
+      label: '＋ New track',
+      action: () => addTrackToFile(node),
+    });
+    items.push({
+      label: '⤓ Export GPX',
+      action: () => exportNodeGPX(node),
+    });
+  }
+
+  if (node.type === 'folder') {
+    items.push({ separator: true });
+    items.push({
+      label: '＋ New file',
+      action: () => addFileToFolder(node),
+    });
+  }
+
+  if (node.type === 'track') {
+    items.push({ separator: true });
+    items.push({
+      label: '＋ New segment',
+      action: () => addSegmentToTrack(node),
+    });
+    if ((node._legacyTrackIds || []).length > 1) {
+      items.push({
+        label: '⇄ Merge segments into one',
+        action: () => _deps.mergeTrackNodeByIds?.(node._legacyTrackIds || [], { mode: 'single-segment', name: node.name || 'Track' }),
+      });
+    }
+    items.push({
+      label: '⤓ Export GPX',
+      action: () => exportNodeGPX(node),
+    });
+  }
+
+  if (node.type === 'route') {
+    items.push({ separator: true });
+    items.push({
+      label: '⤓ Export GPX',
+      action: () => exportNodeGPX(node),
+    });
+  }
+
+  items.push({ separator: true });
+  items.push({ label: '⧉ Duplicate', disabled: !canDuplicateNode(node), action: () => duplicateNode(node) });
+  items.push({ label: '📋 Copy', disabled: !canCopyNode(node), action: () => copyNode(node) });
+  items.push({ label: '✂ Cut', disabled: !canCutNode(node), action: () => cutNode(node) });
+  items.push({ label: '📥 Paste', disabled: !canPasteInto(node), action: () => pasteInto(node) });
 
   if (node.type === 'file' || node.type === 'folder') {
     items.push({ separator: true });
@@ -247,15 +417,347 @@ function collectLegacyTrackIds(node) {
   return ids;
 }
 
+function findParentCollection(nodes, id) {
+  for (const node of nodes) {
+    if (node.children?.some(child => child.id === id)) return node.children;
+    if (node.children) {
+      const found = findParentCollection(node.children, id);
+      if (found) return found;
+    }
+  }
+  return nodes;
+}
+
+function getWorkspaceContextMenuItems() {
+  return [
+    { label: '＋ New file', action: () => createRootFile() },
+    { separator: true },
+    { label: '📥 Paste', disabled: !canPasteIntoWorkspace(), action: () => pasteIntoWorkspace() },
+  ];
+}
+
+function createRootFile() {
+  const fileNode = createFileNode(nextFileName());
+  workspace.children.push(fileNode);
+  treeState.expandedNodeIds.add(fileNode.id);
+  treeState.selectedNodeId = fileNode.id;
+  scheduleWorkspaceSave();
+  renderGpxTree();
+  openInfoEditor(fileNode.id);
+}
+
+function addSiblingFile(node) {
+  const collection = findParentCollection(workspace.children, node.id);
+  const insertIndex = collection.findIndex(item => item.id === node.id);
+  const fileNode = createFileNode(nextFileName());
+  collection.splice(insertIndex + 1, 0, fileNode);
+  treeState.expandedNodeIds.add(fileNode.id);
+  treeState.selectedNodeId = fileNode.id;
+  scheduleWorkspaceSave();
+  renderGpxTree();
+  openInfoEditor(fileNode.id);
+}
+
+function addFileToFolder(folderNode) {
+  const fileNode = createFileNode(nextFileName());
+  folderNode.children ||= [];
+  folderNode.children.push(fileNode);
+  treeState.expandedNodeIds.add(folderNode.id);
+  treeState.expandedNodeIds.add(fileNode.id);
+  treeState.selectedNodeId = fileNode.id;
+  scheduleWorkspaceSave();
+  renderGpxTree();
+  openInfoEditor(fileNode.id);
+}
+
+function nextFileName() {
+  const existing = new Set();
+  walkNodes(workspace.children, (node) => {
+    if (node.type === 'file' && node.name) existing.add(node.name);
+  });
+  let index = 1;
+  while (existing.has(`Outing ${index}.gpx`)) index++;
+  return `Outing ${index}.gpx`;
+}
+
+function canDuplicateNode(node) {
+  return ['file', 'track', 'segment', 'waypoint'].includes(node.type);
+}
+
+function canCopyNode(node) {
+  return ['file', 'track', 'segment', 'waypoint'].includes(node.type);
+}
+
+function canCutNode(node) {
+  return ['file', 'track', 'segment', 'waypoint'].includes(node.type);
+}
+
+function canPasteInto(node) {
+  if (!_clipboard) return false;
+  if (node.type === 'file') return ['file', 'track', 'segment', 'waypoint'].includes(_clipboard.kind);
+  if (node.type === 'folder') return ['file', 'track', 'waypoint'].includes(_clipboard.kind);
+  if (node.type === 'track') return _clipboard.kind === 'segment';
+  return false;
+}
+
+function canPasteIntoWorkspace() {
+  return Boolean(_clipboard && _clipboard.kind === 'file');
+}
+
+function duplicateNode(node) {
+  const payload = snapshotNodePayload(node);
+  if (!payload) return;
+  pastePayloadNearNode(node, payload, false, true);
+}
+
+function copyNode(node) {
+  const payload = snapshotNodePayload(node);
+  if (!payload) return;
+  _clipboard = { mode: 'copy', sourceNodeId: node.id, kind: payload.kind, payload };
+}
+
+function cutNode(node) {
+  const payload = snapshotNodePayload(node);
+  if (!payload) return;
+  _clipboard = { mode: 'cut', sourceNodeId: node.id, kind: payload.kind, payload };
+}
+
+function pasteInto(node) {
+  if (!_clipboard) return;
+  pastePayloadNearNode(node, _clipboard.payload, _clipboard.mode === 'cut', false);
+}
+
+function pasteIntoWorkspace() {
+  if (!_clipboard || _clipboard.kind !== 'file') return;
+  const inserted = materializeFilePayload(_clipboard.payload, workspace.children);
+  if (!inserted) return;
+  if (_clipboard.mode === 'cut') {
+    removeOriginalClipboardSource(inserted.id);
+    return;
+  }
+  afterMutationSelectAndRender(inserted.id);
+}
+
+function removeOriginalClipboardSource(selectNodeId = null) {
+  if (!_clipboard?.sourceNodeId) return;
+  const sourceNode = findNodeById(workspace.children, _clipboard.sourceNodeId);
+  if (sourceNode) removeNodeAndLegacyData(sourceNode, false);
+  _clipboard = null;
+  afterMutationSelectAndRender(selectNodeId);
+}
+
+function pastePayloadNearNode(targetNode, payload, shouldRemoveSource, asDuplicate) {
+  let inserted = null;
+  if (targetNode.type === 'folder') treeState.expandedNodeIds.add(targetNode.id);
+  if (targetNode.type === 'file') {
+    if (payload.kind === 'file') {
+      const collection = findParentCollection(workspace.children, targetNode.id);
+      const insertIndex = collection.findIndex(item => item.id === targetNode.id);
+      inserted = materializeFilePayload(payload, collection, insertIndex + 1, asDuplicate);
+    } else if (payload.kind === 'track') {
+      inserted = materializeTrackPayloadIntoFile(payload, targetNode, asDuplicate);
+    } else if (payload.kind === 'segment') {
+      inserted = materializeSegmentPayloadIntoFile(payload, targetNode, asDuplicate);
+    } else if (payload.kind === 'waypoint') {
+      inserted = materializeWaypointPayload(payload, targetNode.children ||= [], asDuplicate);
+    }
+  } else if (targetNode.type === 'folder') {
+    if (payload.kind === 'file') inserted = materializeFilePayload(payload, targetNode.children ||= [], undefined, asDuplicate);
+    if (payload.kind === 'track') inserted = materializeTrackPayloadIntoContainer(payload, targetNode.children ||= [], asDuplicate);
+    if (payload.kind === 'waypoint') inserted = materializeWaypointPayload(payload, targetNode.children ||= [], asDuplicate);
+  } else if (targetNode.type === 'track' && payload.kind === 'segment') {
+    inserted = materializeSegmentPayloadIntoTrack(payload, targetNode, asDuplicate);
+  }
+  if (!inserted) return;
+  if (shouldRemoveSource) removeOriginalClipboardSource(inserted.id);
+  else afterMutationSelectAndRender(inserted.id);
+}
+
+function afterMutationSelectAndRender(nodeId) {
+  treeState.selectedNodeId = nodeId;
+  scheduleWorkspaceSave();
+  renderGpxTree();
+}
+
+function snapshotTrack(track) {
+  return {
+    name: track.name,
+    coords: track.coords.map(coord => coord.slice()),
+    color: track.color,
+    segmentLabel: track.segmentLabel || '',
+  };
+}
+
+function snapshotWaypoint(node) {
+  const waypoint = node._waypointId ? _deps.findWaypointById?.(node._waypointId) : null;
+  const source = waypoint || node;
+  return {
+    name: source.name || 'Waypoint',
+    coords: source.coords ? source.coords.slice() : null,
+    sym: source.sym || '',
+    desc: source.desc || '',
+    comment: source.comment || source.cmt || '',
+    wptType: source.wptType || '',
+  };
+}
+
+function snapshotNodePayload(node) {
+  if (node.type === 'segment') {
+    const track = node._legacyTrackId ? _deps.findTrack(node._legacyTrackId) : null;
+    if (!track) return null;
+    return { kind: 'segment', segment: snapshotTrack(track) };
+  }
+  if (node.type === 'track') {
+    const segments = (node._legacyTrackIds || []).map(id => _deps.findTrack(id)).filter(Boolean).map(snapshotTrack);
+    return {
+      kind: 'track',
+      name: node.name || 'Track',
+      desc: node.desc || '',
+      cmt: node.cmt || '',
+      trkType: node.trkType || '',
+      segments,
+    };
+  }
+  if (node.type === 'file') {
+    return {
+      kind: 'file',
+      name: node.name || nextFileName(),
+      desc: node.desc || '',
+      children: (node.children || []).map(child => snapshotNodePayload(child)).filter(Boolean),
+    };
+  }
+  if (node.type === 'waypoint') {
+    return { kind: 'waypoint', waypoint: snapshotWaypoint(node) };
+  }
+  return null;
+}
+
+function cloneName(name, suffix = 'copy') {
+  return `${name || 'Item'} ${suffix}`;
+}
+
+function materializeFilePayload(payload, collection, insertIndex, asDuplicate) {
+  const fileNode = createFileNode(asDuplicate ? cloneName(payload.name) : payload.name, { desc: payload.desc || '' });
+  if (insertIndex == null || insertIndex < 0 || insertIndex > collection.length) collection.push(fileNode);
+  else collection.splice(insertIndex, 0, fileNode);
+  for (const child of payload.children || []) {
+    if (child.kind === 'track') materializeTrackPayloadIntoFile(child, fileNode, asDuplicate);
+    if (child.kind === 'waypoint') materializeWaypointPayload(child, fileNode.children ||= [], asDuplicate);
+  }
+  return fileNode;
+}
+
+function materializeTrackPayloadIntoContainer(payload, collection, asDuplicate) {
+  const fileNode = createFileNode(nextFileName());
+  collection.push(fileNode);
+  treeState.expandedNodeIds.add(fileNode.id);
+  return materializeTrackPayloadIntoFile(payload, fileNode, asDuplicate);
+}
+
+function materializeTrackPayloadIntoFile(payload, fileNode, asDuplicate) {
+  const trackName = asDuplicate ? cloneName(payload.name) : payload.name;
+  const trackNode = createTrackNode(trackName, {
+    desc: payload.desc || '',
+    cmt: payload.cmt || '',
+    trkType: payload.trkType || '',
+    _legacyTrackIds: [],
+  });
+  fileNode.children ||= [];
+  fileNode.children.push(trackNode);
+  treeState.expandedNodeIds.add(fileNode.id);
+  if ((payload.segments || []).length > 1) {
+    const groupId = `grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const groupName = trackName;
+    (payload.segments || []).forEach((segment, index) => {
+      const created = _deps.createTrackWithoutTree?.(trackName, segment.coords.map(coord => coord.slice()), {
+        color: segment.color,
+        groupId,
+        groupName,
+        segmentLabel: segment.segmentLabel || `Segment ${index + 1}`,
+      });
+      if (created) trackNode._legacyTrackIds.push(created.id);
+    });
+  } else {
+    const segment = payload.segments?.[0];
+    const created = _deps.createTrackWithoutTree?.(trackName, (segment?.coords || []).map(coord => coord.slice()), {
+      color: segment?.color,
+    });
+    if (created) trackNode._legacyTrackIds.push(created.id);
+  }
+  return trackNode;
+}
+
+function materializeSegmentPayloadIntoTrack(payload, trackNode, asDuplicate) {
+  const grouping = _deps.ensureTrackGrouping?.([...(trackNode._legacyTrackIds || [])], trackNode.name || 'Track');
+  if (!grouping?.groupId) return null;
+  const segment = payload.segment;
+  const created = _deps.createTrackWithoutTree?.(trackNode.name || 'Track', (segment.coords || []).map(coord => coord.slice()), {
+    color: segment.color,
+    groupId: grouping.groupId,
+    groupName: grouping.groupName,
+    segmentLabel: asDuplicate ? cloneName(segment.segmentLabel || `Segment ${grouping.segmentCount + 1}`) : (segment.segmentLabel || `Segment ${grouping.segmentCount + 1}`),
+  });
+  if (!created) return null;
+  rebuildTree();
+  const selectedNode = findNodeForTrackId(created.id);
+  if (selectedNode) {
+    treeState.expandedNodeIds.add(selectedNode.id);
+    const parent = findParentOf(workspace.children, selectedNode.id);
+    if (parent) treeState.expandedNodeIds.add(parent.id);
+  }
+  return selectedNode;
+}
+
+function materializeSegmentPayloadIntoFile(payload, fileNode, asDuplicate) {
+  const trackPayload = {
+    kind: 'track',
+    name: asDuplicate ? cloneName(payload.segment.name || 'Track') : (payload.segment.name || 'Track'),
+    desc: '',
+    cmt: '',
+    trkType: '',
+    segments: [payload.segment],
+  };
+  return materializeTrackPayloadIntoFile(trackPayload, fileNode, false);
+}
+
+function materializeWaypointPayload(payload, collection, asDuplicate) {
+  const waypoint = payload.waypoint;
+  const created = _deps.createWaypoint?.({
+    name: asDuplicate ? cloneName(waypoint.name || 'Waypoint') : (waypoint.name || 'Waypoint'),
+    coords: waypoint.coords ? waypoint.coords.slice() : null,
+    sym: waypoint.sym || '',
+    desc: waypoint.desc || '',
+    comment: waypoint.comment || '',
+  });
+  if (!created) return null;
+  const waypointNode = createWaypointNode(created.name, {
+    coords: created.coords,
+    sym: created.sym,
+    desc: created.desc,
+    cmt: created.comment,
+    wptType: waypoint.wptType || '',
+    _waypointId: created.id,
+  });
+  collection.push(waypointNode);
+  return waypointNode;
+}
+
+function removeNodeAndLegacyData(node, shouldRender = true) {
+  const trackIds = collectLegacyTrackIds(node);
+  for (const id of trackIds) _deps.deleteTrackById(id);
+  if (node._waypointId) _deps.deleteWaypointById?.(node._waypointId);
+  removeNodeFromTree(workspace.children, node.id);
+  if (shouldRender) {
+    scheduleWorkspaceSave();
+    renderGpxTree();
+  }
+}
+
 function deleteNode(node) {
   const ids = collectLegacyTrackIds(node);
   const name = node.name || node.type;
   if (!confirm(`Delete "${name}"${ids.length > 1 ? ` (${ids.length} tracks)` : ''}?`)) return;
-  for (const id of ids) _deps.deleteTrackById(id);
-  // Remove from workspace
-  removeNodeFromTree(workspace.children, node.id);
-  scheduleWorkspaceSave();
-  renderGpxTree();
+  removeNodeAndLegacyData(node, true);
 }
 
 function removeNodeFromTree(nodes, id) {
@@ -264,6 +766,49 @@ function removeNodeFromTree(nodes, id) {
     if (nodes[i].children && removeNodeFromTree(nodes[i].children, id)) return true;
   }
   return false;
+}
+
+function addTrackToFile(fileNode) {
+  const trackName = _deps.suggestTrackNameForFile?.(fileNode) || 'Track';
+  const track = _deps.createTrackWithoutTree?.(trackName, [], {});
+  if (!track) return;
+
+  const trackNode = createTrackNode(trackName, { _legacyTrackIds: [track.id] });
+  fileNode.children ||= [];
+  fileNode.children.push(trackNode);
+  treeState.expandedNodeIds.add(fileNode.id);
+  treeState.selectedNodeId = trackNode.id;
+  scheduleWorkspaceSave();
+  renderGpxTree();
+  _deps.enterEditForTrack?.(track.id);
+}
+
+function addSegmentToTrack(trackNode) {
+  const legacyTrackIds = [...(trackNode._legacyTrackIds || [])];
+  if (!legacyTrackIds.length) return;
+
+  const grouping = _deps.ensureTrackGrouping?.(legacyTrackIds, trackNode.name || 'Track');
+  if (!grouping?.groupId) return;
+
+  const segmentLabel = `Segment ${grouping.segmentCount + 1}`;
+  const track = _deps.createTrackWithoutTree?.(trackNode.name || 'Track', [], {
+    groupId: grouping.groupId,
+    groupName: grouping.groupName,
+    segmentLabel,
+  });
+  if (!track) return;
+
+  rebuildTree();
+  const selectedNode = findNodeForTrackId(track.id);
+  if (selectedNode) {
+    treeState.selectedNodeId = selectedNode.id;
+    treeState.expandedNodeIds.add(selectedNode.id);
+    const parent = findParentOf(workspace.children, selectedNode.id);
+    if (parent) treeState.expandedNodeIds.add(parent.id);
+  }
+  scheduleWorkspaceSave();
+  renderGpxTree();
+  _deps.enterEditForTrack?.(track.id);
 }
 
 // ---- Info editor ----
@@ -383,6 +928,7 @@ function applyInfoEdits(node, inputs) {
       node[field] = val;
     }
   }
+  syncInfoToLegacy(node);
   scheduleWorkspaceSave();
   if (nameChanged) _deps.renderTrackList();
   renderGpxTree();
@@ -397,6 +943,19 @@ function syncNameToLegacy(node, name) {
     for (const id of node._legacyTrackIds) {
       _deps.renameGroupByTrackId(id, name);
     }
+  }
+}
+
+function syncInfoToLegacy(node) {
+  if (node._waypointId) {
+    _deps.updateWaypointById?.(node._waypointId, {
+      name: node.name || '',
+      desc: node.desc || '',
+      comment: node.cmt || '',
+      sym: node.sym || '',
+      wptType: node.wptType || '',
+      coords: node.coords ? node.coords.slice() : null,
+    });
   }
 }
 
@@ -555,11 +1114,31 @@ function scheduleWorkspaceSave() {
 // ---- Hooks for tracks.js to call ----
 
 export function onTrackCreated(track) {
+  if ((track.sourceKind || 'track') === 'route') {
+    const fileNode = createFileNode(track.name, { desc: track.desc || '' });
+    const routeNode = createRouteNode(track.name, {
+      desc: track.desc || '',
+      cmt: track.cmt || '',
+      rteType: track.rteType || '',
+      _legacyTrackId: track.id,
+    });
+    fileNode.children.push(routeNode);
+    workspace.children.push(fileNode);
+    treeState.expandedNodeIds.add(fileNode.id);
+    scheduleWorkspaceSave();
+    renderGpxTree();
+    return;
+  }
   // If it's a grouped track, let rebuildTree handle it
   if (track.groupId) { rebuildTree(); renderGpxTree(); return; }
   // Single track — add a file + track node
-  const fileNode = createFileNode(track.name);
-  const trackNode = createTrackNode(track.name, { _legacyTrackIds: [track.id] });
+  const fileNode = createFileNode(track.name, { desc: track.desc || '' });
+  const trackNode = createTrackNode(track.name, {
+    desc: track.desc || '',
+    cmt: track.cmt || '',
+    trkType: track.trkType || '',
+    _legacyTrackIds: [track.id],
+  });
   fileNode.children.push(trackNode);
   workspace.children.push(fileNode);
   treeState.expandedNodeIds.add(fileNode.id);

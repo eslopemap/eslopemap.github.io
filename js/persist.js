@@ -2,6 +2,7 @@
 // No external deps — thin wrapper over localStorage with JSON encoding.
 
 const TRACKS_KEY = 'slope:tracks';
+const WAYPOINTS_KEY = 'slope:waypoints';
 const SETTINGS_KEY = 'slope:settings';
 const PROFILE_SETTINGS_KEY = 'slope:profile-settings';
 const WORKSPACE_KEY = 'slope:workspace';
@@ -11,9 +12,15 @@ const WORKSPACE_KEY = 'slope:workspace';
 /** Serialize tracks for storage (strips internal fields) */
 function serializeTracks(tracks) {
   return tracks.map(t => ({
+    id: t.id,
     name: t.name,
     color: t.color,
     coords: t.coords,
+    desc: t.desc || undefined,
+    cmt: t.cmt || undefined,
+    trkType: t.trkType || undefined,
+    rteType: t.rteType || undefined,
+    sourceKind: t.sourceKind || undefined,
     groupId: t.groupId || undefined,
     groupName: t.groupName || undefined,
     segmentLabel: t.segmentLabel || undefined,
@@ -29,6 +36,32 @@ export function saveTracks(tracks) {
 export function loadTracks() {
   try {
     const raw = localStorage.getItem(TRACKS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+// ---- Waypoints ----
+
+function serializeWaypoints(waypoints) {
+  return waypoints.map(wp => ({
+    id: wp.id,
+    name: wp.name,
+    coords: wp.coords,
+    sym: wp.sym || undefined,
+    desc: wp.desc || undefined,
+    comment: wp.comment || undefined,
+  }));
+}
+
+export function saveWaypoints(waypoints) {
+  try {
+    localStorage.setItem(WAYPOINTS_KEY, JSON.stringify(serializeWaypoints(waypoints)));
+  } catch { /* quota exceeded or private mode */ }
+}
+
+export function loadWaypoints() {
+  try {
+    const raw = localStorage.getItem(WAYPOINTS_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
@@ -78,6 +111,7 @@ export function loadProfileSettings() {
 export function clearAll() {
   try {
     localStorage.removeItem(TRACKS_KEY);
+    localStorage.removeItem(WAYPOINTS_KEY);
     localStorage.removeItem(SETTINGS_KEY);
     localStorage.removeItem(PROFILE_SETTINGS_KEY);
     localStorage.removeItem(WORKSPACE_KEY);
@@ -95,6 +129,7 @@ function serializeNode(node) {
   if (node.trkType) base.trkType = node.trkType;
   if (node.rteType) base.rteType = node.rteType;
   if (node.wptType) base.wptType = node.wptType;
+  if (node._waypointId) base._waypointId = node._waypointId;
   if (node._legacyTrackId) base._legacyTrackId = node._legacyTrackId;
   if (node._legacyTrackIds?.length) base._legacyTrackIds = node._legacyTrackIds;
   if (node.children?.length) base.children = node.children.map(serializeNode);

@@ -6,11 +6,13 @@ import { DEM_MAX_Z, DEM_HD_SOURCE_ID, TRACK_COLORS } from './constants.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
-import { saveTracks, loadTracks } from './persist.js';
-import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onImportComplete, openInfoEditor } from './gpx-tree.js';
+import { saveTracks, loadTracks, saveWaypoints, loadWaypoints } from './persist.js';
+import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onImportComplete, openInfoEditor, findNodeForTrackId } from './gpx-tree.js';
+import { buildSelectionSpan, densifyTrackSpan, simplifyTrackSpan, splitTrackSpan, mergeTrackSpans, convertRouteToTrack } from './track-ops.js';
 
 let map, state;
 let updateProfileFn = () => {};  // wired by initTracks
+let _editFns = null;
 
 const tracks = [];
 const waypoints = [];
@@ -18,12 +20,16 @@ let activeTrackId = null;
 let trackColorIdx = 0;
 let mapReady = false;
 let profileClosed = false;
+let activeSelectionSpan = null;
 
 // Debounced save to localStorage
 let _saveTimer = 0;
 function scheduleSave() {
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => saveTracks(tracks), 300);
+  _saveTimer = setTimeout(() => {
+    saveTracks(tracks);
+    saveWaypoints(waypoints);
+  }, 300);
 }
 
 // DOM refs (resolved at init)
@@ -144,6 +150,44 @@ function enrichAllTracks() {
 function trackSourceId(t) { return 'track-' + t.id; }
 function trackLineLayerId(t) { return 'track-line-' + t.id; }
 function trackPtsLayerId(t) { return 'track-pts-' + t.id; }
+
+const SELECTION_HIGHLIGHT_SOURCE = 'selection-highlight';
+const SELECTION_HIGHLIGHT_LAYER = 'selection-highlight-line';
+
+function refreshSelectionHighlight() {
+  const emptyData = { type: 'FeatureCollection', features: [] };
+  if (!map.getSource(SELECTION_HIGHLIGHT_SOURCE)) {
+    map.addSource(SELECTION_HIGHLIGHT_SOURCE, { type: 'geojson', data: emptyData });
+    map.addLayer({
+      id: SELECTION_HIGHLIGHT_LAYER,
+      type: 'line',
+      source: SELECTION_HIGHLIGHT_SOURCE,
+      paint: {
+        'line-color': '#3b82f6',
+        'line-width': 6,
+        'line-opacity': 0.55,
+      },
+    });
+  }
+  if (!activeSelectionSpan?.ok) {
+    map.getSource(SELECTION_HIGHLIGHT_SOURCE).setData(emptyData);
+    return;
+  }
+  const track = getTrackById(activeSelectionSpan.trackId);
+  if (!track) {
+    map.getSource(SELECTION_HIGHLIGHT_SOURCE).setData(emptyData);
+    return;
+  }
+  const coords = track.coords.slice(activeSelectionSpan.startIdx, activeSelectionSpan.endIdx + 1);
+  if (coords.length < 2) {
+    map.getSource(SELECTION_HIGHLIGHT_SOURCE).setData(emptyData);
+    return;
+  }
+  map.getSource(SELECTION_HIGHLIGHT_SOURCE).setData({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: coords.map(c => [c[0], c[1]]) },
+  });
+}
 
 function trackGeoJSON(t) {
   const features = [];
@@ -335,15 +379,59 @@ function refreshWaypointSource() {
 function addWaypoints(newWaypoints) {
   for (const wp of newWaypoints) {
     waypoints.push({
-      id: 'wpt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      id: wp.id || ('wpt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
       name: wp.name,
       coords: wp.coords,
       sym: wp.sym,
       desc: wp.desc,
       comment: wp.comment,
+      wptType: wp.wptType || '',
     });
   }
   if (waypoints.length) refreshWaypointSource();
+  scheduleSave();
+}
+
+function createWaypoint(waypoint) {
+  if (!Array.isArray(waypoint?.coords) || waypoint.coords.length < 2) return null;
+  const created = {
+    id: waypoint.id || ('wpt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
+    name: waypoint.name || 'Waypoint',
+    coords: waypoint.coords.slice(),
+    sym: waypoint.sym || '',
+    desc: waypoint.desc || '',
+    comment: waypoint.comment || '',
+    wptType: waypoint.wptType || '',
+  };
+  waypoints.push(created);
+  refreshWaypointSource();
+  scheduleSave();
+  return created;
+}
+
+function updateWaypointById(id, updates) {
+  const waypoint = waypoints.find(wp => wp.id === id);
+  if (!waypoint) return;
+  if (typeof updates.name === 'string') waypoint.name = updates.name;
+  if (typeof updates.desc === 'string') waypoint.desc = updates.desc;
+  if (typeof updates.comment === 'string') waypoint.comment = updates.comment;
+  if (typeof updates.sym === 'string') waypoint.sym = updates.sym;
+  if (typeof updates.wptType === 'string') waypoint.wptType = updates.wptType;
+  if (Array.isArray(updates.coords) && updates.coords.length >= 2) waypoint.coords = updates.coords.slice();
+  refreshWaypointSource();
+  scheduleSave();
+}
+
+function findWaypointById(id) {
+  return waypoints.find(wp => wp.id === id) || null;
+}
+
+function deleteWaypointById(id) {
+  const index = waypoints.findIndex(wp => wp.id === id);
+  if (index < 0) return;
+  waypoints.splice(index, 1);
+  refreshWaypointSource();
+  scheduleSave();
 }
 
 function removeTrackFromMap(t) {
@@ -452,146 +540,7 @@ function trackStats(t) {
   return t._statsCache;
 }
 
-// ---- Track list rendering ----
-
-// Collapsed groups (persisted as a Set of groupIds)
-const collapsedGroups = new Set();
-
-function escapeHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function buildTrackItemHTML(t) {
-  const s = t.coords.length >= 2 ? trackStats(t) : null;
-  const statsStr = s ? `${s.dist.toFixed(1)} km · ↑${Math.round(s.gain)} m · ↓${Math.round(s.loss)} m · ${t.coords.length} pts` : `${t.coords.length} pts`;
-  const detailStatsStr = (s && t.id === activeTrackId)
-    ? `Avg slope: ${s.avgSlope != null ? `${s.avgSlope.toFixed(1)}°` : 'n/a'} · Max slope: ${s.maxTerrainSlope != null ? `${s.maxTerrainSlope.toFixed(1)}°` : 'n/a'}`
-    : '';
-  const editActive = isTrackEditing(t.id);
-  const displayName = escapeHtml(t.segmentLabel || t.name);
-  return `<span class="track-color" style="background:${t.color}"></span>` +
-    `<span class="track-name" data-track-id="${t.id}">${displayName}` +
-    (statsStr ? `<br><span class="track-stats">${statsStr}</span>` : '') +
-    (detailStatsStr ? `<br><span class="track-stats">${detailStatsStr}</span>` : '') +
-    `</span>` +
-    `<button class="track-edit${editActive ? ' active' : ''}" data-id="${t.id}" title="Edit track">&#9998;</button>` +
-    `<button class="track-del" data-id="${t.id}">&times;</button>`;
-}
-
 function renderTrackList() {
-  trackListEl.innerHTML = '';
-
-  // Group tracks by groupId
-  const grouped = new Map(); // groupId → track[]
-  const ungrouped = [];
-  for (const t of tracks) {
-    if (t.groupId) {
-      if (!grouped.has(t.groupId)) grouped.set(t.groupId, []);
-      grouped.get(t.groupId).push(t);
-    } else {
-      ungrouped.push(t);
-    }
-  }
-
-  // Render in order: maintain original tracks order
-  const rendered = new Set();
-  for (const t of tracks) {
-    if (rendered.has(t.id)) continue;
-
-    if (t.groupId && grouped.has(t.groupId)) {
-      const group = grouped.get(t.groupId);
-      grouped.delete(t.groupId); // only render once
-      const collapsed = collapsedGroups.has(t.groupId);
-
-      // Group header
-      const header = document.createElement('div');
-      header.className = 'track-group-header';
-      const anyActive = group.some(g => g.id === activeTrackId);
-      if (anyActive) header.classList.add('active');
-
-      // Aggregate stats
-      let totalDist = 0, totalGain = 0, totalLoss = 0, totalPts = 0;
-      for (const g of group) {
-        const gs = g.coords.length >= 2 ? trackStats(g) : null;
-        if (gs) { totalDist += gs.dist; totalGain += gs.gain; totalLoss += gs.loss; }
-        totalPts += g.coords.length;
-      }
-      const aggStats = totalPts >= 2
-        ? `${totalDist.toFixed(1)} km · ↑${Math.round(totalGain)} m · ↓${Math.round(totalLoss)} m · ${totalPts} pts`
-        : `${totalPts} pts`;
-
-      header.innerHTML = `<span class="track-group-toggle">${collapsed ? '▸' : '▾'}</span>` +
-        `<span class="track-color" style="background:${group[0].color}"></span>` +
-        `<span class="track-name">${t.groupName || 'Group'}` +
-        `<br><span class="track-stats">${aggStats} · ${group.length} segs</span>` +
-        `</span>`;
-      header.addEventListener('click', () => {
-        if (collapsed) collapsedGroups.delete(t.groupId);
-        else collapsedGroups.add(t.groupId);
-        renderTrackList();
-      });
-      const groupNameEl = header.querySelector('.track-name');
-      if (groupNameEl) {
-        groupNameEl.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          startGroupRename(t.groupId, groupNameEl);
-        });
-      }
-      trackListEl.appendChild(header);
-
-      // Group children (segments)
-      if (!collapsed) {
-        for (const g of group) {
-          rendered.add(g.id);
-          const div = document.createElement('div');
-          div.className = 'track-item track-item-nested' + (g.id === activeTrackId ? ' active' : '');
-          div.innerHTML = buildTrackItemHTML(g);
-          div.addEventListener('click', (e) => {
-            if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
-            setActiveTrack(g.id);
-          });
-          const nestedNameEl = div.querySelector('.track-name');
-          if (nestedNameEl) {
-            nestedNameEl.addEventListener('dblclick', (e) => {
-              e.stopPropagation();
-              startTrackRename(g.id, nestedNameEl);
-            });
-          }
-          div.querySelector('.track-edit').addEventListener('click', () => {
-            if (isTrackEditing(g.id)) exitEditMode();
-            else { setActiveTrack(g.id); enterEditMode(g.id); }
-          });
-          div.querySelector('.track-del').addEventListener('click', () => deleteTrack(g.id));
-          trackListEl.appendChild(div);
-        }
-      } else {
-        for (const g of group) rendered.add(g.id);
-      }
-    } else if (!t.groupId) {
-      rendered.add(t.id);
-      const div = document.createElement('div');
-      div.className = 'track-item' + (t.id === activeTrackId ? ' active' : '');
-      div.innerHTML = buildTrackItemHTML(t);
-      div.addEventListener('click', (e) => {
-        if (e.target.classList.contains('track-del') || e.target.classList.contains('track-edit')) return;
-        setActiveTrack(t.id);
-      });
-      const nameEl = div.querySelector('.track-name');
-      if (nameEl) {
-        nameEl.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          startTrackRename(t.id, nameEl);
-        });
-      }
-      div.querySelector('.track-edit').addEventListener('click', () => {
-        if (isTrackEditing(t.id)) exitEditMode();
-        else { setActiveTrack(t.id); enterEditMode(t.id); }
-      });
-      div.querySelector('.track-del').addEventListener('click', () => deleteTrack(t.id));
-      trackListEl.appendChild(div);
-    }
-  }
-
   if (!tracks.length) setTrackPanelVisible(false);
   else syncTrackPanelShell();
   syncProfileToggleButton();
@@ -603,25 +552,36 @@ function renderTrackList() {
 // ---- Active track ----
 
 function setActiveTrack(id) {
+  const changed = id !== activeTrackId;
   if (id !== activeTrackId) profileClosed = false;
   const es = getEditState();
   if (es.editingTrackId && es.editingTrackId !== id) exitEditMode();
   activeTrackId = id;
+  if (changed) clearSelectionSpan();
   renderTrackList();
   updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
   updateProfileFn();
 }
 
-function deleteTrack(id) {
+function removeTrackById(id) {
   const t = tracks.find(tr => tr.id === id);
-  if (!t) return;
-  if (!confirm(`Delete track "${t.name}"?`)) return;
+  if (!t) return null;
   const idx = tracks.indexOf(t);
   const es = getEditState();
   if (es.editingTrackId === id) exitEditMode();
   removeTrackFromMap(t);
   tracks.splice(idx, 1);
   if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+  if (activeSelectionSpan?.trackId === id) clearSelectionSpan(false);
+  return t;
+}
+
+function deleteTrack(id) {
+  const t = tracks.find(tr => tr.id === id);
+  if (!t) return;
+  if (!confirm(`Delete track "${t.name}"?`)) return;
+  const es = getEditState();
+  removeTrackById(id);
   onTrackDeleted(id);
   renderTrackList();
   updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
@@ -630,8 +590,13 @@ function deleteTrack(id) {
 
 function createTrack(name, coords, opts) {
   const t = {
-    id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-    name, color: nextColor(), coords, _statsCache: null,
+    id: opts?.id || ('trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
+    name, color: opts?.color || nextColor(), coords, _statsCache: null,
+    desc: opts?.desc || '',
+    cmt: opts?.cmt || '',
+    trkType: opts?.trkType || '',
+    rteType: opts?.rteType || '',
+    sourceKind: opts?.sourceKind || 'track',
     groupId: opts?.groupId || null,
     groupName: opts?.groupName || null,
     segmentLabel: opts?.segmentLabel || null,
@@ -640,14 +605,225 @@ function createTrack(name, coords, opts) {
   tracks.push(t);
   if (mapReady) addTrackToMap(t);
   setTrackPanelVisible(true);
-  setActiveTrack(t.id);
-  onTrackCreated(t);
+  if (!opts?.skipSelect) setActiveTrack(t.id);
+  if (!opts?.skipTreeHook) onTrackCreated(t);
   scheduleSave();
   return t;
 }
 
+function ensureTrackGrouping(trackIds, groupName) {
+  const existingTracks = trackIds
+    .map(id => tracks.find(tr => tr.id === id))
+    .filter(Boolean);
+  if (!existingTracks.length) return null;
+
+  const existingGroupId = existingTracks.find(t => t.groupId)?.groupId;
+  const finalGroupId = existingGroupId || ('grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
+  const finalGroupName = groupName || existingTracks[0].groupName || existingTracks[0].name || 'Track';
+
+  for (let i = 0; i < existingTracks.length; i++) {
+    const track = existingTracks[i];
+    track.groupId = finalGroupId;
+    track.groupName = finalGroupName;
+    if (!track.segmentLabel) track.segmentLabel = `Segment ${i + 1}`;
+  }
+
+  renderTrackList();
+  scheduleSave();
+  return {
+    groupId: finalGroupId,
+    groupName: finalGroupName,
+    segmentCount: existingTracks.length,
+  };
+}
+
+function suggestTrackNameForFile(fileNode) {
+  const base = (fileNode?.name || 'Track').replace(/\.gpx$/i, '').trim() || 'Track';
+  const existingCount = Array.isArray(fileNode?.children)
+    ? fileNode.children.filter(child => child.type === 'track').length
+    : 0;
+  return existingCount > 0 ? `${base} #${existingCount + 1}` : base;
+}
+
 function getActiveTrack() {
   return tracks.find(t => t.id === activeTrackId) || null;
+}
+
+function getTrackById(id) {
+  return tracks.find(t => t.id === id) || null;
+}
+
+function clearSelectionSpan(notifyProfile = true) {
+  activeSelectionSpan = null;
+  refreshSelectionHighlight();
+  if (notifyProfile) updateProfileFn();
+}
+
+function setSelectionSpan(selectionSpan) {
+  activeSelectionSpan = selectionSpan?.ok ? selectionSpan : null;
+  refreshSelectionHighlight();
+  updateProfileFn();
+}
+
+function getSelectionSpanForTrack(trackId) {
+  if (!activeSelectionSpan?.ok) return null;
+  return activeSelectionSpan.trackId === trackId ? activeSelectionSpan : null;
+}
+
+function buildWorkingSpan(trackId, fallbackToFullTrack = true) {
+  const track = getTrackById(trackId);
+  if (!track) return { ok: false, error: 'Track not found' };
+  const existing = getSelectionSpanForTrack(trackId);
+  if (existing) return existing;
+  if (!fallbackToFullTrack) return { ok: false, error: 'No active selection span' };
+  return buildSelectionSpan(track, 0, track.coords.length - 1);
+}
+
+function applyTrackCoords(trackId, updatedCoords) {
+  const track = getTrackById(trackId);
+  if (!track) return null;
+  track.coords = updatedCoords.map(coord => coord.slice());
+  onTrackCoordsChanged(track);
+  const refreshedSelection = activeSelectionSpan?.trackId === trackId && track.coords.length
+    ? buildSelectionSpan(track, 0, track.coords.length - 1)
+    : null;
+  if (activeSelectionSpan?.trackId === trackId) {
+    activeSelectionSpan = refreshedSelection?.ok ? refreshedSelection : null;
+  }
+  return track;
+}
+
+function replaceTrackProperties(trackId, patch) {
+  const track = getTrackById(trackId);
+  if (!track) return null;
+  Object.assign(track, patch || {});
+  invalidateTrackStats(track);
+  refreshTrackSource(track);
+  renderTrackList();
+  updateProfileFn();
+  scheduleSave();
+  return track;
+}
+
+function finishStructuralMutation(nextActiveTrackId = null) {
+  rebuildTree();
+  renderTrackList();
+  if (nextActiveTrackId) setActiveTrack(nextActiveTrackId);
+  updateProfileFn();
+  scheduleSave();
+}
+
+function densifyActiveTrackSpan(options = {}) {
+  const track = getActiveTrack();
+  if (!track) return { ok: false, error: 'No active track' };
+  const span = buildWorkingSpan(track.id, true);
+  const result = densifyTrackSpan(track, span, span.startIdx, span.endIdx, options);
+  if (!result.ok) return result;
+  applyTrackCoords(track.id, result.updatedCoords);
+  setSelectionSpan(buildSelectionSpan(getTrackById(track.id), result.startIdx, result.startIdx + result.replacementCoords.length - 1));
+  return result;
+}
+
+function simplifyActiveTrackSpan(options = {}) {
+  const track = getActiveTrack();
+  if (!track) return { ok: false, error: 'No active track' };
+  const span = buildWorkingSpan(track.id, true);
+  const result = simplifyTrackSpan(track, span, span.startIdx, span.endIdx, options);
+  if (!result.ok) return result;
+  applyTrackCoords(track.id, result.updatedCoords);
+  setSelectionSpan(buildSelectionSpan(getTrackById(track.id), result.startIdx, result.startIdx + result.replacementCoords.length - 1));
+  return result;
+}
+
+function convertActiveRouteToTrack(options = {}) {
+  const track = getActiveTrack();
+  if (!track) return { ok: false, error: 'No active route' };
+  const span = buildSelectionSpan(track, 0, track.coords.length - 1);
+  const result = convertRouteToTrack(track, span, 0, track.coords.length - 1, options);
+  if (!result.ok) return result;
+  if (result.replace) {
+    replaceTrackProperties(track.id, {
+      sourceKind: 'track',
+      trkType: result.createdTrack.trkType || track.trkType || '',
+      rteType: '',
+    });
+    finishStructuralMutation(track.id);
+  } else {
+    const created = createTrack(result.createdTrack.name, result.createdTrack.coords, {
+      color: track.color,
+      desc: result.createdTrack.desc,
+      cmt: result.createdTrack.cmt,
+      trkType: result.createdTrack.trkType,
+      sourceKind: 'track',
+      skipTreeHook: true,
+      skipSelect: true,
+    });
+    finishStructuralMutation(created?.id || track.id);
+  }
+  return result;
+}
+
+function splitActiveTrackSpan(options = {}) {
+  const track = getActiveTrack();
+  if (!track) return { ok: false, error: 'No active track' };
+  const span = buildWorkingSpan(track.id, true);
+  const result = splitTrackSpan(track, span, span.startIdx, span.endIdx, options);
+  if (!result.ok) return result;
+
+  const baseName = track.groupName || track.name;
+  const targetMode = options.mode === 'extract-segment' ? 'extract-segment' : result.mode;
+  const newTracks = [];
+  const groupId = targetMode === 'extract-segment'
+    ? ('grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6))
+    : null;
+
+  for (let i = 0; i < result.fragments.length; i++) {
+    const fragment = result.fragments[i];
+    if (!fragment.coords || fragment.coords.length < 2) continue;
+    const created = createTrack(baseName, fragment.coords, {
+      color: i === 0 ? track.color : nextColor(),
+      desc: track.desc,
+      cmt: track.cmt,
+      trkType: track.trkType,
+      sourceKind: track.sourceKind,
+      groupId,
+      groupName: groupId ? baseName : null,
+      segmentLabel: groupId ? `${fragment.role === 'selected' ? 'Selected' : fragment.role.charAt(0).toUpperCase() + fragment.role.slice(1)} segment` : null,
+      skipTreeHook: true,
+      skipSelect: true,
+    });
+    if (created) newTracks.push(created);
+  }
+
+  removeTrackById(track.id);
+  finishStructuralMutation(newTracks[0]?.id || null);
+  return result;
+}
+
+function mergeSelectedTracks(trackIds, options = {}) {
+  const selectedTracks = (trackIds || []).map(id => getTrackById(id)).filter(Boolean);
+  if (options.mode === 'segments') {
+    const grouping = ensureTrackGrouping(selectedTracks.map(track => track.id), options.groupName || selectedTracks[0]?.groupName || selectedTracks[0]?.name || 'Track');
+    if (!grouping) return { ok: false, error: 'Unable to merge tracks as segments' };
+    finishStructuralMutation(selectedTracks[0]?.id || null);
+    return { ok: true, kind: 'merge', mode: 'segments', preview: { inputTrackCount: selectedTracks.length } };
+  }
+
+  const result = mergeTrackSpans(selectedTracks, options);
+  if (!result.ok) return result;
+  const first = selectedTracks[0];
+  const created = createTrack(options.name || first.name, result.mergedCoords, {
+    color: first.color,
+    desc: first.desc,
+    cmt: first.cmt,
+    trkType: first.trkType,
+    sourceKind: 'track',
+    skipTreeHook: true,
+    skipSelect: true,
+  });
+  for (const track of selectedTracks) removeTrackById(track.id);
+  finishStructuralMutation(created?.id || null);
+  return result;
 }
 
 function fitToTrack(t) {
@@ -776,12 +952,31 @@ export function getTracksState() {
     get mapReady() { return mapReady; },
     get profileClosed() { return profileClosed; },
     set profileClosed(v) { profileClosed = v; },
+    get selectionSpan() { return activeSelectionSpan; },
     getActiveTrack,
+    getTrackById,
+    setActiveTrack,
+    enterEditForTrack: (id) => { setActiveTrack(id); enterEditMode(id); },
+    exitEditMode,
+    setSelectionSpan,
+    clearSelectionSpan,
+    buildSelectionSpanForTrack: (trackId, startIdx, endIdx) => {
+      const track = getTrackById(trackId);
+      return track ? buildSelectionSpan(track, startIdx, endIdx) : { ok: false, error: 'Track not found' };
+    },
+    densifyActiveTrackSpan,
+    simplifyActiveTrackSpan,
+    splitActiveTrackSpan,
+    mergeSelectedTracks,
+    convertActiveRouteToTrack,
     ensureProfileHoverLayer,
     PROFILE_HOVER_SOURCE_ID,
     syncProfileToggleButton,
     syncBottomRightOffset() {
       document.body.classList.toggle('profile-open', document.getElementById('profile-panel').classList.contains('visible'));
+    },
+    wireRectangleSelectionCheck(fn) {
+      if (_editFns) _editFns.isRectangleSelectionActive = fn;
     },
   };
 }
@@ -808,17 +1003,24 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   for (const st of saved) {
     if (!st.coords || !st.coords.length) continue;
     const t = {
-      id: 'trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      id: st.id || ('trk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
       name: st.name || 'Track',
       color: st.color || nextColor(),
       coords: st.coords,
       _statsCache: null,
+      desc: st.desc || '',
+      cmt: st.cmt || '',
+      trkType: st.trkType || '',
+      rteType: st.rteType || '',
+      sourceKind: st.sourceKind || 'track',
       groupId: st.groupId || null,
       groupName: st.groupName || null,
       segmentLabel: st.segmentLabel || null,
     };
     tracks.push(t);
   }
+  const savedWaypoints = loadWaypoints();
+  addWaypoints(savedWaypoints);
   if (tracks.length) {
     activeTrackId = tracks[tracks.length - 1].id;
     setTrackPanelVisible(true);
@@ -826,7 +1028,7 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   }
 
   // Init the editing module
-  initTrackEdit(mapRef, stateRef, updateProfile, {
+  _editFns = {
     findTrack: (id) => tracks.find(tr => tr.id === id),
     getActiveTrack,
     getTrackCount: () => tracks.length,
@@ -842,7 +1044,13 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     updateVertexHighlight,
     trackPtsLayerId,
     elevationAt,
-  });
+    isRectangleSelectionActive: null, // wired later by main.js
+    openInfoForTrack: (id, options) => {
+      const node = findNodeForTrackId(id, options);
+      if (node) openInfoEditor(node.id);
+    },
+  };
+  initTrackEdit(mapRef, stateRef, updateProfile, _editFns);
 
   // Re-enrich when new DEM tiles load
   map.on('data', (e) => {
@@ -864,7 +1072,9 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     createTrack,
     getActiveTrack,
     getTracks: () => tracks,
+    findTrackById: (id) => tracks.find(track => track.id === id),
     getWaypoints: () => waypoints,
+    findWaypointById,
     addWaypoints,
     fitToTrack,
     onImportComplete: () => onImportComplete(),
@@ -881,17 +1091,42 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     renderTrackList,
     scheduleSave,
     enterEditForTrack: (id) => { setActiveTrack(id); enterEditMode(id); },
+    createTrackWithoutTree: (name, coords, opts) => createTrack(name, coords, { ...opts, skipTreeHook: true }),
+    ensureTrackGrouping,
+    simplifyTrackById: (id, options) => {
+      const previousActiveTrackId = activeTrackId;
+      setActiveTrack(id);
+      const result = simplifyActiveTrackSpan(options);
+      if (previousActiveTrackId && previousActiveTrackId !== id) setActiveTrack(id);
+      return result;
+    },
+    densifyTrackById: (id, options) => {
+      const previousActiveTrackId = activeTrackId;
+      setActiveTrack(id);
+      const result = densifyActiveTrackSpan(options);
+      if (previousActiveTrackId && previousActiveTrackId !== id) setActiveTrack(id);
+      return result;
+    },
+    splitTrackById: (id, options) => {
+      setActiveTrack(id);
+      return splitActiveTrackSpan(options);
+    },
+    convertRouteById: (id, options) => {
+      setActiveTrack(id);
+      return convertActiveRouteToTrack(options);
+    },
+    mergeTrackNodeByIds: (ids, options) => mergeSelectedTracks(ids, options),
+    suggestTrackNameForFile,
+    createWaypoint,
+    findWaypointById,
+    updateWaypointById,
+    deleteWaypointById,
     showProfileForTrack: (id) => { setActiveTrack(id); updateProfileFn(); },
     fitToTrackById: (id) => { const t = tracks.find(tr => tr.id === id); if (t) fitToTrack(t); },
     deleteTrackById: (id) => {
       const t = tracks.find(tr => tr.id === id);
       if (!t) return;
-      const idx = tracks.indexOf(t);
-      const es = getEditState();
-      if (es.editingTrackId === id) exitEditMode();
-      removeTrackFromMap(t);
-      tracks.splice(idx, 1);
-      if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+      removeTrackById(id);
       scheduleSave();
     },
     renameTrackById: (id, name) => renameTrack(id, name),
