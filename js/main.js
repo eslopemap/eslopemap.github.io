@@ -24,6 +24,8 @@ import { initTracks, getTracksState } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
 import { loadSettings, saveSettings, clearAll as clearPersistedData } from './persist.js';
+import { initShortcuts, registerShortcut } from './shortcuts.js';
+import { openInfoEditor } from './gpx-tree.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 
@@ -494,6 +496,126 @@ initSearch(map);
 initTracks(map, state, updateProfile);
 const tracksState = getTracksState();
 initProfile(map, state, tracksState);
+
+// ---- Init shortcuts ----
+initShortcuts();
+
+// Ctrl/Cmd+P — toggle profile
+registerShortcut({ key: 'p', ctrl: true, handler: () => {
+  const profilePanel = document.getElementById('profile-panel');
+  const t = tracksState.getActiveTrack();
+  if (!t || t.coords.length < 2) return;
+  const isVisible = profilePanel.classList.contains('visible');
+  if (isVisible) {
+    profilePanel.classList.remove('visible');
+    tracksState.profileClosed = true;
+  } else {
+    profilePanel.classList.add('visible');
+    tracksState.profileClosed = false;
+  }
+  tracksState.syncProfileToggleButton();
+  tracksState.syncBottomRightOffset();
+}});
+
+// Ctrl/Cmd+L — toggle track list
+registerShortcut({ key: 'l', ctrl: true, handler: () => {
+  const trackPanel = document.getElementById('track-panel');
+  const isVisible = trackPanel.classList.contains('visible');
+  trackPanel.classList.toggle('visible', !isVisible);
+  // sync shell state
+  const shell = document.getElementById('track-panel-shell');
+  shell.classList.toggle('visible', !isVisible);
+  shell.classList.toggle('panel-surface', !isVisible);
+}});
+
+// N — new track
+registerShortcut({ key: 'n', handler: () => {
+  document.getElementById('rail-new-btn')?.click();
+}});
+
+// E — edit active track
+registerShortcut({ key: 'e', handler: () => {
+  document.getElementById('rail-edit-btn')?.click();
+}});
+
+// Ctrl/Cmd+I — Info editor for active track
+registerShortcut({ key: 'i', ctrl: true, handler: async () => {
+  const activeId = tracksState.activeTrackId;
+  if (!activeId) return;
+  const { getWorkspace } = await import('./gpx-tree.js');
+  const { walkNodes } = await import('./gpx-model.js');
+  const ws = getWorkspace();
+  let targetNodeId = null;
+  walkNodes(ws.children, n => {
+    if (targetNodeId) return;
+    if (n._legacyTrackId === activeId || n._legacyTrackIds?.includes(activeId)) {
+      targetNodeId = n.id;
+    }
+  });
+  if (targetNodeId) openInfoEditor(targetNodeId);
+}});
+
+// Esc — exit edit mode / close panels
+registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
+  if (tracksState.editingTrackId) {
+    document.getElementById('rail-edit-btn')?.click();
+  }
+}});
+
+// ---- Left edit rail wiring ----
+{
+  const railNewBtn = document.getElementById('rail-new-btn');
+  const railEditBtn = document.getElementById('rail-edit-btn');
+  const railUndoBtn = document.getElementById('rail-undo-btn');
+  const railRectBtn = document.getElementById('rail-rect-btn');
+  const railMobileBtn = document.getElementById('rail-mobile-btn');
+
+  // New track button — same as existing draw-btn
+  railNewBtn?.addEventListener('click', () => {
+    document.getElementById('draw-btn')?.click();
+  });
+
+  // Edit active track button
+  railEditBtn?.addEventListener('click', () => {
+    const t = tracksState.getActiveTrack();
+    if (!t) return;
+    // Find the edit button for this track in the existing panel and click it
+    const editBtns = document.querySelectorAll(`.track-edit[data-id="${t.id}"]`);
+    if (editBtns.length) editBtns[0].click();
+    syncRailState();
+  });
+
+  // Undo button — delegates to existing undo
+  railUndoBtn?.addEventListener('click', () => {
+    document.getElementById('undo-btn')?.click();
+  });
+
+  // Rect delete — delegates to existing rect-delete
+  railRectBtn?.addEventListener('click', () => {
+    document.getElementById('rect-delete-btn')?.click();
+  });
+
+  // Mobile mode — delegates to existing mobile-mode
+  railMobileBtn?.addEventListener('click', () => {
+    document.getElementById('mobile-mode-btn')?.click();
+  });
+
+  // Sync rail state periodically with track editing state
+  function syncRailState() {
+    const t = tracksState.getActiveTrack();
+    railEditBtn.disabled = !t;
+    railEditBtn.classList.toggle('active', Boolean(tracksState.editingTrackId));
+    railUndoBtn.style.display = tracksState.editingTrackId ? '' : 'none';
+    railRectBtn.disabled = !tracksState.editingTrackId;
+
+    // Mobile btn visibility
+    const mobileBtn = document.getElementById('mobile-mode-btn');
+    railMobileBtn.style.display = mobileBtn?.style.display === 'none' ? 'none' : '';
+  }
+
+  // Sync rail state on interval (lightweight)
+  setInterval(syncRailState, 500);
+}
 
 // ---- Settings event handlers ----
 

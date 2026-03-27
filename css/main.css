@@ -186,6 +186,37 @@
     }
     .tb-btn:disabled:hover { background: rgba(255,255,255,0.94); }
 
+    /* Left edit rail */
+    #edit-rail {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 11;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .rail-btn {
+      background: rgba(255,255,255,0.94);
+      border: none;
+      border-radius: 8px;
+      padding: 7px 9px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .rail-btn:hover { background: rgba(240,240,240,0.97); }
+    .rail-btn.active { background: #4a90d9; color: #fff; box-shadow: 0 1px 6px rgba(74,144,217,0.5); }
+    .rail-btn:disabled { opacity: 0.4; cursor: default; }
+    .rail-btn:disabled:hover { background: rgba(255,255,255,0.94); }
+
     #track-panel-shell {
       position: absolute;
       top: 10px;
