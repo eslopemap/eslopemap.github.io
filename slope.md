@@ -24,8 +24,13 @@
 ## Track Editor
 - **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
 - **Single-file  and Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
+- **Workspace tree** — hierarchical tree view in the track panel showing folder → file → track → segment/route/waypoint nodes with disclosure toggles and type icons (📁📄🛤️🧭📍)
+- **Context menu** — right-click, long-press, or kebab (⋮) button on any tree node opens a context menu with Info, Edit, Profile, Zoom to, and Delete actions
+- **Info editor** — modal dialog for editing GPX metadata fields per node type: name/desc for files, name/desc/cmt/type for tracks and routes, name/desc/cmt/sym/type for waypoints; saves through the existing persistence flow; Ctrl/Cmd+I shortcut opens Info for the active track
 - **Top-right track workspace** — compact floating panel for track management and export
+- **Left edit rail** — vertically centered rail on the left side of the map with New (+), Edit (✎), Undo (↩), Rectangle select (⬚), and Mobile (📱) buttons; mirrors the existing toolbar actions
 - **Icon-based toolbar** — all toolbar buttons use icons with title tooltips to save space: `+` (new track), 📄 (open file), 📈 (profile), 📍 (track list), plus contextual ↩ (undo) and ⬚ (rectangle delete)
+- **Keyboard shortcuts** — central shortcut registry with focus guards (no firing inside inputs/textareas); Ctrl/Cmd+P (toggle profile), Ctrl/Cmd+L (toggle track list), N (new track), E (edit active track), Ctrl/Cmd+I (Info editor), Esc (exit edit mode); macOS Cmd parity for all Ctrl shortcuts
 - **Draw mode** — `+` button creates a new track with a pre-filled name input; enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
 - **Track rename** — double-click a track name in the panel (or group header) to inline-edit; press Enter to commit, Escape to cancel
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
@@ -78,18 +83,21 @@
 
 ## Module structure
 - **slope.html** — shell with HTML markup, CDN script tags, importmap for `@we-gold/gpxjs`, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
-- **css/main.css** — all styles including track group nesting
-- **js/main.js** — entry point: creates map, imports all modules, wires settings event handlers, persistence, exposes window getters for tests
+- **css/main.css** — all styles including track group nesting, workspace tree, context menu, Info editor, left edit rail
+- **js/main.js** — entry point: creates map, imports all modules, wires settings event handlers, persistence, shortcuts, left rail, exposes window getters for tests
 - **js/constants.js** — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers
 - **js/dem.js** — Elevation sampling from loaded DEM tiles (cursor elevation & slope)
 - **js/ui.js** — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, Nominatim search
-- **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer
+- **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer, tree integration
 - **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, undo stack, draw/undo buttons
-- **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation
-- **js/persist.js** — localStorage persistence for tracks, settings, and profile display settings (thin wrapper, no deps)
+- **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation; calls `onImportComplete` for tree sync
+- **js/persist.js** — localStorage persistence for tracks, settings, profile display settings, and workspace tree (thin wrapper, no deps)
 - **js/profile.js** — Chart.js elevation profile with speed, pause detection, display settings menu, multiple x-axis modes
-- **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS`
+- **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS` + `TREE_STATE_DEFAULTS`
 - **js/utils.js** — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
+- **js/gpx-model.js** — GPX workspace tree data model: node constructors (folder, file, track, segment, route, waypoint), stable IDs, tree traversal helpers, action-target resolution shell, `buildTreeFromLegacy()`
+- **js/gpx-tree.js** — workspace tree renderer: hierarchical tree in track panel, context menu (right-click/long-press/kebab), Info editor modal, tree–legacy track sync
+- **js/shortcuts.js** — central keyboard shortcut registry with focus guards, macOS Cmd parity
 
 ### Dependency flow
 - `constants.js` ← `utils.js` (pure, no DOM)
@@ -98,9 +106,12 @@
 - `persist.js` — standalone (localStorage only)
 - `io.js` ← `utils.js`, `@we-gold/gpxjs` (GPX parsing/serialization)
 - `track-edit.js` ← `ui.js` (cursor tooltip)
-- `tracks.js` ← `utils.js`, `constants.js`, `dem.js`, `track-edit.js`, `io.js`, `persist.js`
+- `gpx-model.js` — standalone (pure data)
+- `gpx-tree.js` ← `gpx-model.js`, `persist.js`
+- `shortcuts.js` — standalone (DOM keydown listener)
+- `tracks.js` ← `utils.js`, `constants.js`, `dem.js`, `track-edit.js`, `io.js`, `persist.js`, `gpx-tree.js`
 - `profile.js` ← `utils.js`, `dem.js`, `ui.js`, `persist.js` (Chart.js + DOM)
-- `main.js` ← all modules (orchestrator)
+- `main.js` ← all modules (orchestrator), `shortcuts.js`, `gpx-tree.js`
 - `state.js` — standalone, imported by `main.js` which creates the store and passes it to modules
 
 ## Technical gotchas
@@ -158,6 +169,45 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 - `mobileFriendlyMode` — boolean. Default true on mobile. When enabled, shows crosshair-centered insertion and pan-to-move vertex editing. On localhost, the toggle is also shown on desktop for debugging.
 - `insertPreviewLngLat` — tracks cursor/center position for the insert preview dashed line.
 - `insertPopupMarker` — MapLibre marker showing the "+" button on the map next to the selected vertex.
+
+### Workspace tree
+- `js/gpx-model.js` defines node types: `folder`, `file`, `track`, `segment`, `route`, `waypoint`. Each node has a stable auto-generated ID (`uid(prefix)`), type-specific metadata fields, and optional `children[]`.
+- `buildTreeFromLegacy()` derives the workspace tree from the existing `tracks[]` and `waypoints[]` arrays. Grouped tracks (multi-segment GPX imports with matching `groupId`) become file → track → segment hierarchies. Ungrouped tracks become file → track.
+- The tree is rendered in the `#track-list` element alongside (below) the existing flat track list. Tree rows show disclosure toggles, type icons, node names, and inline stats.
+- `treeState` holds UI state: `expandedNodeIds` (Set), `selectedNodeId`, `contextMenu`, `infoEditor`.
+- `saveWorkspace()` / `loadWorkspace()` persist the workspace tree structure and metadata to localStorage under `slope:workspace`. On restore, persisted metadata (desc, cmt, type, sym) is merged back into freshly built tree nodes.
+
+### Context menu
+- Triggered by right-click, long-press (600ms on mobile), or clicking the kebab (⋮) button on any tree row.
+- Menu items depend on node type:
+  - All except segment: **ℹ Info…** (opens Info editor), **🗑 Delete** (with confirmation dialog)
+  - Track / segment / route: **✎ Edit**, **📈 Profile**, **🔎 Zoom to**
+  - File / folder: **🔎 Zoom to all**
+- Closes on outside click.
+
+### Info editor
+- Modal overlay (`#info-editor-overlay`) shown over the map.
+- Editable fields per node type: folder (name), file (name, desc), track (name, desc, cmt, type), route (name, desc, cmt, type), waypoint (name, desc, cmt, sym, type).
+- Name changes sync back to the legacy track model via `renameTrack` / `renameGroup`.
+- Metadata changes are persisted through the workspace save flow.
+- Esc or Cancel closes without saving; Enter (in single-line fields) or Save commits. Focus is placed on the first input on open.
+
+### Left edit rail
+- Vertically centered floating column (`#edit-rail`) on the left side of the map with buttons: New (+), Edit (✎), Undo (↩), Rect select (⬚), Mobile (📱).
+- Each rail button delegates to the corresponding existing toolbar button.
+- Edit button enables when a track is active, highlights (active class) when editing is in progress.
+- Undo and Mobile buttons visibility matches the existing toolbar button state.
+- Rail state syncs every 500ms via `setInterval`.
+
+### Keyboard shortcuts
+- All shortcuts registered via `js/shortcuts.js` with focus guards: shortcuts do not fire inside `<input>`, `<textarea>`, `<select>`, or `contenteditable` elements.
+- `Ctrl/Cmd+P` — toggle elevation profile panel.
+- `Ctrl/Cmd+L` — toggle track list panel.
+- `N` — create new track (delegates to draw button).
+- `E` — edit active track (delegates to edit rail button).
+- `Ctrl/Cmd+I` — open Info editor for the active track (finds the tree node matching `activeTrackId`).
+- `Esc` — exit edit mode.
+- Future stubs reserved: `R` (rectangle select), `Ctrl/Cmd+Shift+S` (save), selection clipboard shortcuts.
 
 ### Track selection vs editing (unified)
 - **Select** (click track name): sets `activeTrackId`. Line becomes 4px wide. Profile auto-opens. Only start/end markers visible.
