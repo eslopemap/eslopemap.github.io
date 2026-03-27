@@ -7,6 +7,7 @@ import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
 import { saveTracks, loadTracks } from './persist.js';
+import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onImportComplete, openInfoEditor } from './gpx-tree.js';
 
 let map, state;
 let updateProfileFn = () => {};  // wired by initTracks
@@ -596,6 +597,7 @@ function renderTrackList() {
   syncProfileToggleButton();
   const es = getEditState();
   es.syncUndoBtn();
+  renderGpxTree();
 }
 
 // ---- Active track ----
@@ -620,6 +622,7 @@ function deleteTrack(id) {
   removeTrackFromMap(t);
   tracks.splice(idx, 1);
   if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+  onTrackDeleted(id);
   renderTrackList();
   updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
   scheduleSave();
@@ -638,6 +641,7 @@ function createTrack(name, coords, opts) {
   if (mapReady) addTrackToMap(t);
   setTrackPanelVisible(true);
   setActiveTrack(t.id);
+  onTrackCreated(t);
   scheduleSave();
   return t;
 }
@@ -863,6 +867,37 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     getWaypoints: () => waypoints,
     addWaypoints,
     fitToTrack,
+  });
+
+  // Init the workspace tree
+  initGpxTree({
+    getTracks: () => tracks,
+    getWaypoints: () => waypoints,
+    findTrack: (id) => tracks.find(tr => tr.id === id),
+    trackStats,
+    getActiveTrackId: () => activeTrackId,
+    setActiveTrack,
+    renderTrackList,
+    scheduleSave,
+    enterEditForTrack: (id) => { setActiveTrack(id); enterEditMode(id); },
+    showProfileForTrack: (id) => { setActiveTrack(id); updateProfileFn(); },
+    fitToTrackById: (id) => { const t = tracks.find(tr => tr.id === id); if (t) fitToTrack(t); },
+    deleteTrackById: (id) => {
+      const t = tracks.find(tr => tr.id === id);
+      if (!t) return;
+      const idx = tracks.indexOf(t);
+      const es = getEditState();
+      if (es.editingTrackId === id) exitEditMode();
+      removeTrackFromMap(t);
+      tracks.splice(idx, 1);
+      if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
+      scheduleSave();
+    },
+    renameTrackById: (id, name) => renameTrack(id, name),
+    renameGroupByTrackId: (id, name) => {
+      const t = tracks.find(tr => tr.id === id);
+      if (t?.groupId) renameGroup(t.groupId, name);
+    },
   });
 
   // Add map layers for tracks once map is loaded
