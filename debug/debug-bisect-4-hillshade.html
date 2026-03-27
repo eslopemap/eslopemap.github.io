@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html><head>
+	<meta charset="utf-8" />
+	<title>3D Bisect 4: hillshade conflict on same DEM source</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
+	<link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+	<style>
+		html, body, #map { margin: 0; width: 100%; height: 100%; }
+		#info {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			z-index: 10;
+			background: rgba(255, 255, 255, 0.96);
+			padding: 10px 12px;
+			border-radius: 8px;
+			font: 13px/1.4 system-ui;
+			box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+			max-width: 420px;
+		}
+		#status {
+			margin-top: 8px;
+			font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			white-space: pre-line;
+		}
+		label { display: block; margin-top: 6px; }
+	</style>
+</head>
+<body>
+	<div id="map"></div>
+	<div id="info">
+		<strong>3D Bisect 4: hillshade conflict</strong><br>
+		Terrain-analysis always uses <code>dem</code>.<br>
+		Toggle 3D and compare hillshade on the same DEM source vs a duplicate DEM source.
+		<label><input type="checkbox" id="toggle3d" checked> Enable 3D terrain</label>
+		<label><input type="checkbox" id="sameHillshade" checked> Same-source hillshade (<code>dem</code>)</label>
+		<label><input type="checkbox" id="separateHillshade"> Separate-source hillshade (<code>dem-hillshade</code>)</label>
+		<div id="status"></div>
+	</div>
+	<script>
+		const status = document.getElementById('status');
+
+		const slopeRamp = [
+			'step', ['slope'],
+			'#ffffff', 20, '#c0ffff', 24, '#57ffff', 28, '#00d3db',
+			31, '#fffa32', 34, '#ffc256', 37, '#fd7100', 40, '#ff0000',
+			43, '#e958ff', 47, '#a650ff', 52, '#5e1eff', 57, '#0000ff', 65, '#aaaaaa'
+		];
+
+		const map = new maplibregl.Map({
+			container: 'map',
+			center: [6.8652, 45.8326],
+			zoom: 12,
+			pitch: 60,
+			bearing: 25,
+			attributionControl: false,
+			style: {
+				version: 8,
+				glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+				sources: {
+					osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 },
+					dem: { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' },
+					'dem-hillshade': { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' }
+				},
+				layers: [
+					{ id: 'basemap', type: 'raster', source: 'osm' },
+					{
+						id: 'hillshade-same',
+						type: 'hillshade',
+						source: 'dem',
+						paint: { 'hillshade-exaggeration': 0.10, 'hillshade-method': 'igor' }
+					},
+					{
+						id: 'hillshade-separate',
+						type: 'hillshade',
+						source: 'dem-hillshade',
+						layout: { visibility: 'none' },
+						paint: { 'hillshade-exaggeration': 0.10, 'hillshade-method': 'igor' }
+					}
+				]
+			}
+		});
+
+		function syncStatus() {
+			const terrainOn = document.getElementById('toggle3d').checked;
+			const sameOn = document.getElementById('sameHillshade').checked;
+			const separateOn = document.getElementById('separateHillshade').checked;
+			status.textContent = [
+				`terrain=${terrainOn ? 'on' : 'off'}`,
+				`same-source hillshade=${sameOn ? 'on' : 'off'}`,
+				`separate-source hillshade=${separateOn ? 'on' : 'off'}`,
+				'Expected: same-source hillshade is the risky combination in 3D.'
+			].join('\n');
+		}
+
+		function syncState() {
+			const terrainOn = document.getElementById('toggle3d').checked;
+			const sameOn = document.getElementById('sameHillshade').checked;
+			const separateOn = document.getElementById('separateHillshade').checked;
+
+			map.setLayoutProperty('hillshade-same', 'visibility', sameOn ? 'visible' : 'none');
+			map.setLayoutProperty('hillshade-separate', 'visibility', separateOn ? 'visible' : 'none');
+
+			if (terrainOn) {
+				map.setTerrain({ source: 'dem', exaggeration: 1.4 });
+			} else {
+				map.setTerrain(null);
+			}
+
+			console.log('[bisect4] terrain=%s same=%s separate=%s', terrainOn, sameOn, separateOn);
+			syncStatus();
+		}
+
+		map.on('load', () => {
+			map.addLayer({
+				id: 'analysis',
+				type: 'terrain-analysis',
+				source: 'dem',
+				paint: {
+					'terrain-analysis-attribute': 'slope',
+					'terrain-analysis-opacity': 0.45,
+					'terrain-analysis-color': slopeRamp,
+					'blend-mode': 'multiply'
+				}
+			});
+
+			document.getElementById('toggle3d').addEventListener('change', syncState);
+			document.getElementById('sameHillshade').addEventListener('change', syncState);
+			document.getElementById('separateHillshade').addEventListener('change', syncState);
+			syncState();
+		});
+
+		map.on('error', (e) => console.error('[bisect4] Map error:', e.error ? e.error.message : e));
+	</script>
+</body></html>

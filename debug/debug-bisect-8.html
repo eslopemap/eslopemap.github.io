@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8" />
+  <title>3D Bisect 8: setTerrain before addLayer + applyModeState after</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+  <style>html, body, #map { margin: 0; width: 100%; height: 100%; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; background: #fff; padding: 8px 12px; border-radius: 6px; font: 13px system-ui; box-shadow: 0 1px 4px rgba(0,0,0,.3); max-width: 450px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">
+    <b>3D Bisect 8: Our app's EXACT order</b><br>
+    setTerrain → addLayer → setPaintProperty(zoom expr).
+    Mimics: persisted terrain3d=true, slope+relief mode.<br>
+    3D is ON from the start.
+  </div>
+  <script>
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [6.8652, 45.8326], zoom: 12,
+      style: {
+        version: 8,
+        sources: {
+          osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 },
+          dem: { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' }
+        },
+        layers: [
+          { id: 'basemap', type: 'raster', source: 'osm' },
+          { id: 'dem-loader', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.10 } }
+        ]
+      }
+    });
+    map.on('load', () => {
+      // Step 1: setTerrain FIRST (persisted state)
+      console.log('[bisect8] Step 1: setTerrain');
+      map.setTerrain({ source: 'dem', exaggeration: 1.4 });
+
+      // Step 2: addLayer
+      console.log('[bisect8] Step 2: addLayer analysis');
+      map.addLayer({
+        id: 'analysis', type: 'terrain-analysis', source: 'dem',
+        paint: {
+          'terrain-analysis-attribute': 'slope',
+          'terrain-analysis-opacity': 0.45,
+          'terrain-analysis-color': ['step', ['slope'],
+            '#ffffff', 20, '#c0ffff', 28, '#00d3db', 34, '#ffc256',
+            40, '#ff0000', 52, '#5e1eff', 65, '#aaaaaa'],
+          'blend-mode': 'multiply'
+        }
+      });
+      map.addLayer({
+        id: 'analysis-relief', type: 'terrain-analysis', source: 'dem',
+        paint: {
+          'terrain-analysis-attribute': 'elevation',
+          'terrain-analysis-opacity': 0.45,
+          'terrain-analysis-color': ['interpolate', ['linear'], ['elevation'],
+            0, '#A9D4E8', 500, '#C8B75F', 1500, '#705B43', 3000, '#D9CCBF', 5000, '#F6F2EF'],
+          'blend-mode': 'multiply'
+        }
+      });
+
+      // Step 3: applyModeState — override with zoom expression (slope+relief)
+      console.log('[bisect8] Step 3: applyModeState (zoom expressions)');
+      map.setLayoutProperty('analysis', 'visibility', 'visible');
+      map.setPaintProperty('analysis', 'terrain-analysis-attribute', 'slope');
+      map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+        ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 0.45]);
+      map.setPaintProperty('analysis', 'blend-mode', 'multiply');
+
+      map.setLayoutProperty('analysis-relief', 'visibility', 'visible');
+      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity',
+        ['interpolate', ['linear'], ['zoom'], 10, 0.45, 11, 0]);
+      map.setPaintProperty('analysis-relief', 'blend-mode', 'multiply');
+
+      console.log('[bisect8] Done — 3D terrain + terrain-analysis active');
+    });
+    map.on('error', e => console.error('Map error:', e.error ? e.error.message : e));
+  </script>
+</body></html>

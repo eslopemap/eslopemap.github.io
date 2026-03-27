@@ -12,7 +12,7 @@
 - **3D terrain** — toggle with configurable exaggeration
 
 ## Basemaps
-- **OSM** (default), **OTM**, **IGN plan (FR)**, **SwissTopo vector**, **Kartverket topo (NO)**
+- **OSM** (default), **OTM**, **IGN plan (FR)**, **SwissTopo vector**, **Kartverket topo (NO)**, **None** (white background, useful for viewing overlays in isolation)
 - **Basemap opacity** — slider for the visible basemap stack
 - **Auto fly-to** — selecting a regional basemap outside its supported area recenters the view
 - **URL persistence** — center, zoom, basemap, mode, opacity, terrain state, bearing, and pitch are encoded in the URL hash
@@ -25,15 +25,18 @@
 - **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
 - **Single-file  and Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
 - **Workspace tree** — hierarchical tree view in the track panel showing folder → file → track → segment/route/waypoint nodes with disclosure toggles and type icons (📁📄🛤️🧭📍)
-- **Context menu** — right-click, long-press, or kebab (⋮) button on any tree node opens a context menu with Info, Edit, Profile, Zoom to, and Delete actions
+- **Context menu** — right-click, long-press, the row kebab (⋮), or the persistent top-right actions button opens the relevant context menu for the selected item; file nodes expose `New track` and `Export GPX`, while track and route nodes expose edit/profile/geometry actions plus `Export GPX`
+- **Route-aware tree actions** — route nodes now expose `Convert to track` and `Convert and replace`; track and segment nodes expose `Simplify`, `Add intermediate points`, and `Split`; grouped track nodes expose `Merge segments into one`
 - **Info editor** — modal dialog for editing GPX metadata fields per node type: name/desc for files, name/desc/cmt/type for tracks and routes, name/desc/cmt/sym/type for waypoints; saves through the existing persistence flow; Ctrl/Cmd+I shortcut opens Info for the active track
-- **Top-right track workspace** — compact floating panel for track management and export
-- **Left edit rail** — vertically centered rail on the left side of the map with New (+), Edit (✎), Undo (↩), Rectangle select (⬚), and Mobile (📱) buttons; mirrors the existing toolbar actions
-- **Icon-based toolbar** — all toolbar buttons use icons with title tooltips to save space: `+` (new track), 📄 (open file), 📈 (profile), 📍 (track list), plus contextual ↩ (undo) and ⬚ (rectangle delete)
-- **Keyboard shortcuts** — central shortcut registry with focus guards (no firing inside inputs/textareas); Ctrl/Cmd+P (toggle profile), Ctrl/Cmd+L (toggle track list), N (new track), E (edit active track), Ctrl/Cmd+I (Info editor), Esc (exit edit mode); macOS Cmd parity for all Ctrl shortcuts
-- **Draw mode** — `+` button creates a new track with a pre-filled name input; enters edit mode; click to add vertices, double-click or `Escape` to finish; vertices can be dragged during editing
+- **Top-right track workspace** — compact floating panel for track management; the always-visible header row now carries global workspace actions only (new, import file/folder, profile, active-item actions, track list)
+- **Left edit rail** — vertically centered rail on the left side of the map with New (+), Edit (✎), Undo (↩), Rectangle selection (⬚), and Mobile (📱) buttons; mirrors the existing toolbar actions and the Edit button directly toggles edit mode for the active track
+- **Action scopes** — object-specific geometry and export actions now live in the active-item context menu and per-row kebab menu, while the persistent top row stays reserved for global workspace actions to avoid duplicate entry points
+- **Selection-context highlighting** — when a rectangle selection span is active, eligible actions turn bright blue while unrelated actions dim or disable; hovering an action updates the anchored selection hint with its consequence preview
+- **Keyboard shortcuts** — central shortcut registry with focus guards (no firing inside inputs/textareas); Ctrl/Cmd+P (toggle profile), Ctrl/Cmd+L (toggle track list), N (new track), E (edit active track), R (toggle rectangle selection), Ctrl/Cmd+I (Info editor), Esc (exit edit mode or clear selection); macOS Cmd parity for all Ctrl shortcuts
+- **Draw mode** — `+` button creates a new track and enters edit mode; click to add vertices, double-click or `Escape` to finish; when a newly drawn track is finished, the `Info` editor opens automatically (preferring the parent file when the track was created in a new file)
 - **Track rename** — double-click a track name in the panel (or group header) to inline-edit; press Enter to commit, Escape to cancel
 - **Track list button state** — pin button is greyed out when there are no tracks and becomes a close button while the track panel is open
+- **Track panel auto-scroll** — selecting or activating a track scrolls the workspace tree so the active row stays visible
 - **Multi-track management** — color-coded tracks with selection, deletion (with confirmation), export actions, and active-track emphasis
 - **Select vs Edit** — selecting a track widens the line and shows the profile; clicking the edit button (✎) enters edit mode with fully interactive vertices. No separate draw mode — editing new and existing tracks uses the same unified editing state.
 - **Vertex selection** — clicking a vertex (desktop) or tapping it (mobile) selects it with blue highlight; an on-map "+" popup appears next to the selected vertex
@@ -47,9 +50,14 @@
 - **Delete from insertion point** — Delete key or Backspace deletes the currently selected vertex first, then the insertion-point vertex, then the last point as fallback
 - **Undo stack** — real undo (Ctrl+Z / Cmd+Z / ↩ toolbar button) with coordinate snapshots; captures state before every mutation (add, delete, move, rect-delete); max 50 entries; cleared on enter/exit edit mode
 - **Rectangle delete** — ⬚ button in toolbar (visible during editing); drag a rectangle on the map to select all track points inside, then delete them; red dashed feedback overlay, toast notification with count. On mobile, touch-drag draws the rectangle and a confirmation dialog appears before deleting.
+- **Rectangle selection** — explicit `Rectangle selection` mode resolves all hit points on the active track to the smallest enclosing continuous span, keeps the selection anchored with an informational popup, and reuses the existing action row for follow-up operations; works during both editing and non-editing modes; `Esc` clears the active selection span
+- **Add intermediate points** — densifies the full active track or the selected span so no surviving gap exceeds 5 m; interpolates elevation and timestamps when present
+- **Simplify** — defaults to Visvalingam-Whyatt with elevation-extrema protection and a post-pass max-gap rule (`15 × horizontal tolerance`); Douglas-Peucker is available as an advanced prompt option
+- **Split / Merge** — split can operate on a selected point or selected span; grouped sibling segments can be merged back into one segment from the tree context menu or the action row when a grouped track is active
+- **Route to track conversion** — imported GPX routes stay typed as routes in the workspace tree and can be converted to a sibling track or replaced in-place with track metadata
 - **Desktop vertex editing** — drag vertices to reposition (works in unified edit mode); right-click always pans/rotates (never adds points)
 - **Mobile vertex editing** — mobile-friendly mode is default on mobile (📱 toggle); crosshair at center, tap inserts at center, tap vertex then pan to reposition. Desktop-style mode also available (tap=click, long-press-drag=move vertex). On localhost, the 📱 toggle is shown on desktop for debugging.
-- **Export** — active track as GPX or GeoJSON; all tracks as GPX preserving group structure (grouped → one `<trk>` per group with `<trkseg>` per segment); includes `<wpt>` elements
+- **Export** — active track as GPX or GeoJSON from the footer export bar; individual file, track, and route export as GPX from the context menu; all tracks as GPX preserving group structure (grouped → one `<trk>` per group with `<trkseg>` per segment); includes `<wpt>` elements and route exports
 - **Directory export** — 'Save to folder…' button for File System Access browsers; writes one GPX per track
 - **GPX waypoints** — `<wpt>` elements parsed from GPX via gpxjs; rendered as amber circles with text labels on the map; included in 'Export All GPX'
 - **GPX timestamps** — `<time>` elements parsed from GPX and stored as epoch-ms in `coords[3]`; preserved in export; enables speed/pace computation and time-based profile x-axis
@@ -65,13 +73,14 @@
 - **Reopenable profile** — the track panel includes a profile toggle so closing the chart is not terminal
 - **Profile-to-map hover linkage** — hovering the profile highlights the corresponding track vertex on the map and shows cursor tooltip at the vertex
 - **Hover pan assist** — if the hovered vertex is out of view, the map pans to bring it back on screen
+- **Profile span filter** — when a rectangle selection span is active, the profile switches to that continuous span, shows a filter badge in the header, and provides a one-click `Full` reset button
 
 ## UX
 - **Settings toggle** — top-left `🌍 Settings` button with auto-collapse when you start dragging the map
 - **Elevation & slope display** — configurable via dropdown: `At cursor` (floating tooltip near pointer, default on desktop), `Corner` (fixed in legend panel, default on mobile), `No` (hidden)
 - **Mobile center crosshair** — a small '+' crosshair is always shown at the center of the screen on mobile, continuously updating the corner elevation & slope info as the map moves. During track editing, the crosshair becomes larger and blue.
 - **Mobile tap crosshair** — tapping the map on mobile shows a crosshair at tap location with elevation/slope info; disappears on pan
-- **Track panel header layout** — when open, the header row is `Tracks`, `Profile`, draw button, close button; track details stay below
+- **Track panel header layout** — when open, the header stays sticky while the tree scrolls so the workspace actions remain visible
 - **Panel styling** — controls, legend, profile, and the open track panel share the same translucent blurred panel surface
 - **Bottom-right controls** — native MapLibre bottom-right stack with navigation, geolocate, ruler, and attribution
 - **Legend behavior** — dynamic color ramp for the current mode; in `Mode: none`, the legend collapses to cursor info only
@@ -93,6 +102,8 @@
 - **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation; calls `onImportComplete` for tree sync
 - **js/persist.js** — localStorage persistence for tracks, settings, profile display settings, and workspace tree (thin wrapper, no deps)
 - **js/profile.js** — Chart.js elevation profile with speed, pause detection, display settings menu, multiple x-axis modes
+- **js/track-ops.js** — pure FEAT2 operation layer for normalized selection spans, route conversion, simplify, split, merge, densify, and consequence descriptions
+- **js/selection-tools.js** — rectangle selection controller with touch/desktop drag handling, enclosing-span resolution, and anchored hint popup
 - **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS` + `TREE_STATE_DEFAULTS`
 - **js/utils.js** — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
 - **js/gpx-model.js** — GPX workspace tree data model: node constructors (folder, file, track, segment, route, waypoint), stable IDs, tree traversal helpers, action-target resolution shell, `buildTreeFromLegacy()`
@@ -173,29 +184,35 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 ### Workspace tree
 - `js/gpx-model.js` defines node types: `folder`, `file`, `track`, `segment`, `route`, `waypoint`. Each node has a stable auto-generated ID (`uid(prefix)`), type-specific metadata fields, and optional `children[]`.
 - `buildTreeFromLegacy()` derives the workspace tree from the existing `tracks[]` and `waypoints[]` arrays. Grouped tracks (multi-segment GPX imports with matching `groupId`) become file → track → segment hierarchies. Ungrouped tracks become file → track.
-- The tree is rendered in the `#track-list` element alongside (below) the existing flat track list. Tree rows show disclosure toggles, type icons, node names, and inline stats.
+- The tree is rendered directly in the `#track-list` element and is now the only panel renderer. Tree rows show disclosure toggles, type icons, node names, and inline stats.
 - `treeState` holds UI state: `expandedNodeIds` (Set), `selectedNodeId`, `contextMenu`, `infoEditor`.
-- `saveWorkspace()` / `loadWorkspace()` persist the workspace tree structure and metadata to localStorage under `slope:workspace`. On restore, persisted metadata (desc, cmt, type, sym) is merged back into freshly built tree nodes.
+- `saveWorkspace()` / `loadWorkspace()` persist the workspace tree structure and metadata to localStorage under `slope:workspace`. On restore, the saved workspace structure is authoritative, with orphan legacy tracks and waypoints appended as a fallback.
+- `saveTracks()` / `loadTracks()` now preserve stable track IDs, and waypoints are persisted independently so file placement and waypoint nodes survive reloads exactly.
 
 ### Context menu
 - Triggered by right-click, long-press (600ms on mobile), or clicking the kebab (⋮) button on any tree row.
 - Menu items depend on node type:
   - All except segment: **ℹ Info…** (opens Info editor), **🗑 Delete** (with confirmation dialog)
   - Track / segment / route: **✎ Edit**, **📈 Profile**, **🔎 Zoom to**
-  - File / folder: **🔎 Zoom to all**
+  - File: **＋ New file**, **＋ New track**, **⧉ Duplicate**, **Copy**, **Cut**, **Paste**, **🔎 Zoom to all**
+  - Track: **＋ New segment**
+  - Track / segment / waypoint: **⧉ Duplicate**, **Copy**, **Cut**
+  - File / folder: **Paste**, **🔎 Zoom to all**
+- The track panel header also has a workspace kebab menu for root-level **New file** and **Paste**.
 - Closes on outside click.
 
 ### Info editor
 - Modal overlay (`#info-editor-overlay`) shown over the map.
 - Editable fields per node type: folder (name), file (name, desc), track (name, desc, cmt, type), route (name, desc, cmt, type), waypoint (name, desc, cmt, sym, type).
 - Name changes sync back to the legacy track model via `renameTrack` / `renameGroup`.
+- Waypoint metadata changes also sync back into the waypoint store used for export and persistence.
 - Metadata changes are persisted through the workspace save flow.
 - Esc or Cancel closes without saving; Enter (in single-line fields) or Save commits. Focus is placed on the first input on open.
 
 ### Left edit rail
 - Vertically centered floating column (`#edit-rail`) on the left side of the map with buttons: New (+), Edit (✎), Undo (↩), Rect select (⬚), Mobile (📱).
 - Each rail button delegates to the corresponding existing toolbar button.
-- Edit button enables when a track is active, highlights (active class) when editing is in progress.
+- Edit button enables when a track is active, highlights (active class) when editing is in progress, and directly toggles edit mode for the active track.
 - Undo and Mobile buttons visibility matches the existing toolbar button state.
 - Rail state syncs every 500ms via `setInterval`.
 

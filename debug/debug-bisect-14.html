@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8" />
+  <title>terrain-analysis invisible in 3D when many layers intervene — reproducer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+  <style>html, body, #map { margin: 0; width: 100%; height: 100%; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; background: #fff; padding: 8px 12px; border-radius: 6px; font: 13px/1.5 system-ui; box-shadow: 0 1px 4px rgba(0,0,0,.3); max-width: 520px; }
+    code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">
+    <b>Bug reproducer: <code>terrain-analysis</code> invisible in 3D when many layers intervene</b>
+    <p>
+      <b>Library:</b> <code>@eslopemap/maplibre-gl@5.21.2</code> (fork with built-in <code>terrain-analysis</code> layer type)<br>
+      <b>Bug:</b> When 20+ non-DEM layers (GeoJSON line/circle) are added between the
+      <code>hillshade</code> layer and the <code>terrain-analysis</code> layer in the style stack,
+      the terrain-analysis overlay becomes invisible in 3D terrain mode.<br>
+      <b>Expected:</b> Layer stack position should not affect terrain-analysis rendering in 3D.<br>
+      <b>Workaround:</b> Place terrain-analysis layers immediately after the hillshade in the initial style.
+    </p>
+    <label><input type="checkbox" id="toggle3d" checked> 3D terrain (on = bug visible)</label><br>
+    <label><input type="checkbox" id="toggleLayers" checked> Add 30 dummy layers before terrain-analysis (on = bug trigger)</label>
+    <p id="status" style="margin:4px 0;font-size:12px;color:#666;"></p>
+  </div>
+  <script>
+    // ── Setup ──
+    // This reproducer creates:
+    //   1. A raster basemap + hillshade layer
+    //   2. Optionally 30 empty GeoJSON layers (simulating app track/marker layers)
+    //   3. Two terrain-analysis layers (slope + elevation) added AFTER the dummy layers
+    //   4. 3D terrain enabled via setTerrain()
+    //
+    // With the dummy layers present, terrain-analysis is invisible in 3D.
+    // Without them (uncheck the checkbox and reload), it renders correctly.
+    // In 2D mode it always renders regardless of layer count.
+
+    const DUMMY_LAYER_COUNT = 30;
+    let dummyLayersAdded = false;
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [6.8652, 45.8326], // Mont Blanc area
+      zoom: 12,
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            attribution: '&copy; OpenStreetMap contributors'
+          },
+          dem: {
+            type: 'raster-dem',
+            tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+            tileSize: 512,
+            maxzoom: 14,
+            encoding: 'terrarium'
+          }
+        },
+        layers: [
+          {
+            id: 'basemap',
+            type: 'raster',
+            source: 'osm'
+          },
+          {
+            id: 'dem-loader',
+            type: 'hillshade',
+            source: 'dem',
+            paint: { 'hillshade-exaggeration': 0.10 }
+          }
+        ]
+      }
+    });
+
+    function updateStatus() {
+      const layers = map.getStyle().layers;
+      const analysisIdx = layers.findIndex(l => l.id === 'analysis');
+      const hillshadeIdx = layers.findIndex(l => l.id === 'dem-loader');
+      const gap = analysisIdx > 0 ? analysisIdx - hillshadeIdx - 1 : 0;
+      const terrain = map.getTerrain();
+      document.getElementById('status').textContent =
+        `Layers: ${layers.length} | Gap between hillshade and analysis: ${gap} | 3D: ${terrain ? 'ON' : 'OFF'}`;
+    }
+
+    map.on('load', () => {
+      const addDummy = document.getElementById('toggleLayers').checked;
+
+      // Step 1: enable 3D terrain
+      if (document.getElementById('toggle3d').checked) {
+        map.setLayoutProperty('dem-loader', 'visibility', 'none');
+        map.setTerrain({ source: 'dem', exaggeration: 1.4 });
+      }
+
+      // Step 2: optionally add dummy layers (this is the bug trigger)
+      if (addDummy) {
+        for (let i = 0; i < DUMMY_LAYER_COUNT; i++) {
+          const srcId = `dummy-src-${i}`;
+          const layerId = `dummy-layer-${i}`;
+          map.addSource(srcId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] }
+          });
+          map.addLayer({
+            id: layerId,
+            type: i % 2 === 0 ? 'line' : 'circle',
+            source: srcId,
+            paint: i % 2 === 0
+              ? { 'line-color': '#e040fb', 'line-width': 3 }
+              : { 'circle-radius': 4, 'circle-color': '#e040fb' }
+          });
+        }
+        dummyLayersAdded = true;
+      }
+
+      // Step 3: add terrain-analysis layers (appended at end of stack)
+      map.addLayer({
+        id: 'analysis',
+        type: 'terrain-analysis',
+        source: 'dem',
+        paint: {
+          'terrain-analysis-attribute': 'slope',
+          'terrain-analysis-opacity': 0.45,
+          'terrain-analysis-color': [
+            'step', ['slope'],
+            '#ffffff', 20, '#c0ffff', 24, '#57ffff', 28, '#00d3db',
+            31, '#fffa32', 34, '#ffc256', 37, '#fd7100', 40, '#ff0000',
+            43, '#e958ff', 47, '#a650ff', 52, '#5e1eff', 57, '#0000ff', 65, '#aaaaaa'
+          ],
+          'blend-mode': 'multiply'
+        }
+      });
+
+      map.addLayer({
+        id: 'analysis-relief',
+        type: 'terrain-analysis',
+        source: 'dem',
+        paint: {
+          'terrain-analysis-attribute': 'elevation',
+          'terrain-analysis-opacity': 0.45,
+          'terrain-analysis-color': [
+            'interpolate', ['linear'], ['elevation'],
+            0, '#A9D4E8', 500, '#C8B75F', 1500, '#705B43', 3000, '#D9CCBF', 5000, '#F6F2EF'
+          ],
+          'blend-mode': 'multiply'
+        }
+      });
+
+      // For slope+relief mode: crossfade via zoom expression
+      map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+        ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 0.45]);
+      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity',
+        ['interpolate', ['linear'], ['zoom'], 10, 0.45, 11, 0]);
+
+      updateStatus();
+    });
+
+    // ── Controls ──
+    document.getElementById('toggle3d').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        map.setLayoutProperty('dem-loader', 'visibility', 'none');
+        map.setTerrain({ source: 'dem', exaggeration: 1.4 });
+      } else {
+        map.setTerrain(null);
+        map.setLayoutProperty('dem-loader', 'visibility', 'visible');
+      }
+      updateStatus();
+    });
+
+    document.getElementById('toggleLayers').addEventListener('change', () => {
+      // Layer count change requires reload to take effect
+      alert('Reload the page for this change to take effect.');
+    });
+
+    map.on('error', e => console.error('Map error:', e.error ? e.error.message : e));
+  </script>
+</body></html>

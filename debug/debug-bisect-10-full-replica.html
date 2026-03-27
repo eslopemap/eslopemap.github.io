@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8" />
+  <title>3D Bisect 10: full app replica</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+  <style>html, body, #map { margin: 0; width: 100%; height: 100%; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; background: #fff; padding: 8px 12px; border-radius: 6px; font: 13px system-ui; box-shadow: 0 1px 4px rgba(0,0,0,.3); max-width: 500px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">
+    <b>3D Bisect 10: full app replica</b><br>
+    bisect-9 + global-state exprs, debug-color-relief layer, contour layers, moveLayer.<br>
+    3D is ON from the start. Hillshade uses a duplicated DEM source.<br>
+    <label><input type="checkbox" id="toggle3d" checked> Enable 3D terrain</label>
+  </div>
+  <script>
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [6.8652, 45.8326], zoom: 12,
+      style: {
+        version: 8,
+        glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+        sources: {
+          osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 },
+          dem: { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' },
+          'dem-hillshade': { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' },
+          'dem-color-relief': { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' }
+        },
+        layers: [
+          { id: 'basemap', type: 'raster', source: 'osm',
+            paint: { 'raster-opacity': ['coalesce', ['global-state', 'basemapOpacity'], 1] } },
+          { id: 'dem-loader', type: 'hillshade', source: 'dem-hillshade', paint: {
+            'hillshade-method': 'igor',
+            'hillshade-exaggeration': ['coalesce', ['global-state', 'hillshadeOpacity'], 0.35]
+          }}
+        ]
+      }
+    });
+    map.on('load', () => {
+      // Set global-state properties (like the app does)
+      if (typeof map.setGlobalStateProperty === 'function') {
+        map.setGlobalStateProperty('basemapOpacity', 1);
+        map.setGlobalStateProperty('hillshadeOpacity', 0.10);
+      }
+
+      // moveLayer — like applyBasemapSelection does
+      if (map.getLayer('basemap') && map.getLayer('dem-loader')) {
+        map.moveLayer('basemap', 'dem-loader');
+      }
+
+      // Step 1: applyTerrainState — keep hillshade, setTerrain on separate DEM source
+      console.log('[bisect10] Step 1: keep hillshade + setTerrain');
+      map.setTerrain({ source: 'dem', exaggeration: 1.4 });
+
+      // Step 2: addLayer terrain-analysis layers
+      console.log('[bisect10] Step 2: addLayer terrain-analysis');
+      map.addLayer({
+        id: 'analysis', type: 'terrain-analysis', source: 'dem',
+        paint: {
+          'terrain-analysis-attribute': 'slope',
+          'terrain-analysis-opacity': 0.45,
+          'terrain-analysis-color': ['step', ['slope'],
+            '#ffffff', 20, '#c0ffff', 28, '#00d3db', 34, '#ffc256',
+            40, '#ff0000', 52, '#5e1eff', 65, '#aaaaaa'],
+          'blend-mode': 'multiply'
+        }
+      });
+      map.addLayer({
+        id: 'analysis-relief', type: 'terrain-analysis', source: 'dem',
+        paint: {
+          'terrain-analysis-attribute': 'elevation',
+          'terrain-analysis-opacity': 0.45,
+          'terrain-analysis-color': ['interpolate', ['linear'], ['elevation'],
+            0, '#A9D4E8', 500, '#C8B75F', 1500, '#705B43', 3000, '#D9CCBF', 5000, '#F6F2EF'],
+          'blend-mode': 'multiply'
+        }
+      });
+
+      // debug-color-relief layer (hidden)
+      try {
+        map.addLayer({
+          id: 'debug-color-relief', type: 'color-relief', source: 'dem-color-relief',
+          layout: { visibility: 'none' },
+          paint: {
+            'color-relief-opacity': 0.5,
+            'color-relief-color': ['interpolate', ['linear'], ['elevation'],
+              0, '#A9D4E8', 500, '#C8B75F', 1500, '#705B43', 3000, '#D9CCBF', 5000, '#F6F2EF']
+          }
+        });
+        console.log('[bisect10] debug-color-relief added');
+      } catch (e) {
+        console.warn('[bisect10] color-relief not available:', e.message);
+      }
+
+      // Step 3: applyModeState — slope+relief zoom crossfade
+      console.log('[bisect10] Step 3: applyModeState');
+      map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+        ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 0.45]);
+      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity',
+        ['interpolate', ['linear'], ['zoom'], 10, 0.45, 11, 0]);
+
+      // Contour layers (like the app)
+      console.log('[bisect10] Step 4: contour layers');
+      // Simplified — just add an empty GeoJSON layer as placeholder for contours
+      map.addSource('contour-placeholder', {
+        type: 'geojson', data: { type: 'FeatureCollection', features: [] }
+      });
+      map.addLayer({
+        id: 'contours', type: 'line', source: 'contour-placeholder',
+        paint: { 'line-opacity': 0.2, 'line-width': 0.5 }
+      });
+
+      console.log('[bisect10] Done — 3D on, hillshade hidden, all extra layers');
+    });
+
+    document.getElementById('toggle3d').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        map.setTerrain({ source: 'dem', exaggeration: 1.4 });
+        console.log('[bisect10] 3D ON, split-source hillshade visible');
+      } else {
+        map.setTerrain(null);
+        console.log('[bisect10] 3D OFF, hillshade visible');
+      }
+    });
+    map.on('error', e => console.error('Map error:', e.error ? e.error.message : e));
+  </script>
+</body></html>

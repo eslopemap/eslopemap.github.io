@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8" />
+  <title>Bisect 5: Our exact color ramp + step expression</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+  <style>html, body, #map { margin: 0; width: 100%; height: 100%; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; background: #fff; padding: 8px 12px; border-radius: 6px; font: 13px system-ui; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">Bisect 5: Our step ramp expression (not interpolate) — in initial style</div>
+  <script>
+    /* Our app uses a step expression; the working demo uses interpolate.
+       If this one fails, the step expression is the issue. */
+    const SLOPE_RAMP = [
+      'step', ['slope'],
+      "#ffffff",
+      20, "#c0ffff",
+      24, "#57ffff",
+      28, "#00d3db",
+      31, "#fffa32",
+      34, "#ffc256",
+      37, "#fd7100",
+      40, "#ff0000",
+      43, "#e958ff",
+      47, "#a650ff",
+      52, "#5e1eff",
+      57, "#0000ff",
+      65, "#aaaaaa"
+    ];
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [6.8652, 45.8326], zoom: 12,
+      style: {
+        version: 8,
+        sources: {
+          osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 },
+          dem: { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' }
+        },
+        layers: [
+          { id: 'basemap', type: 'raster', source: 'osm' },
+          { id: 'analysis', type: 'terrain-analysis', source: 'dem', paint: {
+            'terrain-analysis-attribute': 'slope',
+            'terrain-analysis-opacity': 0.6,
+            'terrain-analysis-color': SLOPE_RAMP,
+            'blend-mode': 'multiply'
+          }}
+        ]
+      }
+    });
+    map.on('error', e => console.error('Map error:', e.error ? e.error.message : e));
+  </script>
+</body></html>

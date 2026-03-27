@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8" />
+  <title>Bisect 2: Direct tiles + terrarium + 512 (our DEM config) — inline style</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.2/dist/maplibre-gl.css" />
+  <style>html, body, #map { margin: 0; width: 100%; height: 100%; }
+    #info { position: absolute; top: 10px; left: 10px; z-index: 10; background: #fff; padding: 8px 12px; border-radius: 6px; font: 13px system-ui; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">Bisect 2: Direct tiles + terrarium + tileSize 512 (our DEM config) — inline style</div>
+  <script>
+    const map = new maplibregl.Map({
+      container: 'map',
+      center: [6.8652, 45.8326], zoom: 12,
+      style: {
+        version: 8,
+        sources: {
+          osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256 },
+          dem: { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize: 512, maxzoom: 14, encoding: 'terrarium' }
+        },
+        layers: [
+          { id: 'basemap', type: 'raster', source: 'osm' },
+          { id: 'analysis', type: 'terrain-analysis', source: 'dem', paint: {
+            'terrain-analysis-attribute': 'slope',
+            'terrain-analysis-opacity': 0.6,
+            'terrain-analysis-color': ['interpolate', ['linear'], ['slope'], 0, '#00ff00', 30, '#ff8800', 60, '#ff0000', 90, '#550000'],
+            'blend-mode': 'multiply'
+          }}
+        ]
+      }
+    });
+    map.on('error', e => console.error('Map error:', e.error ? e.error.message : e));
+  </script>
+</body></html>
