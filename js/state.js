@@ -30,3 +30,13 @@ export const STATE_DEFAULTS = {
   terrainExaggeration: 1.4,
   pauseThreshold: 5,  // minutes
 };
+
+// ---- Workspace tree UI state (not persisted in settings) ----
+
+export const TREE_STATE_DEFAULTS = {
+  selectedNodeIds: [],
+  contextMenuState: null,    // { nodeId, x, y } or null
+  infoEditorState: null,     // { nodeId } or null
+  expandedNodeIds: new Set(),
+  activeActionContext: null,  // future — for action dispatch
+};

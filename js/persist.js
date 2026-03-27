@@ -4,6 +4,7 @@
 const TRACKS_KEY = 'slope:tracks';
 const SETTINGS_KEY = 'slope:settings';
 const PROFILE_SETTINGS_KEY = 'slope:profile-settings';
+const WORKSPACE_KEY = 'slope:workspace';
 
 // ---- Tracks ----
 
@@ -79,5 +80,37 @@ export function clearAll() {
     localStorage.removeItem(TRACKS_KEY);
     localStorage.removeItem(SETTINGS_KEY);
     localStorage.removeItem(PROFILE_SETTINGS_KEY);
+    localStorage.removeItem(WORKSPACE_KEY);
   } catch { /* ignore */ }
+}
+
+// ---- Workspace tree ----
+
+function serializeNode(node) {
+  const base = { id: node.id, type: node.type };
+  if (node.name != null) base.name = node.name;
+  if (node.desc) base.desc = node.desc;
+  if (node.cmt) base.cmt = node.cmt;
+  if (node.sym) base.sym = node.sym;
+  if (node.trkType) base.trkType = node.trkType;
+  if (node.rteType) base.rteType = node.rteType;
+  if (node.wptType) base.wptType = node.wptType;
+  if (node._legacyTrackId) base._legacyTrackId = node._legacyTrackId;
+  if (node._legacyTrackIds?.length) base._legacyTrackIds = node._legacyTrackIds;
+  if (node.children?.length) base.children = node.children.map(serializeNode);
+  return base;
+}
+
+export function saveWorkspace(workspace) {
+  try {
+    const data = { children: workspace.children.map(serializeNode) };
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(data));
+  } catch { /* quota exceeded or private mode */ }
+}
+
+export function loadWorkspace() {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
