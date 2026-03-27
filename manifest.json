@@ -1,7 +1,7 @@
 {
   "name": "Slope viewer & editor",
   "short_name": "Slope",
-  "start_url": "./slope.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2A5A8A",
