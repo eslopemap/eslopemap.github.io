@@ -867,6 +867,7 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     getWaypoints: () => waypoints,
     addWaypoints,
     fitToTrack,
+    onImportComplete: () => onImportComplete(),
   });
 
   // Init the workspace tree

@@ -141,6 +141,7 @@ export function importFileContent(filename, text) {
     if (result.waypoints.length && tracksFns.addWaypoints) {
       tracksFns.addWaypoints(result.waypoints);
     }
+    if (tracksFns.onImportComplete) tracksFns.onImportComplete();
   } else {
     const coordsList = parseGeoJSON(text);
     if (!coordsList.length) { console.warn('No tracks found in', filename); return; }
@@ -149,6 +150,7 @@ export function importFileContent(filename, text) {
       const t = tracksFns.createTrack(name, coordsList[i]);
       tracksFns.fitToTrack(t);
     }
+    if (tracksFns.onImportComplete) tracksFns.onImportComplete();
   }
 }
 
