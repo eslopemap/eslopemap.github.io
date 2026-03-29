@@ -204,6 +204,19 @@ function ensureWorkspaceMenuButton() {
   _workspaceMenuBtn = document.getElementById('active-actions-btn');
 }
 
+function collectDescendantTrackIds(node) {
+  const ids = [];
+  if (node._legacyTrackId) ids.push(node._legacyTrackId);
+  if (node._legacyTrackIds) ids.push(...node._legacyTrackIds);
+  if (node.children) {
+    walkNodes(node.children, n => {
+      if (n._legacyTrackId) ids.push(n._legacyTrackId);
+      if (n._legacyTrackIds) ids.push(...n._legacyTrackIds);
+    });
+  }
+  return ids;
+}
+
 export function renderGpxTree() {
   if (!_trackListEl) return;
   _trackListEl.innerHTML = '';
@@ -217,9 +230,18 @@ export function renderGpxTree() {
 export function syncTreeSelection() {
   const items = _trackListEl?.querySelectorAll('.tree-row');
   if (!items) return;
+  // Collect descendant IDs of the selected node for child-selected highlighting
+  const childIds = new Set();
+  if (treeState.selectedNodeId) {
+    const selNode = findNodeById(workspace.children, treeState.selectedNodeId);
+    if (selNode?.children) {
+      walkNodes(selNode.children, n => childIds.add(n.id));
+    }
+  }
   items.forEach(row => {
     const nodeId = row.dataset.nodeId;
     row.classList.toggle('selected', nodeId === treeState.selectedNodeId);
+    row.classList.toggle('child-selected', childIds.has(nodeId));
   });
 }
 
@@ -1162,6 +1184,9 @@ function renderNodeList(nodes, container, depth) {
       // Activate the legacy track if applicable
       const legacyId = node._legacyTrackId || node._legacyTrackIds?.[0];
       if (legacyId) _deps.setActiveTrack(legacyId);
+      // Fit map to all descendant tracks
+      const trackIds = collectDescendantTrackIds(node);
+      if (trackIds.length) _deps.fitToTrackIds(trackIds);
       syncTreeSelection();
     });
 

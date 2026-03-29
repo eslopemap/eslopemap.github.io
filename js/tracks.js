@@ -841,6 +841,22 @@ function fitToTrack(t) {
   map.fitBounds(bounds, opts);
 }
 
+function fitToTrackIds(ids) {
+  const bounds = new maplibregl.LngLatBounds();
+  let any = false;
+  for (const id of ids) {
+    const t = tracks.find(tr => tr.id === id);
+    if (t) for (const c of t.coords) { bounds.extend([c[0], c[1]]); any = true; }
+  }
+  if (!any) return;
+  const opts = { padding: 60, maxZoom: 15, duration: 1000 };
+  if (!state.terrain3d) {
+    opts.bearing = map.getBearing();
+    opts.pitch = map.getPitch();
+  }
+  map.fitBounds(bounds, opts);
+}
+
 // ---- Callbacks from track-edit.js ----
 
 function onTrackCoordsChanged(t) {
@@ -1129,6 +1145,7 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     deleteWaypointById,
     showProfileForTrack: (id) => { setActiveTrack(id); updateProfileFn(); },
     fitToTrackById: (id) => { const t = tracks.find(tr => tr.id === id); if (t) fitToTrack(t); },
+    fitToTrackIds,
     deleteTrackById: (id) => {
       const t = tracks.find(tr => tr.id === id);
       if (!t) return;
