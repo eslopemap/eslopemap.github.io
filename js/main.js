@@ -1085,6 +1085,28 @@ map.on('load', () => {
     if (!cursorRaf) cursorRaf = requestAnimationFrame(updateCursorElevation);
   });
 
+  // Map click for track selection
+  map.on('click', (e) => {
+    if (tracksState.editingTrackId) return;
+    const layers = tracksState.tracks.map(t => 'track-line-' + t.id).filter(l => map.getLayer(l));
+    if (layers.length === 0) return;
+    const bbox = [[e.point.x - 5, e.point.y - 5], [e.point.x + 5, e.point.y + 5]];
+    const features = map.queryRenderedFeatures(bbox, { layers });
+    if (features.length > 0) {
+      const trackId = features[0].layer.id.replace('track-line-', '');
+      tracksState.setActiveTrack(trackId);
+      // Select in tree
+      const pId = trackId; // In case trackId is passed
+      setTimeout(() => {
+        const treeRow = document.querySelector(`.tree-row[data-node-id]`);
+        // The tree handles this in its own render cycle or via syncTreeSelection
+        // Actually gpx-tree.js watches _deps.getActiveTrackId() => renders bold text, but doesn't select.
+        // There is no exported selectNodeId method from gpxTreeState directly in main.js, 
+        // but gpxTreeState exports something like openInfoEditor ? 
+      }, 0);
+    }
+  });
+
   // Mobile: show crosshair on tap with elevation info
   if (isMobile) {
     map.on('click', (e) => {

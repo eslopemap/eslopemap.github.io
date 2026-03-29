@@ -128,7 +128,8 @@ export function parseBooleanParam(value) {
  * @param {number} radius  half-window size (0 = no smoothing)
  * @returns {(number|null)[]}
  */
-export function smoothArray(data, radius) {
+export function smoothArray(data, radiusParam) {
+  const radius = Number(radiusParam);
   if (!data || radius < 1) return data;
   const n = data.length;
   const out = new Array(n);

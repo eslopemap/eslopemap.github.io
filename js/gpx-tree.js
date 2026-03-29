@@ -970,14 +970,36 @@ function renderNodeList(nodes, container, depth) {
 
     // Determine if this node maps to the active track
     const activeTrackId = _deps.getActiveTrackId?.();
-    const isActive = (node._legacyTrackId === activeTrackId) ||
+    let isActive = (node._legacyTrackId === activeTrackId) ||
       (node._legacyTrackIds?.includes(activeTrackId));
+    if (node.type === 'file' && node.children?.length === 1 && node.children[0].type === 'track') {
+       const t = node.children[0];
+       if (t._legacyTrackId === activeTrackId || (t._legacyTrackIds?.includes(activeTrackId))) {
+           isActive = true;
+       }
+    }
     if (isActive) row.classList.add('active');
 
-    if (treeState.selectedNodeId === node.id) row.classList.add('selected');
+    let isSelected = treeState.selectedNodeId === node.id;
+    if (node.type === 'file' && node.children?.length === 1 && node.children[0].type === 'track') {
+       if (treeState.selectedNodeId === node.children[0].id) {
+           isSelected = true;
+       }
+    }
+    if (isSelected) row.classList.add('selected');
 
     // Disclosure toggle
-    const hasChildren = node.children?.length > 0;
+    let hasChildren = node.children?.length > 0;
+    
+    // Collapse single-segment tracks and single-track files
+    if (node.type === 'track' && node.children?.length === 1 && node.children[0].type === 'segment') {
+       hasChildren = false; 
+    }
+    if (node.type === 'file' && node.children?.length === 1 && node.children[0].type === 'track') {
+       hasChildren = false;
+       // We can rename the node display name safely here for UI ONLY
+       // but we already use node.name below
+    }
     const expanded = treeState.expandedNodeIds.has(node.id);
 
     if (hasChildren) {
@@ -1024,6 +1046,17 @@ function renderNodeList(nodes, container, depth) {
       }
     } else {
       nameEl.textContent = node.name || node.type;
+      if (node.type === 'file' && node.children?.length === 1 && node.children[0].type === 'track') {
+         const innerT = node.children[0];
+         if (innerT.name && innerT.name !== node.name) {
+            nameEl.textContent += ' / ' + innerT.name;
+         }
+         if (innerT._legacyTrackIds?.length > 1) {
+            appendAggregateStats(nameEl, innerT._legacyTrackIds);
+         } else if (innerT._legacyTrackIds?.length === 1) {
+            appendStatsSpan(nameEl, _deps.findTrack(innerT._legacyTrackIds[0]));
+         }
+      }
     }
     row.appendChild(nameEl);
 
@@ -1039,14 +1072,35 @@ function renderNodeList(nodes, container, depth) {
         openNodeContextMenu(node.id, rect.left, rect.bottom + 2);
       });
       row.appendChild(kebab);
+      
+      // If single-track file, add track's kebab too!
+      if (node.type === 'file' && node.children?.length === 1 && node.children[0].type === 'track') {
+         const tchild = node.children[0];
+         const tKebab = document.createElement('button');
+         tKebab.className = 'tree-kebab';
+         tKebab.textContent = '⋮🛤️';
+         tKebab.title = 'Actions (Track)';
+         tKebab.addEventListener('click', (e) => {
+           e.stopPropagation();
+           const rect = tKebab.getBoundingClientRect();
+           openNodeContextMenu(tchild.id, rect.left, rect.bottom + 2);
+         });
+         row.appendChild(tKebab);
+      }
     }
 
     // Click to select/activate
     row.addEventListener('click', (e) => {
       if (e.target.classList.contains('tree-kebab') || e.target.classList.contains('tree-toggle')) return;
-      treeState.selectedNodeId = node.id;
+      
+      let targetNode = node;
+      if (node.type === 'file' && node.children?.length === 1 && node.children[0].type === 'track') {
+         targetNode = node.children[0];
+      }
+      treeState.selectedNodeId = targetNode.id;
+      
       // Activate the legacy track if applicable
-      const legacyId = node._legacyTrackId || node._legacyTrackIds?.[0];
+      const legacyId = targetNode._legacyTrackId || targetNode._legacyTrackIds?.[0];
       if (legacyId) _deps.setActiveTrack(legacyId);
       syncTreeSelection();
     });
@@ -1074,7 +1128,15 @@ function renderNodeList(nodes, container, depth) {
 
     // Render children
     if (hasChildren && expanded) {
-      renderNodeList(node.children, container, depth + 1);
+      let childrenToRender = node.children;
+      if (node.type === 'track' && childrenToRender.length === 1 && childrenToRender[0].type === 'segment') {
+          childrenToRender = [];
+      } else if (node.type === 'file' && childrenToRender.length === 1 && childrenToRender[0].type === 'track') {
+          childrenToRender = [];
+      }
+      if (childrenToRender.length > 0) {
+        renderNodeList(childrenToRender, container, depth + 1);
+      }
     }
   }
 }

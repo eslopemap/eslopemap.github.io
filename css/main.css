@@ -485,6 +485,8 @@
       display: none;
     }
     #profile-panel.visible { display: flex; flex-direction: column; }
+    #profile-panel.expanded { height: 66vh !important; }
+    .track-panel-header { padding: 4px; }
     #profile-panel canvas { width: 100% !important; flex: 1; min-height: 0; }
 
     #profile-header {

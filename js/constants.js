@@ -25,6 +25,7 @@ export const ANALYSIS_COLOR = {
     52, "#5e1eff", // purplish blue
     57, "#0000ff", // rich blue
     65, "#aaaaaa", // cool grey
+    // 90, "#111111", // dummy
   ],
   aspect: [
     'step', ['aspect'],

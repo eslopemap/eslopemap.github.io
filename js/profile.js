@@ -3,6 +3,28 @@
 // pause detection, multiple x-axis modes, display settings menu.
 
 import { haversineKm, smoothArray } from './utils.js';
+
+function clampTo90th(arr) {
+  const valid = arr.filter(v => v != null && !isNaN(v) && isFinite(v));
+  if (valid.length === 0) return arr;
+  valid.sort((a,b) => a - b);
+  const p90 = valid[Math.floor(valid.length * 0.9)];
+  return arr.map(v => (v != null && v > p90) ? p90 : v);
+}
+
+function clampVSpeed(arr) {
+  const valid = arr.filter(v => v != null && !isNaN(v) && isFinite(v) && v > 0);
+  if (valid.length === 0) return arr.map(v => (v != null && v < 0) ? 0 : v);
+  valid.sort((a,b) => a - b);
+  const p90 = valid[Math.floor(valid.length * 0.9)];
+  return arr.map(v => {
+    if (v == null) return null;
+    if (v < 0) return 0;
+    if (v > p90) return p90;
+    return v;
+  });
+}
+
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { showCursorTooltipAt, hideCursorTooltip } from './ui.js';
 import { saveProfileSettings, loadProfileSettings } from './persist.js';
@@ -199,8 +221,8 @@ function computeProfile(coords, pauseThresholdMin, smoothingRadius = 0) {
     distances, elevations,
     slopes: smoothArray(slopes, smoothingRadius),
     terrainSlopes: smoothArray(terrainSlopes, smoothingRadius),
-    speeds: smoothArray(speeds, smoothingRadius),
-    vSpeeds: smoothArray(vSpeeds, smoothingRadius),
+    speeds: clampTo90th(smoothArray(speeds, smoothingRadius)),
+    vSpeeds: clampVSpeed(smoothArray(vSpeeds, smoothingRadius)),
     timestamps, pauses, cumulativeTime, cumulativeTimeNoPauses, hasTime,
   };
 }
@@ -539,6 +561,14 @@ export function initProfile(mapRef, stateRef, tracksStateRef) {
   document.getElementById('profile-close').addEventListener('click', () => {
     closeProfile(true);
   });
+
+  const resizeBtn = document.getElementById('profile-resize-btn');
+  if (resizeBtn) {
+    resizeBtn.addEventListener('click', () => {
+      document.getElementById('profile-panel').classList.toggle('expanded');
+      if (chart) chart.resize();
+    });
+  }
 
   document.getElementById('profile-filter-reset').addEventListener('click', () => {
     tracksState.clearSelectionSpan();
