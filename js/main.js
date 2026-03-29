@@ -427,9 +427,9 @@ const map = new maplibregl.Map({
         source: DEM_HD_SOURCE_ID,
         layout: { visibility: 'none' },
         paint: {
-          'terrain-analysis-attribute': 'slope',
-          'terrain-analysis-opacity': state.slopeOpacity,
-          'terrain-analysis-color': ANALYSIS_COLOR.slope,
+          'attribute': 'slope',
+          'opacity': state.slopeOpacity,
+          'color': ANALYSIS_COLOR.slope,
           'blend-mode': state.multiplyBlend ? 'soft-multiply' : 'normal'
         }
       },
@@ -439,9 +439,9 @@ const map = new maplibregl.Map({
         source: DEM_HD_SOURCE_ID,
         layout: { visibility: 'none' },
         paint: {
-          'terrain-analysis-attribute': 'elevation',
-          'terrain-analysis-opacity': state.slopeOpacity,
-          'terrain-analysis-color': ANALYSIS_COLOR['color-relief'],
+          'attribute': 'elevation',
+          'opacity': state.slopeOpacity,
+          'color': ANALYSIS_COLOR['color-relief'],
           'blend-mode': state.multiplyBlend ? 'soft-multiply' : 'normal'
         }
       }
@@ -727,7 +727,7 @@ registerShortcut({ key: 'l', ctrl: true, handler: () => {
 
 // N — new track
 registerShortcut({ key: 'n', handler: () => {
-  document.getElementById('rail-new-btn')?.click();
+  document.getElementById('draw-btn')?.click();
 }});
 
 // E — edit active track
@@ -766,16 +766,9 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
 
 // ---- Left edit rail wiring ----
 {
-  const railNewBtn = document.getElementById('rail-new-btn');
   const railEditBtn = document.getElementById('rail-edit-btn');
-  const railUndoBtn = document.getElementById('rail-undo-btn');
   const railRectBtn = document.getElementById('rail-rect-btn');
   const railMobileBtn = document.getElementById('rail-mobile-btn');
-
-  // New track button — same as existing draw-btn
-  railNewBtn?.addEventListener('click', () => {
-    document.getElementById('draw-btn')?.click();
-  });
 
   // Edit active track button
   railEditBtn?.addEventListener('click', () => {
@@ -787,11 +780,6 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
       tracksState.enterEditForTrack(t.id);
     }
     syncRailState();
-  });
-
-  // Undo button — delegates to existing undo
-  railUndoBtn?.addEventListener('click', () => {
-    document.getElementById('undo-btn')?.click();
   });
 
   // Rect delete — delegates to existing rect-delete
@@ -809,7 +797,6 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
     const t = tracksState.getActiveTrack();
     railEditBtn.disabled = !t;
     railEditBtn.classList.toggle('active', Boolean(tracksState.editingTrackId));
-    railUndoBtn.style.display = tracksState.editingTrackId ? '' : 'none';
     railRectBtn.disabled = !t;
     railRectBtn.classList.toggle('active', isRectangleModeActive());
 
