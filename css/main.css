@@ -262,8 +262,6 @@
       box-shadow: none;
       font-size: 12px;
       min-width: 180px;
-      max-height: 50vh;
-      overflow-y: auto;
       display: none;
     }
     #track-panel.visible { display: block; }
@@ -271,21 +269,17 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      position: sticky;
-      top: 0;
-      z-index: 2;
       margin: 0 0 6px;
       padding: 0 0 6px;
       border-bottom: 1px solid rgba(0,0,0,0.08);
-      background: rgba(255,255,255,0.92);
-      backdrop-filter: blur(2px);
-      -webkit-backdrop-filter: blur(2px);
     }
     #track-panel h3 { margin: 0; font-size: 13px; }
     #track-panel .track-panel-header #track-tool-row {
       flex-shrink: 0;
     }
     #track-list {
+      max-height: 50vh;
+      overflow-y: auto;
       padding-bottom: 4px;
     }
     .track-item {
@@ -719,6 +713,7 @@
     .tree-row:hover { background: rgba(0,0,0,0.04); }
     .tree-row.active { font-weight: 700; }
     .tree-row.selected { background: rgba(74,144,217,0.12); }
+    .tree-row.child-selected { background: rgba(74,144,217,0.06); }
     .tree-toggle {
       width: 12px;
       flex-shrink: 0;
