@@ -2,6 +2,7 @@
 // Editing interaction is in track-edit.js, import/export in io.js.
 
 import { haversineKm } from './utils.js';
+import { state } from './state.js';
 import { DEM_MAX_Z, DEM_HD_SOURCE_ID, TRACK_COLORS } from './constants.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
@@ -221,7 +222,7 @@ function addTrackToMap(t) {
     filter: ['==', '$type', 'LineString'],
     paint: {
       'line-color': t.color,
-      'line-width': ['case', isActive, 4, 3],
+      'line-width': ['case', isActive, 5, 2.5],
       'line-opacity': 0.9
     }
   });
@@ -832,7 +833,12 @@ function fitToTrack(t) {
     (b, c) => b.extend([c[0], c[1]]),
     new maplibregl.LngLatBounds()
   );
-  map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 1000 });
+  const opts = { padding: 60, maxZoom: 15, duration: 1000 };
+  if (!state.terrain3d) {
+    opts.bearing = map.getBearing();
+    opts.pitch = map.getPitch();
+  }
+  map.fitBounds(bounds, opts);
 }
 
 // ---- Callbacks from track-edit.js ----

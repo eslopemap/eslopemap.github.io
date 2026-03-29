@@ -221,8 +221,8 @@ function computeProfile(coords, pauseThresholdMin, smoothingRadius = 0) {
     distances, elevations,
     slopes: smoothArray(slopes, smoothingRadius),
     terrainSlopes: smoothArray(terrainSlopes, smoothingRadius),
-    speeds: clampTo90th(smoothArray(speeds, smoothingRadius)),
-    vSpeeds: clampVSpeed(smoothArray(vSpeeds, smoothingRadius)),
+    speeds: smoothArray(speeds, smoothingRadius),
+    vSpeeds: smoothArray(vSpeeds, smoothingRadius),
     timestamps, pauses, cumulativeTime, cumulativeTimeNoPauses, hasTime,
   };
 }
@@ -459,7 +459,11 @@ export function updateProfile() {
     };
   }
   if (display.showSpeed && profile.hasTime) {
+    const valid = profile.speeds.filter(v => v != null && isFinite(v));
+    valid.sort((a,b) => a-b);
+    const p90 = valid.length > 0 ? valid[Math.floor(valid.length * 0.9)] : undefined;
     scales.ySpeed = {
+      max: p90 ? Math.ceil(p90) : undefined,
       type: 'linear', position: 'right',
       title: { display: true, text: 'km/h', font: { size: 10 } },
       ticks: { font: { size: 9 } },
@@ -467,7 +471,12 @@ export function updateProfile() {
     };
   }
   if (display.showVSpeed && profile.hasTime) {
+    const valid = profile.vSpeeds.filter(v => v != null && isFinite(v) && v > 0);
+    valid.sort((a,b) => a-b);
+    const p90 = valid.length > 0 ? valid[Math.floor(valid.length * 0.9)] : undefined;
     scales.yVSpeed = {
+      min: 0,
+      max: p90 ? Math.ceil(p90) : undefined,
       type: 'linear', position: 'right',
       title: { display: true, text: 'm/h', font: { size: 10 } },
       ticks: { font: { size: 9 } },
