@@ -17,6 +17,7 @@ let editingTrackId = null;
 let editingIsNewTrack = false;
 let dragVertexInfo = null;
 let mobileSelectedVertex = null;
+let suppressMobileTouchEnd = false;
 let suppressNextMapClick = false;
 let hoverInsertInfo = null;
 let selectedVertexIndex = null;
@@ -197,7 +198,18 @@ function updateInsertPopup() {
       if (insertAfterIdx != null) {
         insertAfterIdx = null;
       } else if (selectedVertexIndex != null) {
-        insertAfterIdx = selectedVertexIndex;
+        // Cancel mobile vertex drag and restore vertex position
+        if (mobileSelectedVertex) {
+          const vtxIdx = selectedVertexIndex;
+          mobileSelectedVertex = null;
+          mobileHint.classList.remove('visible');
+          map.dragPan.enable();
+          popUndo();  // restore vertex to original position before drag
+          selectedVertexIndex = vtxIdx;
+          insertAfterIdx = vtxIdx;
+        } else {
+          insertAfterIdx = selectedVertexIndex;
+        }
       }
       syncUndoBtn();
     });
@@ -456,6 +468,7 @@ export function startNewTrack() {
 
 function cancelMobileMove() {
   mobileSelectedVertex = null;
+  suppressMobileTouchEnd = false;
   mobileHint.classList.remove('visible');
   map.dragPan.enable();
   const t = tracksFns.getActiveTrack();
@@ -566,13 +579,32 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       const hitPt = hitTestVertex(e.point);
       if (hitPt && hitPt.index != null) {
         if (mobileFriendlyMode) {
-          pushUndo(hitPt.trackId);
-          selectedVertexIndex = hitPt.index;
-          mobileSelectedVertex = hitPt;
-          mobileHint.textContent = 'Drag screen to move point \u00b7 tap elsewhere to deselect';
-          mobileHint.classList.add('visible');
-          map.dragPan.disable();
-          showToast('Drag screen to move', 2000);
+          if (mobileSelectedVertex && mobileSelectedVertex.index === hitPt.index) {
+            // Second tap on same vertex — deselect and stop moving
+            cancelMobileMove();
+            selectedVertexIndex = null;
+            insertAfterIdx = null;
+          } else if (mobileSelectedVertex) {
+            // Tap on a different vertex while moving — switch to new vertex
+            cancelMobileMove();
+            pushUndo(hitPt.trackId);
+            selectedVertexIndex = hitPt.index;
+            mobileSelectedVertex = hitPt;
+            suppressMobileTouchEnd = true;
+            mobileHint.textContent = 'Pan to move point \u00b7 tap vertex to deselect';
+            mobileHint.classList.add('visible');
+            map.dragPan.disable();
+          } else {
+            // First tap — select vertex and enter move mode
+            pushUndo(hitPt.trackId);
+            selectedVertexIndex = hitPt.index;
+            mobileSelectedVertex = hitPt;
+            suppressMobileTouchEnd = true;
+            mobileHint.textContent = 'Pan to move point \u00b7 tap vertex to deselect';
+            mobileHint.classList.add('visible');
+            map.dragPan.disable();
+            showToast('Pan to move, or tap + to insert after', 2500);
+          }
           syncUndoBtn();
           return;
         }
@@ -925,6 +957,10 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
     map.on('touchend', () => {
       if (!mobileSelectedVertex) return;
+      if (suppressMobileTouchEnd) {
+        suppressMobileTouchEnd = false;
+        return;
+      }
       cancelMobileMove();
     });
   }
