@@ -430,7 +430,7 @@ const map = new maplibregl.Map({
           'terrain-analysis-attribute': 'slope',
           'terrain-analysis-opacity': state.slopeOpacity,
           'terrain-analysis-color': ANALYSIS_COLOR.slope,
-          'blend-mode': state.multiplyBlend ? 'multiply' : 'normal'
+          'blend-mode': state.multiplyBlend ? 'soft-multiply' : 'normal'
         }
       },
       {
@@ -442,7 +442,7 @@ const map = new maplibregl.Map({
           'terrain-analysis-attribute': 'elevation',
           'terrain-analysis-opacity': state.slopeOpacity,
           'terrain-analysis-color': ANALYSIS_COLOR['color-relief'],
-          'blend-mode': state.multiplyBlend ? 'multiply' : 'normal'
+          'blend-mode': state.multiplyBlend ? 'soft-multiply' : 'normal'
         }
       }
     ]
