@@ -162,6 +162,7 @@ export function importFileContent(filename, text) {
       console.warn('No tracks or waypoints found in', filename);
       return;
     }
+    const createdTracks = [];
     for (const trk of result.tracks) {
       const t = tracksFns.createTrack(trk.name, trk.coords, {
         desc: trk.desc,
@@ -172,22 +173,30 @@ export function importFileContent(filename, text) {
         groupId: trk.groupId,
         groupName: trk.groupName,
         segmentLabel: trk.segmentLabel,
+        skipTreeHook: true,
       });
+      createdTracks.push(t);
       tracksFns.fitToTrack(t);
     }
     if (result.waypoints.length && tracksFns.addWaypoints) {
       tracksFns.addWaypoints(result.waypoints);
     }
-    if (tracksFns.onImportComplete) tracksFns.onImportComplete();
+    if (tracksFns.onFileBatchImported) {
+      tracksFns.onFileBatchImported(baseName, createdTracks, result.waypoints);
+    }
   } else {
     const coordsList = parseGeoJSON(text);
     if (!coordsList.length) { console.warn('No tracks found in', filename); return; }
+    const createdTracks = [];
     for (let i = 0; i < coordsList.length; i++) {
       const name = coordsList.length > 1 ? `${baseName} (${i + 1})` : baseName;
-      const t = tracksFns.createTrack(name, coordsList[i]);
+      const t = tracksFns.createTrack(name, coordsList[i], { skipTreeHook: true });
+      createdTracks.push(t);
       tracksFns.fitToTrack(t);
     }
-    if (tracksFns.onImportComplete) tracksFns.onImportComplete();
+    if (tracksFns.onFileBatchImported) {
+      tracksFns.onFileBatchImported(baseName, createdTracks, []);
+    }
   }
 }
 
@@ -436,6 +445,9 @@ export function exportNodeGPX(node) {
   downloadFile(`${sanitizeFileStem(payload.name)}.gpx`, buildGpxDocument(payload), 'application/gpx+xml');
   return true;
 }
+
+// Exposed for unit tests
+export { buildGpxDocument, buildPayloadFromNode };
 
 function buildTrackGPXString(name, coords) {
   const pts = coords.map(c => {

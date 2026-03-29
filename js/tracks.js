@@ -2,13 +2,13 @@
 // Editing interaction is in track-edit.js, import/export in io.js.
 
 import { haversineKm } from './utils.js';
-import { state } from './state.js';
+// import { state } from './state.js';
 import { DEM_MAX_Z, DEM_HD_SOURCE_ID, TRACK_COLORS } from './constants.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
 import { saveTracks, loadTracks, saveWaypoints, loadWaypoints } from './persist.js';
-import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onImportComplete, openInfoEditor, findNodeForTrackId } from './gpx-tree.js';
+import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onFileBatchImported, openInfoEditor, findNodeForTrackId } from './gpx-tree.js';
 import { buildSelectionSpan, densifyTrackSpan, simplifyTrackSpan, splitTrackSpan, mergeTrackSpans, convertRouteToTrack } from './track-ops.js';
 
 let map, state;
@@ -1083,7 +1083,7 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     findWaypointById,
     addWaypoints,
     fitToTrack,
-    onImportComplete: () => onImportComplete(),
+    onFileBatchImported: (fileName, createdTracks, waypoints) => onFileBatchImported(fileName, createdTracks, waypoints),
   });
 
   // Init the workspace tree

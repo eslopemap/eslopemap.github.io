@@ -4,7 +4,7 @@
 import {
   createWorkspaceModel, createFileNode, createTrackNode, createSegmentNode,
   createRouteNode, createWaypointNode, createFolderNode,
-  walkNodes, findNodeById, findParentOf, buildTreeFromLegacy,
+  walkNodes, findNodeById, findParentOf,
 } from './gpx-model.js';
 import { saveWorkspace, loadWorkspace } from './persist.js';
 import { exportNodeGPX } from './io.js';
@@ -95,12 +95,11 @@ export function rebuildTree() {
   const saved = loadWorkspace();
   workspace = saved?.children
     ? restoreWorkspace(saved, tracks, waypoints)
-    : buildTreeFromLegacy(tracks, waypoints);
+    : buildWorkspaceFromTracks(tracks, waypoints);
 
-  // Auto-expand all is removed by default
-  // walkNodes(workspace.children, n => {
-  //   if (n.children) treeState.expandedNodeIds.add(n.id);
-  // });
+  walkNodes(workspace.children, n => {
+    if (n.children > 1) treeState.expandedNodeIds.add(n.id);
+  });
 }
 
 function restoreWorkspace(savedWorkspace, tracks, waypoints) {
@@ -149,11 +148,56 @@ function restoreWorkspace(savedWorkspace, tracks, waypoints) {
   const orphanTracks = tracks.filter(track => !referencedTrackIds.has(track.id));
   const orphanWaypoints = waypoints.filter(wp => !referencedWaypointIds.has(wp.id));
   if (orphanTracks.length || orphanWaypoints.length) {
-    const fallback = buildTreeFromLegacy(orphanTracks, orphanWaypoints);
-    restored.children.push(...fallback.children);
+    const orphanWs = buildWorkspaceFromTracks(orphanTracks, orphanWaypoints);
+    restored.children.push(...orphanWs.children);
   }
 
   return restored;
+}
+
+function buildWorkspaceFromTracks(tracks, waypoints) {
+  const ws = createWorkspaceModel();
+  const groupMap = new Map();
+  for (const t of tracks) {
+    if ((t.sourceKind || 'track') === 'route') {
+      const fileNode = createFileNode(t.name, { desc: t.desc || '' });
+      fileNode.children.push(createRouteNode(t.name, {
+        desc: t.desc || '', cmt: t.cmt || '', rteType: t.rteType || '',
+        _legacyTrackId: t.id,
+      }));
+      ws.children.push(fileNode);
+      continue;
+    }
+    if (t.groupId) {
+      if (!groupMap.has(t.groupId)) {
+        const fileNode = createFileNode(t.groupName || t.name);
+        const trackNode = createTrackNode(t.groupName || t.name, {
+          desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
+          _legacyTrackIds: [],
+        });
+        fileNode.children.push(trackNode);
+        ws.children.push(fileNode);
+        groupMap.set(t.groupId, { fileNode, trackNode });
+      }
+      const { trackNode } = groupMap.get(t.groupId);
+      trackNode.children.push(createSegmentNode({ _legacyTrackId: t.id }));
+      trackNode._legacyTrackIds.push(t.id);
+    } else {
+      const fileNode = createFileNode(t.name, { desc: t.desc || '' });
+      fileNode.children.push(createTrackNode(t.name, {
+        desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
+        _legacyTrackIds: [t.id],
+      }));
+      ws.children.push(fileNode);
+    }
+  }
+  for (const wp of waypoints) {
+    ws.children.push(createWaypointNode(wp.name, {
+      desc: wp.desc, cmt: wp.comment, sym: wp.sym,
+      coords: wp.coords, _waypointId: wp.id,
+    }));
+  }
+  return ws;
 }
 
 function ensureWorkspaceMenuButton() {
@@ -1199,8 +1243,6 @@ export function onTrackCreated(track) {
     renderGpxTree();
     return;
   }
-  // If it's a grouped track, let rebuildTree handle it
-  if (track.groupId) { rebuildTree(); renderGpxTree(); return; }
   // Single track — add a file + track node
   const fileNode = createFileNode(track.name, { desc: track.desc || '' });
   const trackNode = createTrackNode(track.name, {
@@ -1245,7 +1287,58 @@ function removeNodesForTrack(nodes, trackId) {
   }
 }
 
-export function onImportComplete() {
-  rebuildTree();
+export function onFileBatchImported(fileName, createdTracks, importedWaypoints) {
+  const fileNode = createFileNode(fileName);
+  const groupMap = new Map();
+
+  for (const t of createdTracks) {
+    if ((t.sourceKind || 'track') === 'route') {
+      const routeNode = createRouteNode(t.name, {
+        desc: t.desc || '', cmt: t.cmt || '', rteType: t.rteType || '',
+        _legacyTrackId: t.id,
+      });
+      fileNode.children.push(routeNode);
+      continue;
+    }
+    if (t.groupId) {
+      if (!groupMap.has(t.groupId)) {
+        const trackNode = createTrackNode(t.groupName || t.name, {
+          desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
+          _legacyTrackIds: [],
+        });
+        fileNode.children.push(trackNode);
+        groupMap.set(t.groupId, trackNode);
+      }
+      const trackNode = groupMap.get(t.groupId);
+      trackNode._legacyTrackIds.push(t.id);
+      trackNode.children.push(createSegmentNode({ _legacyTrackId: t.id }));
+    } else {
+      const trackNode = createTrackNode(t.name, {
+        desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
+        _legacyTrackIds: [t.id],
+      });
+      fileNode.children.push(trackNode);
+    }
+  }
+
+  workspace.children.push(fileNode);
+  treeState.expandedNodeIds.add(fileNode.id);
+  walkNodes(fileNode.children, n => {
+    if (n.children?.length) treeState.expandedNodeIds.add(n.id);
+  });
+
+  // Waypoints go at workspace root
+  const waypoints = _deps.getWaypoints();
+  for (const wp of importedWaypoints || []) {
+    const persisted = waypoints.find(w => w.name === wp.name && w.coords?.[0] === wp.coords?.[0]);
+    if (persisted) {
+      workspace.children.push(createWaypointNode(wp.name, {
+        desc: wp.desc, cmt: wp.comment, sym: wp.sym,
+        coords: wp.coords, _waypointId: persisted.id,
+      }));
+    }
+  }
+
+  scheduleWorkspaceSave();
   renderGpxTree();
 }

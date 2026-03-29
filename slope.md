@@ -99,14 +99,14 @@
 - **js/ui.js** — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, Nominatim search
 - **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer, tree integration
 - **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, undo stack, draw/undo buttons
-- **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation; calls `onImportComplete` for tree sync
+- **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation; calls `onFileBatchImported` for tree sync
 - **js/persist.js** — localStorage persistence for tracks, settings, profile display settings, and workspace tree (thin wrapper, no deps)
 - **js/profile.js** — Chart.js elevation profile with speed, pause detection, display settings menu, multiple x-axis modes
 - **js/track-ops.js** — pure FEAT2 operation layer for normalized selection spans, route conversion, simplify, split, merge, densify, and consequence descriptions
 - **js/selection-tools.js** — rectangle selection controller with touch/desktop drag handling, enclosing-span resolution, and anchored hint popup
 - **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS` + `TREE_STATE_DEFAULTS`
 - **js/utils.js** — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
-- **js/gpx-model.js** — GPX workspace tree data model: node constructors (folder, file, track, segment, route, waypoint), stable IDs, tree traversal helpers, action-target resolution shell, `buildTreeFromLegacy()`
+- **js/gpx-model.js** — GPX workspace tree data model: node constructors (folder, file, track, segment, route, waypoint), stable IDs, tree traversal helpers, action-target resolution shell
 - **js/gpx-tree.js** — workspace tree renderer: hierarchical tree in track panel, context menu (right-click/long-press/kebab), Info editor modal, tree–legacy track sync
 - **js/shortcuts.js** — central keyboard shortcut registry with focus guards, macOS Cmd parity
 
@@ -183,7 +183,7 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 
 ### Workspace tree
 - `js/gpx-model.js` defines node types: `folder`, `file`, `track`, `segment`, `route`, `waypoint`. Each node has a stable auto-generated ID (`uid(prefix)`), type-specific metadata fields, and optional `children[]`.
-- `buildTreeFromLegacy()` derives the workspace tree from the existing `tracks[]` and `waypoints[]` arrays. Grouped tracks (multi-segment GPX imports with matching `groupId`) become file → track → segment hierarchies. Ungrouped tracks become file → track.
+- `gpx-tree.js` builds the workspace tree on import via `onFileBatchImported()` which creates one file node per imported file containing its tracks and segments. On restore from persistence, orphan tracks are rebuilt via `buildWorkspaceFromTracks()`.
 - The tree is rendered directly in the `#track-list` element and is now the only panel renderer. Tree rows show disclosure toggles, type icons, node names, and inline stats.
 - `treeState` holds UI state: `expandedNodeIds` (Set), `selectedNodeId`, `contextMenu`, `infoEditor`.
 - `saveWorkspace()` / `loadWorkspace()` persist the workspace tree structure and metadata to localStorage under `slope:workspace`. On restore, the saved workspace structure is authoritative, with orphan legacy tracks and waypoints appended as a fallback.
