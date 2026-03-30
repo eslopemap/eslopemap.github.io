@@ -12,7 +12,8 @@ import { exportNodeGPX } from './io.js';
 let workspace = createWorkspaceModel();
 let treeState = {
   expandedNodeIds: new Set(),
-  selectedNodeId: null,
+  selectedNodeId: null,       // primary (last-clicked) selection — drives active track
+  selectedNodeIds: new Set(),  // all selected nodes (ctrl/shift multi-select)
   contextMenu: null,    // { nodeId, x, y }
   infoEditor: null,     // { nodeId }
 };
@@ -68,7 +69,11 @@ export function initGpxTree(deps) {
 
   ensureWorkspaceMenuButton();
 
-  // Build initial tree from legacy tracks
+  // Keyboard navigation in tree list
+  _trackListEl.tabIndex = 0;
+  _trackListEl.addEventListener('keydown', handleTreeKeydown);
+
+  // Build initial tree from tracks
   rebuildTree();
 }
 
@@ -79,7 +84,7 @@ export function findNodeForTrackId(trackId, options) {
   let match = null;
   walkNodes(workspace.children, (node) => {
     if (match) return;
-    if (node._legacyTrackId === trackId || node._legacyTrackIds?.includes(trackId)) {
+    if (node._trackId === trackId || node._trackIds?.includes(trackId)) {
       match = node;
     }
   });
@@ -112,14 +117,14 @@ function restoreWorkspace(savedWorkspace, tracks, waypoints) {
     const clone = { ...node };
     if (node.children) clone.children = [];
 
-    if (node._legacyTrackId) {
-      if (!trackIds.has(node._legacyTrackId)) return null;
-      referencedTrackIds.add(node._legacyTrackId);
+    if (node._trackId) {
+      if (!trackIds.has(node._trackId)) return null;
+      referencedTrackIds.add(node._trackId);
     }
-    if (node._legacyTrackIds?.length) {
-      clone._legacyTrackIds = node._legacyTrackIds.filter(id => trackIds.has(id));
-      clone._legacyTrackIds.forEach(id => referencedTrackIds.add(id));
-      if (!clone._legacyTrackIds.length && node.type === 'track') return null;
+    if (node._trackIds?.length) {
+      clone._trackIds = node._trackIds.filter(id => trackIds.has(id));
+      clone._trackIds.forEach(id => referencedTrackIds.add(id));
+      if (!clone._trackIds.length && node.type === 'track') return null;
     }
     if (node._waypointId) {
       if (!waypointIds.has(node._waypointId)) return null;
@@ -163,7 +168,7 @@ function buildWorkspaceFromTracks(tracks, waypoints) {
       const fileNode = createFileNode(t.name, { desc: t.desc || '' });
       fileNode.children.push(createRouteNode(t.name, {
         desc: t.desc || '', cmt: t.cmt || '', rteType: t.rteType || '',
-        _legacyTrackId: t.id,
+        _trackId: t.id,
       }));
       ws.children.push(fileNode);
       continue;
@@ -173,20 +178,20 @@ function buildWorkspaceFromTracks(tracks, waypoints) {
         const fileNode = createFileNode(t.groupName || t.name);
         const trackNode = createTrackNode(t.groupName || t.name, {
           desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
-          _legacyTrackIds: [],
+          _trackIds: [],
         });
         fileNode.children.push(trackNode);
         ws.children.push(fileNode);
         groupMap.set(t.groupId, { fileNode, trackNode });
       }
       const { trackNode } = groupMap.get(t.groupId);
-      trackNode.children.push(createSegmentNode({ _legacyTrackId: t.id }));
-      trackNode._legacyTrackIds.push(t.id);
+      trackNode.children.push(createSegmentNode({ _trackId: t.id }));
+      trackNode._trackIds.push(t.id);
     } else {
       const fileNode = createFileNode(t.name, { desc: t.desc || '' });
       fileNode.children.push(createTrackNode(t.name, {
         desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
-        _legacyTrackIds: [t.id],
+        _trackIds: [t.id],
       }));
       ws.children.push(fileNode);
     }
@@ -206,15 +211,87 @@ function ensureWorkspaceMenuButton() {
 
 function collectDescendantTrackIds(node) {
   const ids = [];
-  if (node._legacyTrackId) ids.push(node._legacyTrackId);
-  if (node._legacyTrackIds) ids.push(...node._legacyTrackIds);
+  if (node._trackId) ids.push(node._trackId);
+  if (node._trackIds) ids.push(...node._trackIds);
   if (node.children) {
     walkNodes(node.children, n => {
-      if (n._legacyTrackId) ids.push(n._legacyTrackId);
-      if (n._legacyTrackIds) ids.push(...n._legacyTrackIds);
+      if (n._trackId) ids.push(n._trackId);
+      if (n._trackIds) ids.push(...n._trackIds);
     });
   }
   return ids;
+}
+
+function getVisibleRows() {
+  return _trackListEl ? [..._trackListEl.querySelectorAll('.tree-row')] : [];
+}
+
+function selectSingleNode(nodeId) {
+  treeState.selectedNodeId = nodeId;
+  treeState.selectedNodeIds.clear();
+  if (nodeId) treeState.selectedNodeIds.add(nodeId);
+}
+
+function handleTreeKeydown(e) {
+  const rows = getVisibleRows();
+  if (!rows.length) return;
+  const currentIdx = rows.findIndex(r => r.dataset.nodeId === treeState.selectedNodeId);
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const nextIdx = currentIdx < rows.length - 1 ? currentIdx + 1 : 0;
+    rows[nextIdx].click();
+    rows[nextIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prevIdx = currentIdx > 0 ? currentIdx - 1 : rows.length - 1;
+    rows[prevIdx].click();
+    rows[prevIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (treeState.selectedNodeId) {
+      const node = findNodeById(workspace.children, treeState.selectedNodeId);
+      if (node?.children?.length && !treeState.expandedNodeIds.has(node.id)) {
+        treeState.expandedNodeIds.add(node.id);
+        renderGpxTree();
+      }
+    }
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (treeState.selectedNodeId) {
+      const node = findNodeById(workspace.children, treeState.selectedNodeId);
+      if (node?.children?.length && treeState.expandedNodeIds.has(node.id)) {
+        treeState.expandedNodeIds.delete(node.id);
+        renderGpxTree();
+      } else {
+        // Move to parent
+        const parent = findParentOf(workspace.children, treeState.selectedNodeId);
+        if (parent) {
+          selectSingleNode(parent.id);
+          const trackIds = collectDescendantTrackIds(parent);
+          const firstId = parent._trackId || parent._trackIds?.[0];
+          if (firstId) _deps.setActiveTrack(firstId);
+          if (trackIds.length) _deps.fitToTrackIds(trackIds);
+          syncTreeSelection();
+          const parentRow = _trackListEl.querySelector(`.tree-row[data-node-id="${parent.id}"]`);
+          if (parentRow) parentRow.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }
+  } else if (e.key === 'Backspace' || e.key === 'Delete') {
+    e.preventDefault();
+    if (treeState.selectedNodeId) {
+      const node = findNodeById(workspace.children, treeState.selectedNodeId);
+      if (node && node.type !== 'segment') {
+        deleteNode(node);
+      }
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (treeState.selectedNodeId) {
+      openInfoEditor(treeState.selectedNodeId);
+    }
+  }
 }
 
 export function renderGpxTree() {
@@ -230,17 +307,17 @@ export function renderGpxTree() {
 export function syncTreeSelection() {
   const items = _trackListEl?.querySelectorAll('.tree-row');
   if (!items) return;
-  // Collect descendant IDs of the selected node for child-selected highlighting
+  // Collect descendant IDs of all selected nodes for child-selected highlighting
   const childIds = new Set();
-  if (treeState.selectedNodeId) {
-    const selNode = findNodeById(workspace.children, treeState.selectedNodeId);
+  for (const selId of treeState.selectedNodeIds) {
+    const selNode = findNodeById(workspace.children, selId);
     if (selNode?.children) {
       walkNodes(selNode.children, n => childIds.add(n.id));
     }
   }
   items.forEach(row => {
     const nodeId = row.dataset.nodeId;
-    row.classList.toggle('selected', nodeId === treeState.selectedNodeId);
+    row.classList.toggle('selected', treeState.selectedNodeIds.has(nodeId));
     row.classList.toggle('child-selected', childIds.has(nodeId));
   });
 }
@@ -352,42 +429,42 @@ function getContextMenuItems(node) {
 
   // Type-specific actions
   if (node.type === 'track' || node.type === 'segment' || node.type === 'route') {
-    const legacyId = node._legacyTrackId || (node._legacyTrackIds?.[0]);
-    if (legacyId) {
+    const nodeTrackId = node._trackId || (node._trackIds?.[0]);
+    if (nodeTrackId) {
       items.push({ separator: true });
       items.push({
         label: '✎ Edit',
-        action: () => _deps.enterEditForTrack(legacyId),
+        action: () => _deps.enterEditForTrack(nodeTrackId),
       });
       items.push({
         label: '📈 Profile',
-        action: () => _deps.showProfileForTrack(legacyId),
+        action: () => _deps.showProfileForTrack(nodeTrackId),
       });
       items.push({
         label: '🔎 Zoom to',
-        action: () => _deps.fitToTrackById(legacyId),
+        action: () => _deps.fitToTrackById(nodeTrackId),
       });
       if (node.type === 'route') {
         items.push({
           label: '⇢ Convert to track',
-          action: () => _deps.convertRouteById?.(legacyId, { replace: false }),
+          action: () => _deps.convertRouteById?.(nodeTrackId, { replace: false }),
         });
         items.push({
           label: '⇢ Convert and replace',
-          action: () => _deps.convertRouteById?.(legacyId, { replace: true }),
+          action: () => _deps.convertRouteById?.(nodeTrackId, { replace: true }),
         });
       } else {
         items.push({
           label: '≈ Simplify…',
-          action: () => _deps.simplifyTrackById?.(legacyId),
+          action: () => _deps.simplifyTrackById?.(nodeTrackId),
         });
         items.push({
           label: '＋ Add intermediate points',
-          action: () => _deps.densifyTrackById?.(legacyId),
+          action: () => _deps.densifyTrackById?.(nodeTrackId),
         });
         items.push({
           label: '✂ Split',
-          action: () => _deps.splitTrackById?.(legacyId),
+          action: () => _deps.splitTrackById?.(nodeTrackId),
         });
       }
     }
@@ -409,15 +486,15 @@ function getContextMenuItems(node) {
     });
 
     const trks = node.children?.filter(c => c.type === 'track' || c.type === 'route') || [];
-    let legacyIdsForFile = [];
+    let trackIdsForFile = [];
     let totalSegments = 0;
     trks.forEach(t => { 
-       if (t._legacyTrackIds) {
-          legacyIdsForFile.push(...t._legacyTrackIds);
-          totalSegments += t._legacyTrackIds.length;
+       if (t._trackIds) {
+          trackIdsForFile.push(...t._trackIds);
+          totalSegments += t._trackIds.length;
        }
-       if (t._legacyTrackId) {
-          legacyIdsForFile.push(t._legacyTrackId);
+       if (t._trackId) {
+          trackIdsForFile.push(t._trackId);
           totalSegments += 1;
        }
     });
@@ -426,28 +503,26 @@ function getContextMenuItems(node) {
       items.push({ separator: true });
       items.push({ label: `— Tracks (${trks.length}) ${totalSegments > trks.length ? ` / Segments (${totalSegments})` : ''} —`, action: () => {}, disabled: true });
       
-      if (trks.length === 1 && legacyIdsForFile.length === 1) {
-         const legacyId = legacyIdsForFile[0];
-         items.push({ label: '✎ Edit', action: () => _deps.enterEditForTrack(legacyId) });
-         items.push({ label: '📈 Profile', action: () => _deps.showProfileForTrack(legacyId) });
-         items.push({ label: '🔎 Zoom to', action: () => _deps.fitToTrackById(legacyId) });
+      if (trks.length === 1 && trackIdsForFile.length === 1) {
+         const nodeTrackId = trackIdsForFile[0];
+         items.push({ label: '✎ Edit', action: () => _deps.enterEditForTrack(nodeTrackId) });
+         items.push({ label: '📈 Profile', action: () => _deps.showProfileForTrack(nodeTrackId) });
+         items.push({ label: '🔎 Zoom to', action: () => _deps.fitToTrackById(nodeTrackId) });
          const isRoute = trks[0].type === 'route';
          if (isRoute) {
-            items.push({ label: '⇢ Convert to track', action: () => _deps.convertRouteById?.(legacyId, { replace: false }) });
-            items.push({ label: '⇢ Convert and replace', action: () => _deps.convertRouteById?.(legacyId, { replace: true }) });
+            items.push({ label: '⇢ Convert to track', action: () => _deps.convertRouteById?.(nodeTrackId, { replace: false }) });
+            items.push({ label: '⇢ Convert and replace', action: () => _deps.convertRouteById?.(nodeTrackId, { replace: true }) });
          } else {
-            items.push({ label: '≈ Simplify…', action: () => _deps.simplifyTrackById?.(legacyId) });
-            items.push({ label: '＋ Add intermediate points', action: () => _deps.densifyTrackById?.(legacyId) });
-            items.push({ label: '✂ Split', action: () => _deps.splitTrackById?.(legacyId) });
+            items.push({ label: '≈ Simplify…', action: () => _deps.simplifyTrackById?.(nodeTrackId) });
+            items.push({ label: '＋ Add intermediate points', action: () => _deps.densifyTrackById?.(nodeTrackId) });
+            items.push({ label: '✂ Split', action: () => _deps.splitTrackById?.(nodeTrackId) });
          }
       } else {
          items.push({
            label: '🔎 Zoom to all',
            action: () => {
-             if (legacyIdsForFile.length > 0) {
-                // Just use existing fit to first track + we can expand it later.
-                // GPX usually operates visually; zooming to group can be complex w/o util, so just zoom to 1st.
-                _deps.fitToTrackById(legacyIdsForFile[0]); 
+             if (trackIdsForFile.length > 0) {
+                _deps.fitToTrackIds(trackIdsForFile);
              }
            }
          });
@@ -469,10 +544,10 @@ function getContextMenuItems(node) {
       label: '＋ New segment',
       action: () => addSegmentToTrack(node),
     });
-    if ((node._legacyTrackIds || []).length > 1) {
+    if ((node._trackIds || []).length > 1) {
       items.push({
         label: '⇄ Merge segments into one',
-        action: () => _deps.mergeTrackNodeByIds?.(node._legacyTrackIds || [], { mode: 'single-segment', name: node.name || 'Track' }),
+        action: () => _deps.mergeTrackNodeByIds?.(node._trackIds || [], { mode: 'single-segment', name: node.name || 'Track' }),
       });
     }
     items.push({
@@ -500,9 +575,8 @@ function getContextMenuItems(node) {
     items.push({
       label: '🔎 Zoom to all',
       action: () => {
-        // Zoom to all tracks in this node
-        const ids = collectLegacyTrackIds(node);
-        if (ids.length) _deps.fitToTrackById(ids[0]);
+        const ids = collectTrackIds(node);
+        if (ids.length) _deps.fitToTrackIds(ids);
       },
     });
   }
@@ -519,12 +593,12 @@ function getContextMenuItems(node) {
   return items;
 }
 
-function collectLegacyTrackIds(node) {
+function collectTrackIds(node) {
   const ids = [];
-  if (node._legacyTrackId) ids.push(node._legacyTrackId);
-  if (node._legacyTrackIds) ids.push(...node._legacyTrackIds);
+  if (node._trackId) ids.push(node._trackId);
+  if (node._trackIds) ids.push(...node._trackIds);
   if (node.children) {
-    for (const c of node.children) ids.push(...collectLegacyTrackIds(c));
+    for (const c of node.children) ids.push(...collectTrackIds(c));
   }
   return ids;
 }
@@ -552,7 +626,7 @@ function createRootFile() {
   const fileNode = createFileNode(nextFileName());
   workspace.children.push(fileNode);
   treeState.expandedNodeIds.add(fileNode.id);
-  treeState.selectedNodeId = fileNode.id;
+  selectSingleNode(fileNode.id);
   scheduleWorkspaceSave();
   renderGpxTree();
   openInfoEditor(fileNode.id);
@@ -564,7 +638,7 @@ function addSiblingFile(node) {
   const fileNode = createFileNode(nextFileName());
   collection.splice(insertIndex + 1, 0, fileNode);
   treeState.expandedNodeIds.add(fileNode.id);
-  treeState.selectedNodeId = fileNode.id;
+  selectSingleNode(fileNode.id);
   scheduleWorkspaceSave();
   renderGpxTree();
   openInfoEditor(fileNode.id);
@@ -576,7 +650,7 @@ function addFileToFolder(folderNode) {
   folderNode.children.push(fileNode);
   treeState.expandedNodeIds.add(folderNode.id);
   treeState.expandedNodeIds.add(fileNode.id);
-  treeState.selectedNodeId = fileNode.id;
+  selectSingleNode(fileNode.id);
   scheduleWorkspaceSave();
   renderGpxTree();
   openInfoEditor(fileNode.id);
@@ -653,7 +727,7 @@ function pasteIntoWorkspace() {
 function removeOriginalClipboardSource(selectNodeId = null) {
   if (!_clipboard?.sourceNodeId) return;
   const sourceNode = findNodeById(workspace.children, _clipboard.sourceNodeId);
-  if (sourceNode) removeNodeAndLegacyData(sourceNode, false);
+  if (sourceNode) removeNodeAndData(sourceNode, false);
   _clipboard = null;
   afterMutationSelectAndRender(selectNodeId);
 }
@@ -686,7 +760,7 @@ function pastePayloadNearNode(targetNode, payload, shouldRemoveSource, asDuplica
 }
 
 function afterMutationSelectAndRender(nodeId) {
-  treeState.selectedNodeId = nodeId;
+  selectSingleNode(nodeId);
   scheduleWorkspaceSave();
   renderGpxTree();
 }
@@ -715,12 +789,12 @@ function snapshotWaypoint(node) {
 
 function snapshotNodePayload(node) {
   if (node.type === 'segment') {
-    const track = node._legacyTrackId ? _deps.findTrack(node._legacyTrackId) : null;
+    const track = node._trackId ? _deps.findTrack(node._trackId) : null;
     if (!track) return null;
     return { kind: 'segment', segment: snapshotTrack(track) };
   }
   if (node.type === 'track') {
-    const segments = (node._legacyTrackIds || []).map(id => _deps.findTrack(id)).filter(Boolean).map(snapshotTrack);
+    const segments = (node._trackIds || []).map(id => _deps.findTrack(id)).filter(Boolean).map(snapshotTrack);
     return {
       kind: 'track',
       name: node.name || 'Track',
@@ -772,7 +846,7 @@ function materializeTrackPayloadIntoFile(payload, fileNode, asDuplicate) {
     desc: payload.desc || '',
     cmt: payload.cmt || '',
     trkType: payload.trkType || '',
-    _legacyTrackIds: [],
+    _trackIds: [],
   });
   fileNode.children ||= [];
   fileNode.children.push(trackNode);
@@ -787,20 +861,20 @@ function materializeTrackPayloadIntoFile(payload, fileNode, asDuplicate) {
         groupName,
         segmentLabel: segment.segmentLabel || `Segment ${index + 1}`,
       });
-      if (created) trackNode._legacyTrackIds.push(created.id);
+      if (created) trackNode._trackIds.push(created.id);
     });
   } else {
     const segment = payload.segments?.[0];
     const created = _deps.createTrackWithoutTree?.(trackName, (segment?.coords || []).map(coord => coord.slice()), {
       color: segment?.color,
     });
-    if (created) trackNode._legacyTrackIds.push(created.id);
+    if (created) trackNode._trackIds.push(created.id);
   }
   return trackNode;
 }
 
 function materializeSegmentPayloadIntoTrack(payload, trackNode, asDuplicate) {
-  const grouping = _deps.ensureTrackGrouping?.([...(trackNode._legacyTrackIds || [])], trackNode.name || 'Track');
+  const grouping = _deps.ensureTrackGrouping?.([...(trackNode._trackIds || [])], trackNode.name || 'Track');
   if (!grouping?.groupId) return null;
   const segment = payload.segment;
   const created = _deps.createTrackWithoutTree?.(trackNode.name || 'Track', (segment.coords || []).map(coord => coord.slice()), {
@@ -854,8 +928,8 @@ function materializeWaypointPayload(payload, collection, asDuplicate) {
   return waypointNode;
 }
 
-function removeNodeAndLegacyData(node, shouldRender = true) {
-  const trackIds = collectLegacyTrackIds(node);
+function removeNodeAndData(node, shouldRender = true) {
+  const trackIds = collectTrackIds(node);
   for (const id of trackIds) _deps.deleteTrackById(id);
   if (node._waypointId) _deps.deleteWaypointById?.(node._waypointId);
   removeNodeFromTree(workspace.children, node.id);
@@ -866,10 +940,10 @@ function removeNodeAndLegacyData(node, shouldRender = true) {
 }
 
 function deleteNode(node) {
-  const ids = collectLegacyTrackIds(node);
+  const ids = collectTrackIds(node);
   const name = node.name || node.type;
   if (!confirm(`Delete "${name}"${ids.length > 1 ? ` (${ids.length} tracks)` : ''}?`)) return;
-  removeNodeAndLegacyData(node, true);
+  removeNodeAndData(node, true);
 }
 
 function removeNodeFromTree(nodes, id) {
@@ -885,21 +959,21 @@ function addTrackToFile(fileNode) {
   const track = _deps.createTrackWithoutTree?.(trackName, [], {});
   if (!track) return;
 
-  const trackNode = createTrackNode(trackName, { _legacyTrackIds: [track.id] });
+  const trackNode = createTrackNode(trackName, { _trackIds: [track.id] });
   fileNode.children ||= [];
   fileNode.children.push(trackNode);
   treeState.expandedNodeIds.add(fileNode.id);
-  treeState.selectedNodeId = trackNode.id;
+  selectSingleNode(trackNode.id);
   scheduleWorkspaceSave();
   renderGpxTree();
   _deps.enterEditForTrack?.(track.id);
 }
 
 function addSegmentToTrack(trackNode) {
-  const legacyTrackIds = [...(trackNode._legacyTrackIds || [])];
-  if (!legacyTrackIds.length) return;
+  const existingIds = [...(trackNode._trackIds || [])];
+  if (!existingIds.length) return;
 
-  const grouping = _deps.ensureTrackGrouping?.(legacyTrackIds, trackNode.name || 'Track');
+  const grouping = _deps.ensureTrackGrouping?.(existingIds, trackNode.name || 'Track');
   if (!grouping?.groupId) return;
 
   const segmentLabel = `Segment ${grouping.segmentCount + 1}`;
@@ -913,7 +987,7 @@ function addSegmentToTrack(trackNode) {
   rebuildTree();
   const selectedNode = findNodeForTrackId(track.id);
   if (selectedNode) {
-    treeState.selectedNodeId = selectedNode.id;
+    selectSingleNode(selectedNode.id);
     treeState.expandedNodeIds.add(selectedNode.id);
     const parent = findParentOf(workspace.children, selectedNode.id);
     if (parent) treeState.expandedNodeIds.add(parent.id);
@@ -1034,31 +1108,31 @@ function applyInfoEdits(node, inputs) {
     if (field === 'name' && val && val !== node.name) {
       nameChanged = true;
       node.name = val;
-      // Sync back to legacy track
-      syncNameToLegacy(node, val);
+      // Sync back to track data
+      syncNameToTrack(node, val);
     } else {
       node[field] = val;
     }
   }
-  syncInfoToLegacy(node);
+  syncInfoToTrack(node);
   scheduleWorkspaceSave();
   if (nameChanged) _deps.renderTrackList();
   renderGpxTree();
 }
 
-function syncNameToLegacy(node, name) {
-  if (node._legacyTrackId) {
-    _deps.renameTrackById(node._legacyTrackId, name);
+function syncNameToTrack(node, name) {
+  if (node._trackId) {
+    _deps.renameTrackById(node._trackId, name);
   }
-  if (node._legacyTrackIds?.length) {
+  if (node._trackIds?.length) {
     // Rename the group/file
-    for (const id of node._legacyTrackIds) {
+    for (const id of node._trackIds) {
       _deps.renameGroupByTrackId(id, name);
     }
   }
 }
 
-function syncInfoToLegacy(node) {
+function syncInfoToTrack(node) {
   if (node._waypointId) {
     _deps.updateWaypointById?.(node._waypointId, {
       name: node.name || '',
@@ -1082,11 +1156,11 @@ function renderNodeList(nodes, container, depth) {
 
     // Determine if this node maps to the active track
     const activeTrackId = _deps.getActiveTrackId?.();
-    const isActive = (node._legacyTrackId === activeTrackId) ||
-      (node._legacyTrackIds?.includes(activeTrackId));
+    const isActive = (node._trackId === activeTrackId) ||
+      (node._trackIds?.includes(activeTrackId));
     if (isActive) row.classList.add('active');
 
-    if (treeState.selectedNodeId === node.id) row.classList.add('selected');
+    if (treeState.selectedNodeIds.has(node.id)) row.classList.add('selected');
 
     // Disclosure toggle
     const hasChildren = node.children?.length > 0;
@@ -1128,18 +1202,18 @@ function renderNodeList(nodes, container, depth) {
     nameEl.className = 'tree-name';
 
     if (node.type === 'segment') {
-      const legacyTrack = node._legacyTrackId ? _deps.findTrack(node._legacyTrackId) : null;
-      nameEl.textContent = legacyTrack?.segmentLabel || 'Segment';
-      appendStatsSpan(nameEl, legacyTrack);
+      const segTrack = node._trackId ? _deps.findTrack(node._trackId) : null;
+      nameEl.textContent = segTrack?.segmentLabel || 'Segment';
+      appendStatsSpan(nameEl, segTrack);
     } else if (node.type === 'waypoint') {
       nameEl.textContent = node.name || 'Waypoint';
     } else if (node.type === 'track') {
       nameEl.textContent = node.name || 'Track';
       // Aggregate stats for multi-segment tracks
-      if (node._legacyTrackIds?.length > 1) {
-        appendAggregateStats(nameEl, node._legacyTrackIds);
-      } else if (node._legacyTrackIds?.length === 1) {
-        const t = _deps.findTrack(node._legacyTrackIds[0]);
+      if (node._trackIds?.length > 1) {
+        appendAggregateStats(nameEl, node._trackIds);
+      } else if (node._trackIds?.length === 1) {
+        const t = _deps.findTrack(node._trackIds[0]);
         appendStatsSpan(nameEl, t);
       }
     } else {
@@ -1148,7 +1222,7 @@ function renderNodeList(nodes, container, depth) {
          const trks = node.children?.filter(c => c.type === 'track') || [];
          if (trks.length > 0) {
             const allIds = [];
-            trks.forEach(t => { if (t._legacyTrackIds) allIds.push(...t._legacyTrackIds); });
+            trks.forEach(t => { if (t._trackIds) allIds.push(...t._trackIds); });
             if (allIds.length > 0) appendAggregateStats(nameEl, allIds);
          }
          if (trks.length > 1) {
@@ -1180,13 +1254,49 @@ function renderNodeList(nodes, container, depth) {
     // Click to select/activate
     row.addEventListener('click', (e) => {
       if (e.target.classList.contains('tree-kebab') || e.target.classList.contains('tree-toggle')) return;
-      treeState.selectedNodeId = node.id;
-      // Activate the legacy track if applicable
-      const legacyId = node._legacyTrackId || node._legacyTrackIds?.[0];
-      if (legacyId) _deps.setActiveTrack(legacyId);
-      // Fit map to all descendant tracks
-      const trackIds = collectDescendantTrackIds(node);
-      if (trackIds.length) _deps.fitToTrackIds(trackIds);
+
+      if (e.shiftKey && treeState.selectedNodeId) {
+        // Shift+click: range select from primary to this node
+        const rows = getVisibleRows();
+        const primaryIdx = rows.findIndex(r => r.dataset.nodeId === treeState.selectedNodeId);
+        const clickIdx = rows.findIndex(r => r.dataset.nodeId === node.id);
+        if (primaryIdx >= 0 && clickIdx >= 0) {
+          const lo = Math.min(primaryIdx, clickIdx);
+          const hi = Math.max(primaryIdx, clickIdx);
+          treeState.selectedNodeIds.clear();
+          for (let i = lo; i <= hi; i++) treeState.selectedNodeIds.add(rows[i].dataset.nodeId);
+          treeState.selectedNodeIds.add(treeState.selectedNodeId);
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd+click: toggle this node in multi-select
+        if (treeState.selectedNodeIds.has(node.id)) {
+          treeState.selectedNodeIds.delete(node.id);
+          if (treeState.selectedNodeId === node.id) {
+            treeState.selectedNodeId = treeState.selectedNodeIds.size
+              ? [...treeState.selectedNodeIds][treeState.selectedNodeIds.size - 1]
+              : null;
+          }
+        } else {
+          treeState.selectedNodeIds.add(node.id);
+          treeState.selectedNodeId = node.id;
+        }
+      } else {
+        // Normal click: single select
+        treeState.selectedNodeId = node.id;
+        treeState.selectedNodeIds.clear();
+        treeState.selectedNodeIds.add(node.id);
+      }
+
+      // Activate the track for the primary selection
+      const primaryId = node._trackId || node._trackIds?.[0];
+      if (primaryId) _deps.setActiveTrack(primaryId);
+      // Fit map to all tracks across all selected nodes
+      const allTrackIds = [];
+      for (const nid of treeState.selectedNodeIds) {
+        const n = findNodeById(workspace.children, nid);
+        if (n) allTrackIds.push(...collectDescendantTrackIds(n));
+      }
+      if (allTrackIds.length) _deps.fitToTrackIds(allTrackIds);
       syncTreeSelection();
     });
 
@@ -1229,9 +1339,9 @@ function appendStatsSpan(nameEl, track) {
   }
 }
 
-function appendAggregateStats(nameEl, legacyTrackIds) {
+function appendAggregateStats(nameEl, segTrackIds) {
   let totalDist = 0, totalGain = 0, totalLoss = 0;
-  for (const id of legacyTrackIds) {
+  for (const id of segTrackIds) {
     const t = _deps.findTrack(id);
     if (!t) continue;
     const s = _deps.trackStats(t);
@@ -1259,7 +1369,7 @@ export function onTrackCreated(track) {
       desc: track.desc || '',
       cmt: track.cmt || '',
       rteType: track.rteType || '',
-      _legacyTrackId: track.id,
+      _trackId: track.id,
     });
     fileNode.children.push(routeNode);
     workspace.children.push(fileNode);
@@ -1274,7 +1384,7 @@ export function onTrackCreated(track) {
     desc: track.desc || '',
     cmt: track.cmt || '',
     trkType: track.trkType || '',
-    _legacyTrackIds: [track.id],
+    _trackIds: [track.id],
   });
   fileNode.children.push(trackNode);
   workspace.children.push(fileNode);
@@ -1294,11 +1404,11 @@ export function onTrackDeleted(trackId) {
 function removeNodesForTrack(nodes, trackId) {
   for (let i = nodes.length - 1; i >= 0; i--) {
     const node = nodes[i];
-    if (node._legacyTrackId === trackId) { nodes.splice(i, 1); continue; }
-    if (node._legacyTrackIds) {
-      const idx = node._legacyTrackIds.indexOf(trackId);
-      if (idx >= 0) node._legacyTrackIds.splice(idx, 1);
-      if (node._legacyTrackIds.length === 0 && node.type === 'track') {
+    if (node._trackId === trackId) { nodes.splice(i, 1); continue; }
+    if (node._trackIds) {
+      const idx = node._trackIds.indexOf(trackId);
+      if (idx >= 0) node._trackIds.splice(idx, 1);
+      if (node._trackIds.length === 0 && node.type === 'track') {
         nodes.splice(i, 1); continue;
       }
     }
@@ -1320,7 +1430,7 @@ export function onFileBatchImported(fileName, createdTracks, importedWaypoints) 
     if ((t.sourceKind || 'track') === 'route') {
       const routeNode = createRouteNode(t.name, {
         desc: t.desc || '', cmt: t.cmt || '', rteType: t.rteType || '',
-        _legacyTrackId: t.id,
+        _trackId: t.id,
       });
       fileNode.children.push(routeNode);
       continue;
@@ -1329,18 +1439,18 @@ export function onFileBatchImported(fileName, createdTracks, importedWaypoints) 
       if (!groupMap.has(t.groupId)) {
         const trackNode = createTrackNode(t.groupName || t.name, {
           desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
-          _legacyTrackIds: [],
+          _trackIds: [],
         });
         fileNode.children.push(trackNode);
         groupMap.set(t.groupId, trackNode);
       }
       const trackNode = groupMap.get(t.groupId);
-      trackNode._legacyTrackIds.push(t.id);
-      trackNode.children.push(createSegmentNode({ _legacyTrackId: t.id }));
+      trackNode._trackIds.push(t.id);
+      trackNode.children.push(createSegmentNode({ _trackId: t.id }));
     } else {
       const trackNode = createTrackNode(t.name, {
         desc: t.desc || '', cmt: t.cmt || '', trkType: t.trkType || '',
-        _legacyTrackIds: [t.id],
+        _trackIds: [t.id],
       });
       fileNode.children.push(trackNode);
     }
