@@ -27,9 +27,9 @@
         layers: [
           { id: 'basemap', type: 'raster', source: 'osm' },
           { id: 'analysis', type: 'terrain-analysis', source: 'dem', paint: {
-            'terrain-analysis-attribute': 'slope',
-            'terrain-analysis-opacity': 0.6,
-            'terrain-analysis-color': ['interpolate', ['linear'], ['slope'], 0, '#00ff00', 30, '#ff8800', 60, '#ff0000', 90, '#550000'],
+            'attribute': 'slope',
+            'opacity': 0.6,
+            'color': ['interpolate', ['linear'], ['slope'], 0, '#00ff00', 30, '#ff8800', 60, '#ff0000', 90, '#550000'],
             'blend-mode': 'multiply'
           }}
         ]

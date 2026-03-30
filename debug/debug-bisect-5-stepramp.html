@@ -44,9 +44,9 @@
         layers: [
           { id: 'basemap', type: 'raster', source: 'osm' },
           { id: 'analysis', type: 'terrain-analysis', source: 'dem', paint: {
-            'terrain-analysis-attribute': 'slope',
-            'terrain-analysis-opacity': 0.6,
-            'terrain-analysis-color': SLOPE_RAMP,
+            'attribute': 'slope',
+            'opacity': 0.6,
+            'color': SLOPE_RAMP,
             'blend-mode': 'multiply'
           }}
         ]

@@ -37,9 +37,9 @@
       map.addLayer({
         id: 'analysis', type: 'terrain-analysis', source: 'dem',
         paint: {
-          'terrain-analysis-attribute': 'slope',
-          'terrain-analysis-opacity': 0.45,
-          'terrain-analysis-color': ['step', ['slope'],
+          'attribute': 'slope',
+          'opacity': 0.45,
+          'color': ['step', ['slope'],
             '#ffffff', 20, '#c0ffff', 28, '#00d3db', 34, '#ffc256',
             40, '#ff0000', 52, '#5e1eff', 65, '#aaaaaa'],
           'blend-mode': 'multiply'
@@ -48,7 +48,7 @@
       console.log('[bisect7] Layer added with flat opacity');
 
       // THIS IS THE KEY TEST: override opacity with zoom expression
-      map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+      map.setPaintProperty('analysis', 'opacity',
         ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 0.45]);
       console.log('[bisect7] Opacity overridden with zoom expression');
     });

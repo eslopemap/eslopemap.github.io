@@ -47,15 +47,15 @@
       map.setLayoutProperty('dem-loader', 'visibility', 'none');
       map.setTerrain({ source: 'dem', exaggeration: 1.4 });
       map.addLayer({ id: 'analysis', type: 'terrain-analysis', source: 'dem',
-        paint: { 'terrain-analysis-attribute': 'slope', 'terrain-analysis-opacity': 0.45,
-          'terrain-analysis-color': ['step',['slope'],'#ffffff',20,'#c0ffff',28,'#00d3db',34,'#ffc256',40,'#ff0000',52,'#5e1eff',65,'#aaaaaa'],
+        paint: { 'attribute': 'slope', 'opacity': 0.45,
+          'color': ['step',['slope'],'#ffffff',20,'#c0ffff',28,'#00d3db',34,'#ffc256',40,'#ff0000',52,'#5e1eff',65,'#aaaaaa'],
           'blend-mode': 'multiply' } });
       map.addLayer({ id: 'analysis-relief', type: 'terrain-analysis', source: 'dem',
-        paint: { 'terrain-analysis-attribute': 'elevation', 'terrain-analysis-opacity': 0.45,
-          'terrain-analysis-color': ['interpolate',['linear'],['elevation'],0,'#A9D4E8',500,'#C8B75F',1500,'#705B43',3000,'#D9CCBF',5000,'#F6F2EF'],
+        paint: { 'attribute': 'elevation', 'opacity': 0.45,
+          'color': ['interpolate',['linear'],['elevation'],0,'#A9D4E8',500,'#C8B75F',1500,'#705B43',3000,'#D9CCBF',5000,'#F6F2EF'],
           'blend-mode': 'multiply' } });
-      map.setPaintProperty('analysis', 'terrain-analysis-opacity', ['interpolate',['linear'],['zoom'],10,0,11,0.45]);
-      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity', ['interpolate',['linear'],['zoom'],10,0.45,11,0]);
+      map.setPaintProperty('analysis', 'opacity', ['interpolate',['linear'],['zoom'],10,0,11,0.45]);
+      map.setPaintProperty('analysis-relief', 'opacity', ['interpolate',['linear'],['zoom'],10,0.45,11,0]);
       map.addLayer({ id: 'contours', type: 'line', source: 'contourSource', 'source-layer': 'contours',
         paint: { 'line-opacity': 0.2, 'line-width': ['match',['get','level'],1,1,0.5] } });
     });

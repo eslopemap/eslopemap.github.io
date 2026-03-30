@@ -124,9 +124,9 @@
         type: 'terrain-analysis',
         source: 'dem',
         paint: {
-          'terrain-analysis-attribute': 'slope',
-          'terrain-analysis-opacity': 0.45,
-          'terrain-analysis-color': [
+          'attribute': 'slope',
+          'opacity': 0.45,
+          'color': [
             'step', ['slope'],
             '#ffffff', 20, '#c0ffff', 24, '#57ffff', 28, '#00d3db',
             31, '#fffa32', 34, '#ffc256', 37, '#fd7100', 40, '#ff0000',
@@ -141,9 +141,9 @@
         type: 'terrain-analysis',
         source: 'dem',
         paint: {
-          'terrain-analysis-attribute': 'elevation',
-          'terrain-analysis-opacity': 0.45,
-          'terrain-analysis-color': [
+          'attribute': 'elevation',
+          'opacity': 0.45,
+          'color': [
             'interpolate', ['linear'], ['elevation'],
             0, '#A9D4E8', 500, '#C8B75F', 1500, '#705B43', 3000, '#D9CCBF', 5000, '#F6F2EF'
           ],
@@ -152,9 +152,9 @@
       });
 
       // For slope+relief mode: crossfade via zoom expression
-      map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+      map.setPaintProperty('analysis', 'opacity',
         ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 0.45]);
-      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity',
+      map.setPaintProperty('analysis-relief', 'opacity',
         ['interpolate', ['linear'], ['zoom'], 10, 0.45, 11, 0]);
 
       updateStatus();
