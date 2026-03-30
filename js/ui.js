@@ -143,9 +143,9 @@ export function applyModeState(map, state) {
     if (map.getLayer('analysis')) {
       map.setLayoutProperty('analysis', 'visibility', showSlope ? 'visible' : 'none');
       if (showSlope) {
-        map.setPaintProperty('analysis', 'terrain-analysis-attribute', 'slope');
-        map.setPaintProperty('analysis', 'terrain-analysis-color', ANALYSIS_COLOR.slope);
-        map.setPaintProperty('analysis', 'terrain-analysis-opacity',
+        map.setPaintProperty('analysis', 'attribute', 'slope');
+        map.setPaintProperty('analysis', 'color', ANALYSIS_COLOR.slope);
+        map.setPaintProperty('analysis', 'opacity',
           ['interpolate', ['linear'], ['zoom'],
             SLOPE_RELIEF_CROSSFADE_Z - 1, 0,
             SLOPE_RELIEF_CROSSFADE_Z, state.slopeOpacity
@@ -156,7 +156,7 @@ export function applyModeState(map, state) {
     if (map.getLayer('analysis-relief')) {
       map.setLayoutProperty('analysis-relief', 'visibility', showRelief ? 'visible' : 'none');
       if (showRelief) {
-        map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity',
+        map.setPaintProperty('analysis-relief', 'opacity',
           ['interpolate', ['linear'], ['zoom'],
             SLOPE_RELIEF_CROSSFADE_Z - 1, state.slopeOpacity,
             SLOPE_RELIEF_CROSSFADE_Z, 0
@@ -167,9 +167,9 @@ export function applyModeState(map, state) {
   } else if (state.mode === 'slope' || state.mode === 'aspect') {
     if (map.getLayer('analysis')) {
       map.setLayoutProperty('analysis', 'visibility', 'visible');
-      map.setPaintProperty('analysis', 'terrain-analysis-attribute', state.mode);
-      map.setPaintProperty('analysis', 'terrain-analysis-color', ANALYSIS_COLOR[state.mode]);
-      map.setPaintProperty('analysis', 'terrain-analysis-opacity', state.slopeOpacity);
+      map.setPaintProperty('analysis', 'attribute', state.mode);
+      map.setPaintProperty('analysis', 'color', ANALYSIS_COLOR[state.mode]);
+      map.setPaintProperty('analysis', 'opacity', state.slopeOpacity);
       map.setPaintProperty('analysis', 'blend-mode', blendMode);
     }
     if (map.getLayer('analysis-relief')) map.setLayoutProperty('analysis-relief', 'visibility', 'none');
@@ -177,7 +177,7 @@ export function applyModeState(map, state) {
     if (map.getLayer('analysis')) map.setLayoutProperty('analysis', 'visibility', 'none');
     if (map.getLayer('analysis-relief')) {
       map.setLayoutProperty('analysis-relief', 'visibility', 'visible');
-      map.setPaintProperty('analysis-relief', 'terrain-analysis-opacity', state.slopeOpacity);
+      map.setPaintProperty('analysis-relief', 'opacity', state.slopeOpacity);
       map.setPaintProperty('analysis-relief', 'blend-mode', blendMode);
     }
   }
