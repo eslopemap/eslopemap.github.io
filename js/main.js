@@ -26,7 +26,7 @@ import { importFileContent } from './io.js';
 import { loadSettings, saveSettings, clearAll as clearPersistedData } from './persist.js';
 import { initShortcuts, registerShortcut } from './shortcuts.js';
 import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
-import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection } from './selection-tools.js';
+import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection, getCurrentSelection } from './selection-tools.js';
 import { describeOperationConsequence } from './track-ops.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
@@ -520,6 +520,16 @@ initSelectionTools(map, {
     if (action === 'simplify') simplifyBtn.click();
     else if (action === 'densify') densifyBtn.click();
     else if (action === 'split') splitBtn.click();
+    else if (action === 'delete') {
+      const sel = getCurrentSelection();
+      if (sel?.trackId && sel.sourceIndices?.length) {
+        const result = tracksState.deleteSelectionPoints(sel.trackId, sel.sourceIndices);
+        if (result?.ok) {
+          clearSelection();
+          syncOperationState();
+        }
+      }
+    }
   },
 });
 
@@ -750,7 +760,7 @@ registerShortcut({ key: 'i', ctrl: true, handler: async () => {
   let targetNodeId = null;
   walkNodes(ws.children, n => {
     if (targetNodeId) return;
-    if (n._legacyTrackId === activeId || n._legacyTrackIds?.includes(activeId)) {
+    if (n._trackId === activeId || n._trackIds?.includes(activeId)) {
       targetNodeId = n.id;
     }
   });
@@ -768,7 +778,6 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
 {
   const railEditBtn = document.getElementById('rail-edit-btn');
   const railRectBtn = document.getElementById('rail-rect-btn');
-  const railMobileBtn = document.getElementById('rail-mobile-btn');
 
   // Edit active track button
   railEditBtn?.addEventListener('click', () => {
@@ -782,14 +791,9 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
     syncRailState();
   });
 
-  // Rect delete — delegates to existing rect-delete
+  // Rect select — delegates to selection-mode
   railRectBtn?.addEventListener('click', () => {
     document.getElementById('selection-mode-btn')?.click();
-  });
-
-  // Mobile mode — delegates to existing mobile-mode
-  railMobileBtn?.addEventListener('click', () => {
-    document.getElementById('mobile-mode-btn')?.click();
   });
 
   // Sync rail state periodically with track editing state
@@ -799,10 +803,6 @@ registerShortcut({ key: 'Escape', allowInInputs: false, handler: () => {
     railEditBtn.classList.toggle('active', Boolean(tracksState.editingTrackId));
     railRectBtn.disabled = !t;
     railRectBtn.classList.toggle('active', isRectangleModeActive());
-
-    // Mobile btn visibility
-    const mobileBtn = document.getElementById('mobile-mode-btn');
-    railMobileBtn.style.display = mobileBtn?.style.display === 'none' ? 'none' : '';
     syncOperationState();
   }
 

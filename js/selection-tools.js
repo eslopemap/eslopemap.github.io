@@ -68,6 +68,7 @@ function renderHint(selectionSpan, anchorClientX, anchorClientY) {
     `<button data-action="simplify" title="Simplify">≈</button>`,
     `<button data-action="densify" title="Densify">＋</button>`,
     `<button data-action="split" title="Split">✂</button>`,
+    `<button data-action="delete" title="Delete selected points" class="delete-action">🗑</button>`,
     `</div>`,
   ].join('');
   hint.style.left = Math.round(anchorClientX + 12) + 'px';
@@ -210,6 +211,13 @@ export function initSelectionTools(mapRef, injectedDeps) {
   bindPointerHandlers();
 
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      if (currentSelection?.selectionSpan?.ok) {
+        deps.onAction?.('delete');
+        event.preventDefault();
+        return;
+      }
+    }
     if (event.key !== 'Escape') return;
     if (currentSelection) {
       clearSelectionInternal(true);
@@ -258,6 +266,10 @@ export function getSelectionState() {
     rectangleMode,
     selectionSpan: currentSelection?.selectionSpan || null,
   };
+}
+
+export function getCurrentSelection() {
+  return currentSelection;
 }
 
 export function setActionPreview(text) {

@@ -222,7 +222,7 @@ function addTrackToMap(t) {
     filter: ['==', '$type', 'LineString'],
     paint: {
       'line-color': t.color,
-      'line-width': ['case', isActive, 5, 2.5],
+      'line-width': ['case', isActive, 5, 2],
       'line-opacity': 0.9
     }
   });
@@ -654,6 +654,23 @@ function getTrackById(id) {
   return tracks.find(t => t.id === id) || null;
 }
 
+function deleteSelectionPoints(trackId, sourceIndices) {
+  const track = getTrackById(trackId);
+  if (!track || !sourceIndices?.length) return { ok: false, error: 'Nothing to delete' };
+  const sorted = [...sourceIndices].sort((a, b) => b - a);
+  for (const idx of sorted) {
+    track.coords.splice(idx, 1);
+  }
+  if (track.coords.length === 0) {
+    removeTrackById(trackId);
+  } else {
+    onTrackCoordsChanged(track);
+  }
+  clearSelectionSpan();
+  scheduleSave();
+  return { ok: true, deletedCount: sourceIndices.length };
+}
+
 function clearSelectionSpan(notifyProfile = true) {
   activeSelectionSpan = null;
   refreshSelectionHighlight();
@@ -991,6 +1008,7 @@ export function getTracksState() {
     splitActiveTrackSpan,
     mergeSelectedTracks,
     convertActiveRouteToTrack,
+    deleteSelectionPoints,
     ensureProfileHoverLayer,
     PROFILE_HOVER_SOURCE_ID,
     syncProfileToggleButton,

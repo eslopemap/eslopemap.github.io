@@ -281,6 +281,7 @@
       max-height: 50vh;
       overflow-y: auto;
       padding-bottom: 4px;
+      outline: none;
     }
     .track-item {
       display: flex;
@@ -393,6 +394,14 @@
     }
     .selection-hint-actions button:hover {
       background: rgba(59,130,246,0.25);
+    }
+    .selection-hint-actions button.delete-action {
+      background: rgba(220,38,38,0.12);
+      border-color: rgba(220,38,38,0.3);
+      margin-left: auto;
+    }
+    .selection-hint-actions button.delete-action:hover {
+      background: rgba(220,38,38,0.3);
     }
 
     #mobile-move-hint {
@@ -662,13 +671,8 @@
 
     /* Undo-last-point button */
     #undo-btn { font-size: 14px; }
-    /* Rectangle delete button */
-    #rect-delete-btn { font-size: 14px; }
     /* Draw new track button */
     #draw-btn { font-size: 18px; font-weight: 700; line-height: 1; }
-    /* Mobile-friendly mode button */
-    #mobile-mode-btn { font-size: 14px; }
-    #mobile-mode-btn.active { background: #4a90d9; color: #fff; }
     /* On-map insert popup near selected vertex */
     .vertex-insert-popup { cursor: pointer; }
     .vertex-insert-popup .insert-popup-btn {
@@ -686,16 +690,6 @@
     .vertex-insert-popup .insert-popup-btn:hover,
     .vertex-insert-popup .insert-popup-btn.active {
       background: #4a90d9; color: #fff;
-    }
-
-    /* Rectangle delete overlay */
-    .rect-delete-overlay {
-      position: fixed;
-      border: 2px dashed #e74c3c;
-      background: rgba(231, 76, 60, 0.15);
-      pointer-events: none;
-      z-index: 1000;
-      display: none;
     }
 
     /* Workspace tree */

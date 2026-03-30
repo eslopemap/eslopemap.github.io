@@ -30,7 +30,7 @@ const isLocalhost = location.hostname === 'localhost' || location.hostname === '
 let mobileFriendlyMode = isMobile;
 
 // DOM refs (resolved at init)
-let drawBtn, undoBtn, rectDeleteBtn, mobileModeBtn, mobileHint, drawCrosshair, toastEl;
+let drawBtn, undoBtn, mobileHint, drawCrosshair, toastEl;
 
 // ---- Undo stack ----
 // Stores snapshots of {trackId, coords (deep copy), selectedVertexIndex, insertAfterIdx}
@@ -66,97 +66,7 @@ function clearUndoStack() {
   undoStack.length = 0;
 }
 
-// Rectangle delete state
-let rectDeleteMode = false;
-let rectStart = null;  // {x, y} screen coords
-let rectOverlay = null;
 
-function ensureRectOverlay() {
-  if (!rectOverlay) {
-    rectOverlay = document.createElement('div');
-    rectOverlay.className = 'rect-delete-overlay';
-    document.body.appendChild(rectOverlay);
-  }
-  return rectOverlay;
-}
-
-function updateRectOverlayPosition(startX, startY, curX, curY) {
-  const ov = ensureRectOverlay();
-  ov.style.left = Math.min(startX, curX) + 'px';
-  ov.style.top = Math.min(startY, curY) + 'px';
-  ov.style.width = Math.abs(curX - startX) + 'px';
-  ov.style.height = Math.abs(curY - startY) + 'px';
-  ov.style.display = 'block';
-}
-
-function completeRectDelete(x1, y1, x2, y2, needsConfirm) {
-  const ov = ensureRectOverlay();
-
-  if (x2 - x1 <= 5 || y2 - y1 <= 5) {
-    ov.style.display = 'none';
-    rectDeleteMode = false;
-    syncUndoBtn();
-    return;
-  }
-
-  const t = editingTrackId ? tracksFns.findTrack(editingTrackId) : null;
-  if (!t || !t.coords.length) {
-    ov.style.display = 'none';
-    rectDeleteMode = false;
-    syncUndoBtn();
-    return;
-  }
-
-  const canvas = map.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  const mapX1 = x1 - rect.left, mapY1 = y1 - rect.top;
-  const mapX2 = x2 - rect.left, mapY2 = y2 - rect.top;
-
-  const indicesToDelete = [];
-  for (let i = 0; i < t.coords.length; i++) {
-    const pt = map.project([t.coords[i][0], t.coords[i][1]]);
-    if (pt.x >= mapX1 && pt.x <= mapX2 && pt.y >= mapY1 && pt.y <= mapY2) {
-      indicesToDelete.push(i);
-    }
-  }
-
-  function doDelete() {
-    ov.style.display = 'none';
-    if (indicesToDelete.length > 0) {
-      pushUndo(t.id);
-      for (let i = indicesToDelete.length - 1; i >= 0; i--) {
-        t.coords.splice(indicesToDelete[i], 1);
-      }
-      selectedVertexIndex = null;
-      insertAfterIdx = null;
-      tracksFns.onTrackCoordsChanged(t);
-      if (t.coords.length === 0) tracksFns.deleteTrack(t.id);
-      showToast(`Deleted ${indicesToDelete.length} point${indicesToDelete.length > 1 ? 's' : ''}`, 2000);
-    }
-    rectDeleteMode = false;
-    syncUndoBtn();
-  }
-
-  if (indicesToDelete.length === 0) {
-    ov.style.display = 'none';
-    rectDeleteMode = false;
-    syncUndoBtn();
-    return;
-  }
-
-  if (needsConfirm) {
-    // Keep overlay visible while confirming
-    if (confirm(`Delete ${indicesToDelete.length} point${indicesToDelete.length > 1 ? 's' : ''}?`)) {
-      doDelete();
-    } else {
-      ov.style.display = 'none';
-      rectDeleteMode = false;
-      syncUndoBtn();
-    }
-  } else {
-    doDelete();
-  }
-}
 
 let toastTimer = 0;
 function showToast(msg, durationMs) {
@@ -353,10 +263,7 @@ function syncUndoBtn() {
   const show = t && t.coords.length > 0 && isTrackEditing(t.id);
   undoBtn.style.display = show ? '' : 'none';
   undoBtn.disabled = undoStack.length === 0;
-  rectDeleteBtn.style.display = show ? '' : 'none';
-  rectDeleteBtn.classList.toggle('active', rectDeleteMode);
-  mobileModeBtn.style.display = ((isMobile || isLocalhost) && show) ? '' : 'none';
-  mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
+
   tracksFns.updateVertexHighlight(editingTrackId, selectedVertexIndex);
   updateInsertPopup();
   updateInsertPreview();
@@ -414,7 +321,6 @@ export function enterEditMode(tId) {
   editingTrackId = tId;
   selectedVertexIndex = null;
   insertAfterIdx = null;
-  rectDeleteMode = false;
   clearUndoStack();
   map.getCanvas().style.cursor = 'crosshair';
   drawBtn.classList.add('active');
@@ -433,7 +339,6 @@ export function exitEditMode() {
   selectedVertexIndex = null;
   insertAfterIdx = null;
   clearUndoStack();
-  rectDeleteMode = false;
   removeInsertPopup();
   drawBtn.classList.remove('active');
   setDefaultMapCursor();
@@ -492,6 +397,9 @@ export function getEditState() {
   };
 }
 
+// Exported for unit testing only
+export const _testUndo = { pushUndo, popUndo, clearUndoStack, get undoStack() { return undoStack; } };
+
 // ---- Init: wire up all editing event listeners ----
 
 export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
@@ -502,11 +410,17 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
   drawBtn = document.getElementById('draw-btn');
   undoBtn = document.getElementById('undo-btn');
-  rectDeleteBtn = document.getElementById('rect-delete-btn');
-  mobileModeBtn = document.getElementById('mobile-mode-btn');
   mobileHint = document.getElementById('mobile-move-hint');
   toastEl = document.getElementById('toast');
   drawCrosshair = document.getElementById('draw-crosshair');
+
+  // Show mobile-mode checkbox on localhost (non-mobile)
+  const mobileModeRow = document.getElementById('mobile-mode-row');
+  const mobileModeCheckbox = document.getElementById('mobileModeDesktop');
+  if (mobileModeRow && isLocalhost && !isMobile) {
+    mobileModeRow.style.display = '';
+    mobileModeCheckbox.checked = mobileFriendlyMode;
+  }
 
   // Button handlers
   drawBtn.addEventListener('click', () => {
@@ -518,20 +432,8 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     popUndo();
   });
 
-  rectDeleteBtn.addEventListener('click', () => {
-    rectDeleteMode = !rectDeleteMode;
-    rectDeleteBtn.classList.toggle('active', rectDeleteMode);
-    if (rectDeleteMode) {
-      map.getCanvas().style.cursor = 'crosshair';
-      showToast('Draw rectangle to delete points inside', 2500);
-    } else {
-      map.getCanvas().style.cursor = 'crosshair';
-    }
-  });
-
-  mobileModeBtn.addEventListener('click', () => {
-    mobileFriendlyMode = !mobileFriendlyMode;
-    mobileModeBtn.classList.toggle('active', mobileFriendlyMode);
+  mobileModeCheckbox?.addEventListener('change', () => {
+    mobileFriendlyMode = mobileModeCheckbox.checked;
     if (mobileFriendlyMode && editingTrackId) {
       drawCrosshair.classList.add('visible', 'editing');
       showToast('Tap anywhere to add a point at center', 3000);
@@ -551,8 +453,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }
 
     if (editingTrackId) {
-      // Don't add points while in rectangle delete or rectangle selection mode
-      if (rectDeleteMode) return;
+      // Don't add points while in rectangle selection mode
       if (tracksFns.isRectangleSelectionActive?.()) return;
 
       const t = tracksFns.findTrack(editingTrackId);
@@ -653,14 +554,6 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && rectDeleteMode) {
-      rectDeleteMode = false;
-      if (rectOverlay) rectOverlay.style.display = 'none';
-      rectStart = null;
-      map.dragPan.enable();
-      syncUndoBtn();
-      return;
-    }
     if (e.key === 'Escape' && editingTrackId) exitEditMode();
     if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
     if ((e.key === 'Delete' || e.key === 'Backspace') && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
@@ -705,15 +598,6 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
       // Ignore right-click — let map handle pan/rotate naturally
       if (e.originalEvent.button !== 0) return;
 
-      // Rectangle delete mode
-      if (rectDeleteMode) {
-        e.preventDefault();
-        rectStart = { x: e.originalEvent.clientX, y: e.originalEvent.clientY };
-        updateRectOverlayPosition(rectStart.x, rectStart.y, rectStart.x, rectStart.y);
-        map.dragPan.disable();
-        return;
-      }
-
       const hit = hitTestVertex(e.point);
       if (hit && hit.index != null) {
         e.preventDefault();
@@ -752,12 +636,6 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     });
 
     map.on('mousemove', (e) => {
-      // Rectangle delete drawing
-      if (rectStart && rectOverlay) {
-        updateRectOverlayPosition(rectStart.x, rectStart.y, e.originalEvent.clientX, e.originalEvent.clientY);
-        return;
-      }
-
       if (dragVertexInfo) {
         const t = tracksFns.findTrack(dragVertexInfo.trackId);
         if (!t) return;
@@ -806,40 +684,15 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     });
 
     map.on('mouseup', (e) => {
-      // Complete rectangle delete
-      if (rectStart && rectOverlay) {
-        const endX = e.originalEvent.clientX;
-        const endY = e.originalEvent.clientY;
-        const x1 = Math.min(rectStart.x, endX);
-        const y1 = Math.min(rectStart.y, endY);
-        const x2 = Math.max(rectStart.x, endX);
-        const y2 = Math.max(rectStart.y, endY);
-
-        rectStart = null;
-        map.dragPan.enable();
-        completeRectDelete(x1, y1, x2, y2, false);
-        suppressNextMapClick = true;
-        return;
-      }
-
       finishVertexDrag();
     });
 
     window.addEventListener('mouseup', (e) => {
-      // Also handle rect delete cancel if mouse released outside map
-      if (rectStart && rectOverlay) {
-        rectOverlay.style.display = 'none';
-        rectStart = null;
-        rectDeleteMode = false;
-        map.dragPan.enable();
-        syncUndoBtn();
-        return;
-      }
       finishVertexDrag();
     });
   }
 
-  // Mobile: vertex interaction + rect delete
+  // Mobile: vertex interaction
   if (isMobile) {
     let touchLongPressTimer = null;
     let touchStartPt = null;
@@ -847,15 +700,6 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
     map.getCanvas().addEventListener('touchstart', (e) => {
       if (!editingTrackId) return;
-
-      // Rectangle delete on mobile
-      if (rectDeleteMode && e.touches.length === 1) {
-        const touch = e.touches[0];
-        rectStart = { x: touch.clientX, y: touch.clientY };
-        updateRectOverlayPosition(rectStart.x, rectStart.y, rectStart.x, rectStart.y);
-        map.dragPan.disable();
-        return;
-      }
 
       if (mobileFriendlyMode) return;
       if (e.touches.length !== 1) return;
@@ -875,14 +719,6 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }, { passive: true });
 
     map.getCanvas().addEventListener('touchmove', (e) => {
-      // Rect delete drawing on mobile
-      if (rectDeleteMode && rectStart && e.touches.length === 1) {
-        const touch = e.touches[0];
-        updateRectOverlayPosition(rectStart.x, rectStart.y, touch.clientX, touch.clientY);
-        e.preventDefault();
-        return;
-      }
-
       if (touchLongPressTimer && touchStartPt) {
         const touch = e.touches[0];
         const rect = map.getCanvas().getBoundingClientRect();
@@ -911,22 +747,6 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     }, { passive: false });
 
     map.getCanvas().addEventListener('touchend', (e) => {
-      // Rect delete completion on mobile (with confirm)
-      if (rectDeleteMode && rectStart) {
-        const touch = e.changedTouches[0];
-        const endX = touch.clientX;
-        const endY = touch.clientY;
-        const x1 = Math.min(rectStart.x, endX);
-        const y1 = Math.min(rectStart.y, endY);
-        const x2 = Math.max(rectStart.x, endX);
-        const y2 = Math.max(rectStart.y, endY);
-        rectStart = null;
-        map.dragPan.enable();
-        completeRectDelete(x1, y1, x2, y2, true);
-        suppressNextMapClick = true;
-        return;
-      }
-
       if (touchLongPressTimer) {
         clearTimeout(touchLongPressTimer);
         touchLongPressTimer = null;

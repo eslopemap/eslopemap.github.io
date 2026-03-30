@@ -129,6 +129,10 @@
       <div class="row">
         <button id="clear-data-btn" type="button" class="tb-btn" title="Clear saved tracks and settings from localStorage">Clear saved data</button>
       </div>
+
+      <div class="row" id="mobile-mode-row" style="display:none">
+        <label><input id="mobileModeDesktop" type="checkbox" /> Mobile editing mode (desktop)</label>
+      </div>
     </div>
   </div>
   </div>
@@ -136,20 +140,19 @@
   <div id="edit-rail">
     <button id="rail-edit-btn" class="rail-btn" title="Edit active track (E)" disabled>✎</button>
     <button id="rail-rect-btn" class="rail-btn" title="Rectangle select (R)" disabled>⬚</button>
-    <button id="rail-mobile-btn" class="rail-btn" title="Mobile mode" style="display:none">📱</button>
+
   </div>
 
   <div id="track-panel-shell">
     <div id="track-tool-row">
-      <button id="mobile-mode-btn" class="tb-btn" title="Mobile-friendly edit mode" style="display:none">📱</button>
-      <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩</button>
-      <button id="rect-delete-btn" class="tb-btn" title="Delete points in rectangle" style="display:none">⬚</button>
+
+      <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩ ⎌</button>
       <button id="draw-btn" class="tb-btn" title="New track">&#43;</button>
       <button id="open-file-btn" class="tb-btn" title="Open GPX/GeoJSON file">📄</button>
       <button id="open-folder-btn" class="tb-btn" title="Open GPX folder">📁</button>
       <button id="profile-toggle-btn" class="tb-btn" title="Elevation profile" disabled>📈</button>
       <button id="active-actions-btn" class="tb-btn" title="Workspace actions">⋮</button>
-      <button id="selection-mode-btn" class="tb-btn" title="Rectangle selection (R)" disabled style="display:none">▣</button>
+      <button id="selection-mode-btn" class="tb-btn" title="Rectangle selection (R)" disabled>▣</button>
       <button id="densify-btn" class="tb-btn op-btn" title="Add intermediate points" disabled style="display:none">＋•</button>
       <button id="simplify-btn" class="tb-btn op-btn" title="Simplify active span" disabled style="display:none">≈</button>
       <button id="split-btn" class="tb-btn op-btn" title="Split active track or selection" disabled style="display:none">✂</button>
