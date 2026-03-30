@@ -7,6 +7,7 @@
 
 * "The issue is clear: .track-panel-header is sticky but has background: transparent (inherited from parent). When content scrolls underneath, it shows through. The fix is to give it a background that matches the panel surface" -> no because there is a transparency + blur, so doing it twice is visually inconsistent. find a better technical solution.
 * fill in the "Implementation report" section in the 20260329-FIX-IMPORT-MOBILE.md with important decisions made in this thread
+
 then move on to those:
 * selecting a file does not visually select all tracks (and segments?)
 * clicking file/track/segment should always center it
@@ -14,7 +15,12 @@ then move on to those:
 
 * on a close topic, there is the rectangle select and rectangel delete, provide product manager advice on how to unify the functionality
 
+yes. use a red recycle bin icon, and make sure it is pushed to undo stack. it would be nice to have good  coverage of undo-stack, unit-tested if possible. also map it to the backspace key. then move this button to the top-right track-tool-row and remove the old edit-only rectangel delete button
 
+then move on to:
+* move 'mobile on desktop' localhost test mode to the advanced settings
+* 'zoom to all' in the kebab menu does not encompass all tracks, only first one.
+* implement keyboard nabigation in the track list (up down, right left to collapse, backspace to delete with ability to undo)
 
 as usual make focused commits
 
@@ -29,8 +35,7 @@ as usual make focused commits
 - **Exported `buildGpxDocument` and `buildPayloadFromNode`** from io.js for unit testing. 4 round-trip tests verify multi-track/segment structure, timestamps, ordering, and XML escaping.
 
 ## CSS scroll fix
-- **First attempt** (rejected): added `background: rgba(255,255,255,0.92)` + `backdrop-filter: blur(2px)` to `.track-panel-header` with `position: sticky`. This caused double blur (panel surface already has blur).
-- **Final approach**: moved `max-height: 50vh; overflow-y: auto` from `#track-panel` down to `#track-list`. This keeps the header outside the scroll container entirely — no sticky positioning needed, no background/blur duplication.
+- moved `max-height: 50vh; overflow-y: auto` from `#track-panel` down to `#track-list`. This keeps the header outside the scroll container entirely — no sticky positioning needed, no background/blur duplication.
 
 ## Mobile editing fixes
 - **Vertex drag cancelled immediately**: `map.on('touchend')` fired right after the click that set `mobileSelectedVertex`, calling `cancelMobileMove()`. Fixed by adding a `suppressMobileTouchEnd` flag set on selection, cleared on the next touchend.
