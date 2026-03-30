@@ -130,8 +130,8 @@ function serializeNode(node) {
   if (node.rteType) base.rteType = node.rteType;
   if (node.wptType) base.wptType = node.wptType;
   if (node._waypointId) base._waypointId = node._waypointId;
-  if (node._legacyTrackId) base._legacyTrackId = node._legacyTrackId;
-  if (node._legacyTrackIds?.length) base._legacyTrackIds = node._legacyTrackIds;
+  if (node._trackId) base._trackId = node._trackId;
+  if (node._trackIds?.length) base._trackIds = node._trackIds;
   if (node.children?.length) base.children = node.children.map(serializeNode);
   return base;
 }
@@ -146,6 +146,18 @@ export function saveWorkspace(workspace) {
 export function loadWorkspace() {
   try {
     const raw = localStorage.getItem(WORKSPACE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // Migrate legacy field names
+    if (data?.children) migrateNodes(data.children);
+    return data;
   } catch { return null; }
+}
+
+function migrateNodes(nodes) {
+  for (const node of nodes) {
+    if (node._legacyTrackId) { node._trackId = node._legacyTrackId; delete node._legacyTrackId; }
+    if (node._legacyTrackIds) { node._trackIds = node._legacyTrackIds; delete node._legacyTrackIds; }
+    if (node.children) migrateNodes(node.children);
+  }
 }

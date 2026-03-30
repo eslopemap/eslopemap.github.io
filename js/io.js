@@ -10,7 +10,7 @@ let tracksFns = {};  // wired at init
 
 /**
  * Parse a GPX string into tracks, routes, and waypoints.
- * Multi-segment tracks are split into separate entries (matching legacy behavior).
+ * Multi-segment tracks are split into separate entries (matching split behavior).
  * Each result track carries _gpxParsed + _gpxTrackIdx for future round-trip export.
  */
 export function parseGPXTracks(text, baseName) {
@@ -394,11 +394,11 @@ function buildPayloadFromNode(node) {
       return;
     }
     if (current.type === 'track') {
-      const segments = (current._legacyTrackIds || [])
+      const segments = (current._trackIds || [])
         .map(id => findTrackById(id))
         .filter(Boolean)
         .map(track => track.coords || []);
-      const firstTrack = findTrackById(current._legacyTrackIds?.[0]);
+      const firstTrack = findTrackById(current._trackIds?.[0]);
       if (segments.length && firstTrack) {
         payload.tracks.push(buildTrackEntryFromTrack(firstTrack, {
           name: current.name,
@@ -411,7 +411,7 @@ function buildPayloadFromNode(node) {
       return;
     }
     if (current.type === 'route') {
-      const routeTrack = findTrackById(current._legacyTrackId);
+      const routeTrack = findTrackById(current._trackId);
       if (routeTrack) {
         payload.routes.push(buildRouteEntryFromTrack(routeTrack, {
           name: current.name,

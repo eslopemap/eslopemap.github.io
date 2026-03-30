@@ -14,10 +14,10 @@ describe('gpx-model', () => {
   it('supports lookup and descendant resolution helpers', () => {
     const workspace = createWorkspaceModel();
     const fileNode = createFileNode('Traverse');
-    const trackNode = createTrackNode('Traverse', { _legacyTrackIds: ['seg-1', 'seg-2'] });
+    const trackNode = createTrackNode('Traverse', { _trackIds: ['seg-1', 'seg-2'] });
     trackNode.children.push(
-      createSegmentNode({ _legacyTrackId: 'seg-1' }),
-      createSegmentNode({ _legacyTrackId: 'seg-2' }),
+      createSegmentNode({ _trackId: 'seg-1' }),
+      createSegmentNode({ _trackId: 'seg-2' }),
     );
     fileNode.children.push(trackNode);
     workspace.children.push(fileNode);
@@ -33,7 +33,7 @@ describe('gpx-model', () => {
   it('resolves selected action targets from workspace ids', () => {
     const workspace = createWorkspaceModel();
     const fileNode = createFileNode('Solo Track');
-    const trackNode = createTrackNode('Solo Track', { _legacyTrackIds: ['trk-1'] });
+    const trackNode = createTrackNode('Solo Track', { _trackIds: ['trk-1'] });
     fileNode.children.push(trackNode);
     workspace.children.push(fileNode);
     const selectedId = trackNode.id;

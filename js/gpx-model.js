@@ -31,8 +31,8 @@ export function createTrackNode(name, opts) {
     desc: opts?.desc || '', cmt: opts?.cmt || '', trkType: opts?.trkType || '',
     children: [],   // segment children
     expanded: true,
-    // back-ref to legacy track objects for map rendering
-    _legacyTrackIds: opts?._legacyTrackIds || [],
+    // back-ref to track data objects for map rendering
+    _trackIds: opts?._trackIds || [],
   };
 }
 
@@ -40,7 +40,7 @@ export function createSegmentNode(opts) {
   return {
     id: uid('seg'), type: 'segment',
     // segments have no name in GPX 1.1
-    _legacyTrackId: opts?._legacyTrackId || null,
+    _trackId: opts?._trackId || null,
   };
 }
 
@@ -48,7 +48,7 @@ export function createRouteNode(name, opts) {
   return {
     id: uid('rte'), type: 'route', name,
     desc: opts?.desc || '', cmt: opts?.cmt || '', rteType: opts?.rteType || '',
-    _legacyTrackId: opts?._legacyTrackId || null,
+    _trackId: opts?._trackId || null,
   };
 }
 

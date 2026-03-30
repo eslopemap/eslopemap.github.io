@@ -107,7 +107,7 @@
 - **js/state.js** — reactive Proxy store (`createStore`) + `STATE_DEFAULTS` + `TREE_STATE_DEFAULTS`
 - **js/utils.js** — pure utility functions (haversine, tile math, Terrarium codec, color utils, file download)
 - **js/gpx-model.js** — GPX workspace tree data model: node constructors (folder, file, track, segment, route, waypoint), stable IDs, tree traversal helpers, action-target resolution shell
-- **js/gpx-tree.js** — workspace tree renderer: hierarchical tree in track panel, context menu (right-click/long-press/kebab), Info editor modal, tree–legacy track sync
+- **js/gpx-tree.js** — workspace tree renderer: hierarchical tree in track panel, context menu (right-click/long-press/kebab), Info editor modal, tree–track data sync
 - **js/shortcuts.js** — central keyboard shortcut registry with focus guards, macOS Cmd parity
 
 ### Dependency flow
@@ -186,7 +186,7 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 - `gpx-tree.js` builds the workspace tree on import via `onFileBatchImported()` which creates one file node per imported file containing its tracks and segments. On restore from persistence, orphan tracks are rebuilt via `buildWorkspaceFromTracks()`.
 - The tree is rendered directly in the `#track-list` element and is now the only panel renderer. Tree rows show disclosure toggles, type icons, node names, and inline stats.
 - `treeState` holds UI state: `expandedNodeIds` (Set), `selectedNodeId`, `contextMenu`, `infoEditor`.
-- `saveWorkspace()` / `loadWorkspace()` persist the workspace tree structure and metadata to localStorage under `slope:workspace`. On restore, the saved workspace structure is authoritative, with orphan legacy tracks and waypoints appended as a fallback.
+- `saveWorkspace()` / `loadWorkspace()` persist the workspace tree structure and metadata to localStorage under `slope:workspace`. On restore, the saved workspace structure is authoritative, with orphan tracks and waypoints appended as a fallback.
 - `saveTracks()` / `loadTracks()` now preserve stable track IDs, and waypoints are persisted independently so file placement and waypoint nodes survive reloads exactly.
 
 ### Context menu
@@ -204,7 +204,7 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 ### Info editor
 - Modal overlay (`#info-editor-overlay`) shown over the map.
 - Editable fields per node type: folder (name), file (name, desc), track (name, desc, cmt, type), route (name, desc, cmt, type), waypoint (name, desc, cmt, sym, type).
-- Name changes sync back to the legacy track model via `renameTrack` / `renameGroup`.
+- Name changes sync back to the track data model via `renameTrack` / `renameGroup`.
 - Waypoint metadata changes also sync back into the waypoint store used for export and persistence.
 - Metadata changes are persisted through the workspace save flow.
 - Esc or Cancel closes without saving; Enter (in single-line fields) or Save commits. Focus is placed on the first input on open.

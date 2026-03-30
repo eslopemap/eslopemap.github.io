@@ -98,7 +98,7 @@ describe('persist', () => {
     expect(loadProfileSettings()).toEqual({ xAxis: 'distance', smoothed: true });
   });
 
-  it('persists workspace metadata including waypoint and legacy back-references', () => {
+  it('persists workspace metadata including waypoint and track back-references', () => {
     saveWorkspace({
       children: [
         {
@@ -111,9 +111,9 @@ describe('persist', () => {
               id: 'trk-node-1',
               type: 'track',
               name: 'Traverse',
-              _legacyTrackIds: ['seg-1', 'seg-2'],
+              _trackIds: ['seg-1', 'seg-2'],
               children: [
-                { id: 'seg-node-1', type: 'segment', _legacyTrackId: 'seg-1' },
+                { id: 'seg-node-1', type: 'segment', _trackId: 'seg-1' },
               ],
             },
           ],
@@ -140,9 +140,9 @@ describe('persist', () => {
               id: 'trk-node-1',
               type: 'track',
               name: 'Traverse',
-              _legacyTrackIds: ['seg-1', 'seg-2'],
+              _trackIds: ['seg-1', 'seg-2'],
               children: [
-                { id: 'seg-node-1', type: 'segment', _legacyTrackId: 'seg-1' },
+                { id: 'seg-node-1', type: 'segment', _trackId: 'seg-1' },
               ],
             },
           ],
@@ -156,6 +156,44 @@ describe('persist', () => {
         },
       ],
     });
+  });
+
+  it('migrates legacy _legacyTrackId/_legacyTrackIds fields on load', () => {
+    // Simulate data persisted with old field names
+    const oldData = {
+      children: [
+        {
+          id: 'file-1', type: 'file', name: 'Old.gpx',
+          children: [
+            {
+              id: 'trk-1', type: 'track', name: 'Track',
+              _legacyTrackIds: ['seg-a', 'seg-b'],
+              children: [
+                { id: 's1', type: 'segment', _legacyTrackId: 'seg-a' },
+                { id: 's2', type: 'segment', _legacyTrackId: 'seg-b' },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'route-1', type: 'route', name: 'Route',
+          _legacyTrackId: 'rte-1',
+        },
+      ],
+    };
+    localStorage.setItem('slope:workspace', JSON.stringify(oldData));
+
+    const loaded = loadWorkspace();
+    const trackNode = loaded.children[0].children[0];
+    expect(trackNode._trackIds).toEqual(['seg-a', 'seg-b']);
+    expect(trackNode._legacyTrackIds).toBeUndefined();
+    expect(trackNode.children[0]._trackId).toBe('seg-a');
+    expect(trackNode.children[0]._legacyTrackId).toBeUndefined();
+    expect(trackNode.children[1]._trackId).toBe('seg-b');
+
+    const routeNode = loaded.children[1];
+    expect(routeNode._trackId).toBe('rte-1');
+    expect(routeNode._legacyTrackId).toBeUndefined();
   });
 
   it('clears all persisted keys', () => {
