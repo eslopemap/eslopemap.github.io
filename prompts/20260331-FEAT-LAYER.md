@@ -35,3 +35,17 @@ as usual, highlight  decision points
 - when 'baselayer is 'None', ensure an opaque white layer is present.
 - split slope & ski for swisstopo ie  split 'overlay-swisstopo-ski' and 'overlay-swisstopo-slope30' in constants.js
 - overlays should always be on top of baselayer, it's not the case for swisstop and IGN slope
+
+another one,
+- new 'overlay-ign-ski' should point to a url inspired from  this tile example: https://data.geopf.fr/wmts?layer=TRACES.RANDO.HIVERNALE&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix=7&TileCol=63&TileRow=44 
+
+then split like swiss
+export const IGN_SKI_LAYER_IDS = [
+  'overlay-ign-ski'
+];
+export const IGN_SLOPE_LAYER_IDS = [
+  'overlay-ign-slopes'
+];
+
+---
+change blend-mode from sof-multiply to multiply when 'multiply' checkbox is ticked and overlay opacity passes 0.7
