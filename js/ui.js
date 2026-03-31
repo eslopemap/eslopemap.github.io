@@ -171,7 +171,7 @@ export function updateLegend(state, map) {
 // ---- Mode state ----
 
 export function applyModeState(map, state) {
-  const blendMode = state.multiplyBlend ? 'soft-multiply' : 'normal';
+  const blendMode = state.multiplyBlend ? (state.slopeOpacity > 0.7 ? 'multiply' : 'soft-multiply') : 'normal';
 
   if (!state.mode) {
     if (map.getLayer('analysis')) map.setLayoutProperty('analysis', 'visibility', 'none');
