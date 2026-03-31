@@ -2,7 +2,7 @@
 
 import {
   BASEMAP_LAYER_GROUPS, BASEMAP_DEFAULT_VIEW, OPENSKIMAP_LAYER_IDS,
-  SWISSTOPO_SKI_LAYER_IDS, IGN_SKI_LAYER_IDS,
+  SWISSTOPO_SKI_LAYER_IDS, SWISSTOPO_SLOPE_LAYER_IDS, IGN_SKI_LAYER_IDS, IGN_SLOPE_LAYER_IDS,
   ALL_BASEMAP_LAYER_IDS, DEM_TERRAIN_SOURCE_ID, DEM_MAX_Z, SLOPE_RELIEF_CROSSFADE_Z,
   ANALYSIS_COLOR, COLOR_RELIEF_STOPS,
   rampToLegendCss, interpolateStopsToLegendCss,
@@ -48,6 +48,26 @@ export function applyBasemapSelection(map, state, flyIfOutside) {
       map.moveLayer(layerId, 'dem-loader');
     }
   }
+  for (const layerId of SWISSTOPO_SKI_LAYER_IDS) {
+    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
+      map.moveLayer(layerId, 'dem-loader');
+    }
+  }
+  for (const layerId of SWISSTOPO_SLOPE_LAYER_IDS) {
+    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
+      map.moveLayer(layerId, 'dem-loader');
+    }
+  }
+  for (const layerId of IGN_SKI_LAYER_IDS) {
+    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
+      map.moveLayer(layerId, 'dem-loader');
+    }
+  }
+  for (const layerId of IGN_SLOPE_LAYER_IDS) {
+    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
+      map.moveLayer(layerId, 'dem-loader');
+    }
+  }
 
   if (flyIfOutside) {
     const dv = BASEMAP_DEFAULT_VIEW[state.basemap];
@@ -84,8 +104,20 @@ export function applySwisstopoSkiOverlay(map, state) {
   }
 }
 
-export function applyIgnSlopesOverlay(map, state) {
+export function applySwisstopoSlopeOverlay(map, state) {
+  for (const id of SWISSTOPO_SLOPE_LAYER_IDS) {
+    setLayerVisibilitySafe(map, id, state.showSwisstopoSlope);
+  }
+}
+
+export function applyIgnSkiOverlay(map, state) {
   for (const id of IGN_SKI_LAYER_IDS) {
+    setLayerVisibilitySafe(map, id, state.showIgnSki);
+  }
+}
+
+export function applyIgnSlopesOverlay(map, state) {
+  for (const id of IGN_SLOPE_LAYER_IDS) {
     setLayerVisibilitySafe(map, id, state.showIgnSlopes);
   }
 }

@@ -24,6 +24,8 @@ export const STATE_DEFAULTS = {
   showContours: true,
   showOpenSkiMap: false,
   showSwisstopoSki: false,
+  showSwisstopoSlope: false,
+  showIgnSki: false,
   showIgnSlopes: false,
   showTileGrid: false,
   cursorInfoMode: 'cursor',

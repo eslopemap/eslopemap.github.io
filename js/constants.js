@@ -195,11 +195,18 @@ export const OPENSKIMAP_LAYER_IDS = [
 ];
 
 export const SWISSTOPO_SKI_LAYER_IDS = [
-  'overlay-swisstopo-ski',
+  'overlay-swisstopo-ski'
+];
+
+export const SWISSTOPO_SLOPE_LAYER_IDS = [
   'overlay-swisstopo-slope30'
 ];
 
 export const IGN_SKI_LAYER_IDS = [
+  'overlay-ign-ski'
+];
+
+export const IGN_SLOPE_LAYER_IDS = [
   'overlay-ign-slopes'
 ];
 

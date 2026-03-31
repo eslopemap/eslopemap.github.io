@@ -71,7 +71,7 @@ export function loadWaypoints() {
 const SETTING_KEYS = [
   'basemap', 'mode', 'slopeOpacity', 'basemapOpacity', 'hillshadeOpacity',
   'hillshadeMethod', 'terrain3d', 'terrainExaggeration', 'multiplyBlend',
-  'showContours', 'showOpenSkiMap', 'showSwisstopoSki', 'showIgnSlopes', 'cursorInfoMode', 'pauseThreshold',
+  'showContours', 'showOpenSkiMap', 'showSwisstopoSki', 'showSwisstopoSlope', 'showIgnSki', 'showIgnSlopes', 'cursorInfoMode', 'pauseThreshold',
 ];
 
 export function saveSettings(state) {

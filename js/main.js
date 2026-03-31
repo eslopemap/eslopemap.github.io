@@ -10,7 +10,7 @@ import { createStore, STATE_DEFAULTS } from './state.js';
 import {
   parseHashParams, syncViewToUrl, updateLegend,
   applyBasemapSelection, applyContourVisibility, applyOpenSkiMapOverlay,
-  applySwisstopoSkiOverlay, applyIgnSlopesOverlay,
+  applySwisstopoSkiOverlay, applySwisstopoSlopeOverlay, applyIgnSkiOverlay, applyIgnSlopesOverlay,
   applyTerrainState, applyModeState,
   basemapOpacityExpr, setGlobalStatePropertySafe, updateCursorInfoVisibility,
   setCursorInfo, showCursorTooltipAt, hideCursorTooltip,
@@ -141,6 +141,8 @@ if (persisted) {
   if (persisted.showContours != null) document.getElementById('showContours').checked = state.showContours;
   if (persisted.showOpenSkiMap != null) document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
   if (persisted.showSwisstopoSki != null) document.getElementById('showSwisstopoSki').checked = state.showSwisstopoSki;
+  if (persisted.showSwisstopoSlope != null) document.getElementById('showSwisstopoSlope').checked = state.showSwisstopoSlope;
+  if (persisted.showIgnSki != null) document.getElementById('showIgnSki').checked = state.showIgnSki;
   if (persisted.showIgnSlopes != null) document.getElementById('showIgnSlopes').checked = state.showIgnSlopes;
   if (persisted.multiplyBlend != null) document.getElementById('multiplyBlend').checked = state.multiplyBlend;
   if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
@@ -291,6 +293,13 @@ const map = new maplibregl.Map({
         tileSize: 256,
         maxzoom: 17,
         attribution: '&copy; swisstopo'
+      },
+      'ign-ski': {
+        type: 'raster',
+        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=TRACES.RANDO.HIVERNALE&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'],
+        tileSize: 256,
+        maxzoom: 17,
+        attribution: '&copy; IGN France'
       },
       'ign-slopes': {
         type: 'raster',
@@ -494,6 +503,13 @@ const map = new maplibregl.Map({
         source: 'swisstopo-slope30',
         layout: {visibility: 'none'},
         paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
+      },
+      {
+        id: 'overlay-ign-ski',
+        type: 'raster',
+        source: 'ign-ski',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(0.9) }
       },
       {
         id: 'overlay-ign-slopes',
@@ -979,6 +995,18 @@ document.getElementById('showSwisstopoSki').addEventListener('change', (e) => {
   scheduleSettingsSave();
 });
 
+document.getElementById('showSwisstopoSlope').addEventListener('change', (e) => {
+  state.showSwisstopoSlope = Boolean(e.target.checked);
+  applySwisstopoSlopeOverlay(map, state);
+  scheduleSettingsSave();
+});
+
+document.getElementById('showIgnSki').addEventListener('change', (e) => {
+  state.showIgnSki = Boolean(e.target.checked);
+  applyIgnSkiOverlay(map, state);
+  scheduleSettingsSave();
+});
+
 document.getElementById('showIgnSlopes').addEventListener('change', (e) => {
   state.showIgnSlopes = Boolean(e.target.checked);
   applyIgnSlopesOverlay(map, state);
@@ -1076,6 +1104,8 @@ map.on('load', () => {
   applyBasemapSelection(map, state);
   applyOpenSkiMapOverlay(map, state);
   applySwisstopoSkiOverlay(map, state);
+  applySwisstopoSlopeOverlay(map, state);
+  applyIgnSkiOverlay(map, state);
   applyIgnSlopesOverlay(map, state);
   applyTerrainState(map, state);
   updateDebugGridSource(map);
