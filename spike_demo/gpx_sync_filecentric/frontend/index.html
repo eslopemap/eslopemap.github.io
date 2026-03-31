@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spike 2 — File-Centric GPX Sync</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header>
+    <h1>GPX Sync</h1>
+    <span id="folder-path">No folder selected</span>
+    <span id="runtime-badge"></span>
+    <button id="btn-watch" class="btn-primary">Watch Folder</button>
+</header>
+
+<div class="main-layout">
+    <!-- Sidebar: file list -->
+    <div class="sidebar">
+        <div class="sidebar-header">Files</div>
+        <div id="file-list" class="file-list"></div>
+    </div>
+
+    <!-- Editor area -->
+    <div class="editor-area">
+        <div class="editor-toolbar">
+            <span id="editor-title" class="file-title"></span>
+            <button id="btn-simulate" class="btn-secondary">Simulate External Change</button>
+            <button id="btn-reload" class="btn-secondary" disabled>Reload from Disk</button>
+            <button id="btn-save" class="btn-success" disabled>Save</button>
+        </div>
+
+        <div id="conflict-bar" class="conflict-bar">
+            <span class="conflict-msg">This file was changed on disk while you had unsaved edits.</span>
+            <button id="btn-keep-mine" class="btn-warning">Keep Mine</button>
+            <button id="btn-keep-disk" class="btn-primary">Load Disk Version</button>
+        </div>
+
+        <textarea id="editor" spellcheck="false" style="display:none"></textarea>
+        <div id="editor-placeholder" class="editor-placeholder">Select a file to edit</div>
+    </div>
+</div>
+
+<!-- Event log -->
+<div class="event-log">
+    <div class="log-header">
+        <span>Event Log</span>
+        <button id="btn-clear-log" class="btn-secondary" style="padding:2px 8px;font-size:11px">Clear</button>
+    </div>
+    <div id="log-entries" class="log-entries"></div>
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-spike2-sample"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Morning Ride</name>
+  </metadata>
+  <trk>
+    <name>Morning Ride</name>
+    <trkseg>
+      <trkpt lat="45.1880" lon="5.7245"><ele>210</ele><time>2025-07-01T06:30:00Z</time></trkpt>
+      <trkpt lat="45.1895" lon="5.7260"><ele>215</ele><time>2025-07-01T06:35:00Z</time></trkpt>
+      <trkpt lat="45.1910" lon="5.7280"><ele>225</ele><time>2025-07-01T06:40:00Z</time></trkpt>
+      <trkpt lat="45.1930" lon="5.7300"><ele>240</ele><time>2025-07-01T06:45:00Z</time></trkpt>
+      <trkpt lat="45.1945" lon="5.7320"><ele>260</ele><time>2025-07-01T06:50:00Z</time></trkpt>
+      <trkpt lat="45.1960" lon="5.7340"><ele>280</ele><time>2025-07-01T06:55:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

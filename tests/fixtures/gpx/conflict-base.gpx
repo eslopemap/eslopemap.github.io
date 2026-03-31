@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-spike2-fixture"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Conflict Base</name>
+    <desc>Base version of a GPX file used to test conflict detection.</desc>
+  </metadata>
+  <trk>
+    <name>Original Track</name>
+    <trkseg>
+      <trkpt lat="45.8500" lon="6.8800"><ele>1200</ele><time>2025-06-17T06:00:00Z</time></trkpt>
+      <trkpt lat="45.8510" lon="6.8810"><ele>1230</ele><time>2025-06-17T06:10:00Z</time></trkpt>
+      <trkpt lat="45.8520" lon="6.8820"><ele>1260</ele><time>2025-06-17T06:20:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

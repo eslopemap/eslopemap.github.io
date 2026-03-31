@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-spike2-fixture"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Simple Single Track</name>
+    <desc>A short single-track fixture for spike 2 testing.</desc>
+  </metadata>
+  <trk>
+    <name>Morning Hike</name>
+    <trkseg>
+      <trkpt lat="45.8326" lon="6.8652"><ele>1035</ele><time>2025-06-15T07:00:00Z</time></trkpt>
+      <trkpt lat="45.8330" lon="6.8660"><ele>1050</ele><time>2025-06-15T07:05:00Z</time></trkpt>
+      <trkpt lat="45.8335" lon="6.8670"><ele>1080</ele><time>2025-06-15T07:10:00Z</time></trkpt>
+      <trkpt lat="45.8340" lon="6.8680"><ele>1120</ele><time>2025-06-15T07:15:00Z</time></trkpt>
+      <trkpt lat="45.8345" lon="6.8690"><ele>1155</ele><time>2025-06-15T07:20:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

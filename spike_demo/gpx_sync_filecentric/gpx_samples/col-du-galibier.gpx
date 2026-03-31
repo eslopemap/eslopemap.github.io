@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-spike2-sample"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Col du Galibier</name>
+  </metadata>
+  <trk>
+    <name>Ascent - South Side</name>
+    <trkseg>
+      <trkpt lat="45.0640" lon="6.4050"><ele>1530</ele><time>2025-07-10T08:00:00Z</time></trkpt>
+      <trkpt lat="45.0635" lon="6.4070"><ele>1620</ele><time>2025-07-10T08:15:00Z</time></trkpt>
+      <trkpt lat="45.0630" lon="6.4090"><ele>1740</ele><time>2025-07-10T08:30:00Z</time></trkpt>
+      <trkpt lat="45.0625" lon="6.4100"><ele>1860</ele><time>2025-07-10T08:45:00Z</time></trkpt>
+      <trkpt lat="45.0620" lon="6.4080"><ele>1980</ele><time>2025-07-10T09:00:00Z</time></trkpt>
+      <trkpt lat="45.0615" lon="6.4060"><ele>2100</ele><time>2025-07-10T09:15:00Z</time></trkpt>
+      <trkpt lat="45.0610" lon="6.4050"><ele>2200</ele><time>2025-07-10T09:30:00Z</time></trkpt>
+      <trkpt lat="45.0642" lon="6.4058"><ele>2642</ele><time>2025-07-10T10:00:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+  <trk>
+    <name>Descent - North Side</name>
+    <trkseg>
+      <trkpt lat="45.0642" lon="6.4058"><ele>2642</ele><time>2025-07-10T10:30:00Z</time></trkpt>
+      <trkpt lat="45.0660" lon="6.4040"><ele>2500</ele><time>2025-07-10T10:40:00Z</time></trkpt>
+      <trkpt lat="45.0680" lon="6.4020"><ele>2300</ele><time>2025-07-10T10:50:00Z</time></trkpt>
+      <trkpt lat="45.0700" lon="6.4000"><ele>2100</ele><time>2025-07-10T11:00:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

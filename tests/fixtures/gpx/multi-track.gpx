@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="slope-spike2-fixture"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Multi Track File</name>
+    <desc>A GPX file containing multiple tracks for spike 2 testing.</desc>
+  </metadata>
+  <trk>
+    <name>Ascent</name>
+    <trkseg>
+      <trkpt lat="45.9200" lon="6.8700"><ele>800</ele><time>2025-06-16T08:00:00Z</time></trkpt>
+      <trkpt lat="45.9210" lon="6.8710"><ele>850</ele><time>2025-06-16T08:10:00Z</time></trkpt>
+      <trkpt lat="45.9220" lon="6.8720"><ele>920</ele><time>2025-06-16T08:20:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+  <trk>
+    <name>Ridge Walk</name>
+    <trkseg>
+      <trkpt lat="45.9220" lon="6.8720"><ele>920</ele><time>2025-06-16T09:00:00Z</time></trkpt>
+      <trkpt lat="45.9225" lon="6.8740"><ele>930</ele><time>2025-06-16T09:10:00Z</time></trkpt>
+      <trkpt lat="45.9230" lon="6.8760"><ele>925</ele><time>2025-06-16T09:20:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+  <trk>
+    <name>Descent</name>
+    <trkseg>
+      <trkpt lat="45.9230" lon="6.8760"><ele>925</ele><time>2025-06-16T10:00:00Z</time></trkpt>
+      <trkpt lat="45.9215" lon="6.8750"><ele>870</ele><time>2025-06-16T10:15:00Z</time></trkpt>
+      <trkpt lat="45.9200" lon="6.8700"><ele>800</ele><time>2025-06-16T10:30:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

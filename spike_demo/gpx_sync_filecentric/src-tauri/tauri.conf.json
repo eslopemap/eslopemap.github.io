@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Spike 2 GPX Sync",
+  "version": "0.1.0",
+  "identifier": "com.eslopemap.spike.gpxsync",
+  "build": {
+    "frontendDist": "../frontend"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Spike 2 — File-Centric GPX Sync",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ]
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["../../../icon-512.png"]
+  }
+}
