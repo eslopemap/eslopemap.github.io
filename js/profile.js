@@ -129,7 +129,8 @@ function setProfileHoverVertex(index) {
     if (result) {
       const pt = map.project([coord[0], coord[1]]);
       const rect = map.getCanvas().getBoundingClientRect();
-      showCursorTooltipAt(state, rect.left + pt.x, rect.top + pt.y, `${result.elevation.toFixed(0)} m`, result.slopeDeg != null ? `${result.slopeDeg.toFixed(0)}°` : 'n/a');
+      const lngLat = {lng: coord[0], lat: coord[1]};
+      showCursorTooltipAt(state, rect.left + pt.x, rect.top + pt.y, lngLat, `${result.elevation.toFixed(0)} m`, result.slopeDeg != null ? `${result.slopeDeg.toFixed(0)}°` : 'n/a');
     }
   }
 }

@@ -1143,22 +1143,22 @@ map.on('load', () => {
   const updateCursorElevation = () => {
     cursorRaf = 0;
     if (!lastPointerLngLat) {
-      setCursorInfo(state, 'n/a');
+      setCursorInfo(state, null, 'n/a');
       hideCursorTooltip();
       return;
     }
 
     const result = queryLoadedElevationAtLngLat(map, lastPointerLngLat);
     if (!result) {
-      setCursorInfo(state, 'no loaded tile');
-      if (lastPointerScreenXY) showCursorTooltipAt(state, lastPointerScreenXY.x, lastPointerScreenXY.y, 'no tile', 'n/a');
+      setCursorInfo(state, lastPointerLngLat, 'no loaded tile');
+      if (lastPointerScreenXY) showCursorTooltipAt(state, lastPointerScreenXY.x, lastPointerScreenXY.y, lastPointerLngLat, 'no tile', 'n/a');
       return;
     }
 
     const eleText = `${result.elevation.toFixed(0)} m`;
     const slopeStr = result.slopeDeg != null ? `${result.slopeDeg.toFixed(0)}°` : 'n/a';
-    setCursorInfo(state, eleText, slopeStr);
-    if (lastPointerScreenXY) showCursorTooltipAt(state, lastPointerScreenXY.x, lastPointerScreenXY.y, eleText, slopeStr);
+    setCursorInfo(state, lastPointerLngLat, eleText, slopeStr);
+    if (lastPointerScreenXY) showCursorTooltipAt(state, lastPointerScreenXY.x, lastPointerScreenXY.y, lastPointerLngLat, eleText, slopeStr);
   };
 
   map.on('mousemove', (e) => {

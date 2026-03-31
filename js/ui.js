@@ -200,21 +200,23 @@ export function applyModeState(map, state) {
 
 const cursorTooltip = document.getElementById('cursor-tooltip');
 
-export function setCursorInfo(state, eleText, slopeText) {
+export function setCursorInfo(state, lngLat, eleText, slopeText) {
   if (state.cursorInfoMode === 'corner') {
     const el = document.getElementById('cursorElevation');
-    if (el) el.textContent = eleText;
+    const coordStr = lngLat ? `${lngLat.lng.toFixed(3)}°, ${lngLat.lat.toFixed(3)}°` : '';
+    if (el) el.textContent = coordStr ? `${coordStr}, ${eleText}` : eleText;
     const sl = document.getElementById('cursorSlope');
     if (sl) sl.textContent = slopeText || 'n/a';
   }
 }
 
-export function showCursorTooltipAt(state, screenX, screenY, eleText, slopeText) {
+export function showCursorTooltipAt(state, screenX, screenY, lngLat, eleText, slopeText) {
   if (state.cursorInfoMode !== 'cursor') {
     cursorTooltip.classList.remove('visible');
     return;
   }
-  cursorTooltip.innerHTML = `Elev: <code>${eleText}</code> · Slope: <code>${slopeText || 'n/a'}</code>`;
+  const coordStr = lngLat ? `${lngLat.lng.toFixed(3)}°, ${lngLat.lat.toFixed(3)}°, ` : '';
+  cursorTooltip.innerHTML = `<code>${coordStr}${eleText}</code> · Slope: <code>${slopeText || 'n/a'}</code>`;
   cursorTooltip.style.left = (screenX + 15) + 'px';
   cursorTooltip.style.top = (screenY + 15) + 'px';
   cursorTooltip.classList.add('visible');
