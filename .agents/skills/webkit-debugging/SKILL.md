@@ -1,4 +1,5 @@
 ---
+name: webkit-debugging
 description: Debug WKWebView / WebKit JavaScript execution issues on macOS
 ---
 1. Confirm whether the failure is in the page script or in WebDriver execution.
@@ -39,3 +40,15 @@ description: Debug WKWebView / WebKit JavaScript execution issues on macOS
    - Use a page that sets both a DOM attribute and a `window.__probe` global from inline script.
    - From WebDriver, assert that sync execute and async execute can both see the DOM signal and the page-owned global.
    - Only after that, rerun the full app test suite.
+
+8. Make bootstrap/runtime failures fail fast.
+   - Do not only record startup errors in DOM attributes; make bootstrap success an explicit contract.
+   - At the start of the page bootstrap, set a sentinel such as `document.documentElement.setAttribute('data-app-boot', 'starting')`.
+   - On successful completion of initialization, set `data-app-boot` to `ready`.
+   - In the top-level bootstrap `catch`, set `data-app-boot` to `failed`, write the full error or stack to a DOM attribute such as `data-script-error`, and rethrow.
+   - If helpful, also render a visible fatal error element such as `#fatal-startup-error` so manual repros fail obviously in the UI.
+   - In shared E2E helpers, always assert early that:
+     - `data-app-boot` is `ready`
+     - `data-script-error` is absent
+     - `data-script-rejection` is absent
+   - Treat any violation of those conditions as an immediate test failure before checking later behaviors like DOM state, Tauri IPC, or page globals.
