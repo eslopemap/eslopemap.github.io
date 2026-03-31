@@ -34,14 +34,14 @@ const URL_HANDLERS = [
   }
 ];
 
-function mercatorToLonLat(x, y) {
+export function mercatorToLonLat(x, y) {
   const lon = (x / 20037508.342789244) * 180;
   let lat = (y / 20037508.342789244) * 180;
   lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(lat * Math.PI / 180)) - Math.PI / 2);
   return [lon, lat];
 }
 
-function convertC2cToGpx(data) {
+export function convertC2cToGpx(data) {
   const geomStr = data.geometry?.geom_detail;
   if (!geomStr) throw new Error("C2C API did not return track geometry");
   const geom = JSON.parse(geomStr);
@@ -109,14 +109,15 @@ export async function processUrlImport(url) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status} from ${matchedName}`);
 
     let trackContent = '';
-    let importName = matchedName + ' track';
+    let importName = matchedName;
 
     if (format === 'gpx') {
       trackContent = await resp.text();
-      // Try to extract title from URL for default naming if track name is empty
+      // Try to extract title from URL path for default naming
       try {
         const urlObj = new URL(url);
-        importName = urlObj.pathname.split('/').pop() || importName;
+        const lastPart = urlObj.pathname.split('/').filter(Boolean).pop() || importName;
+        importName = lastPart.replace(/\.gpx$/i, '');
       } catch (e) {}
     } else if (format === 'c2c-json') {
       const data = await resp.json();
@@ -126,9 +127,9 @@ export async function processUrlImport(url) {
 
     // Call io's import logic which adds it to the list
     if (trackContent.trim() === '') throw new Error("Empty GPX file");
-    
-    // We expect importFileContent from io.js. 
-    importFileContent(importName, trackContent);
+
+    // importFileContent dispatches on .gpx extension — always pass .gpx for GPX content
+    importFileContent(importName + '.gpx', trackContent);
 
     if (statusEl) {
       statusEl.style.display = 'none';
