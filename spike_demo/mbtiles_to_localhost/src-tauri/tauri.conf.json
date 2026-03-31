@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Spike 1 Localhost",
+  "version": "0.1.0",
+  "identifier": "com.eslopemap.spike.mbtileslocalhost",
+  "build": {
+    "frontendDist": "../../shared_frontend"
+  },
+  "app": {
+    "windows": []
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["../../../icon-512.png"]
+  }
+}

@@ -1,0 +1,12 @@
+[package]
+name = "mbtiles_custom_protocol"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+http = "1"
+spike_shared_backend = { path = "../../shared_backend" }
+tauri = { version = "2", features = [] }

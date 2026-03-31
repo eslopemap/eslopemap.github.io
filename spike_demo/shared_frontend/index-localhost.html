@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spike 1 - Localhost</title>
+  <link rel="stylesheet" href="https://unpkg.com/@eslopemap/maplibre-gl@5.21.9/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script>
+    globalThis.__SPIKE_CONFIG__ = {
+      demoId: 'mbtiles_to_localhost',
+      demoLabel: 'Localhost HTTP',
+      offlineTileTemplate: 'http://127.0.0.1:14321/tiles/dummy/{z}/{x}/{y}.png',
+      onlineTileTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+    };
+  </script>
+  <script src="https://unpkg.com/@eslopemap/maplibre-gl@5.21.9/dist/maplibre-gl.js"></script>
+</head>
+<body>
+  <aside id="sidebar">
+    <div>
+      <div id="badge">Spike 1</div>
+      <h1>MBTiles localhost demonstrator</h1>
+      <p>Compare online OSM tiles with offline MBTiles tiles served through a loopback HTTP endpoint.</p>
+    </div>
+
+    <section class="panel">
+      <h2>Source mode</h2>
+      <select id="source-mode" aria-label="Tile source mode">
+        <option value="online">Online OSM</option>
+        <option value="offline">Offline MBTiles</option>
+      </select>
+    </section>
+
+    <section class="panel">
+      <h2>Status</h2>
+      <div id="status-grid">
+        <strong>Current source</strong><code id="current-source">Online OSM</code>
+        <strong>Last tile URL</strong><code id="last-tile-url">n/a</code>
+        <strong>Tile requests</strong><code id="tile-request-count">0</code>
+        <strong>Last error</strong><span class="error"><code id="last-error">none</code></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent events</h2>
+      <ol id="event-log"></ol>
+    </section>
+  </aside>
+
+  <main id="map-shell">
+    <div id="map"></div>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

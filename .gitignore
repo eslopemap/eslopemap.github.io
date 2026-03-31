@@ -1,2 +1,4 @@
 /node_modules
 /test-results
+.DS_Store
+spike_demo/**/target

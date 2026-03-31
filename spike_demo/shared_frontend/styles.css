@@ -1,0 +1,124 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #111827;
+  background: #e5e7eb;
+}
+
+body {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+}
+
+#sidebar {
+  box-sizing: border-box;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border-right: 1px solid rgba(17, 24, 39, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#sidebar h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+#sidebar p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
+.panel {
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+#source-mode {
+  width: 100%;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(17, 24, 39, 0.16);
+  background: #ffffff;
+}
+
+#status-grid {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px 10px;
+  align-items: start;
+  font-size: 0.9rem;
+}
+
+#status-grid strong {
+  color: #111827;
+}
+
+#status-grid code {
+  display: inline-block;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.82rem;
+  color: #1d4ed8;
+}
+
+#status-grid .error code {
+  color: #b91c1c;
+}
+
+#map-shell {
+  position: relative;
+  min-width: 0;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+#badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+#event-log {
+  margin: 0;
+  padding-left: 16px;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 0.84rem;
+  color: #374151;
+}
+
+@media (max-width: 900px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  #sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(17, 24, 39, 0.1);
+  }
+}

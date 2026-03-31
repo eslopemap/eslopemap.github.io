@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Default permissions for the localhost spike demo.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
