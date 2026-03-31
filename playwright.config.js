@@ -11,10 +11,12 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  timeout: 30_000,
+  expect: { timeout: 5_000 },
   fullyParallel: false,
-  retries: 1,
+  retries: process.env.CI ? 1 : 0,
+  // workers=1: all tests share localStorage on the same origin (nanostores
+  // persistence). Parallel workers cause race conditions on stored tracks.
   workers: 1,
   reporter: 'list',
   use: {

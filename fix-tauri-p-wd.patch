@@ -1,0 +1,27 @@
+diff --git a/src/platform/macos.rs b/src/platform/macos.rs
+index d972f85..5c7a555 100644
+--- a/src/platform/macos.rs
++++ b/src/platform/macos.rs
+@@ -97,6 +97,8 @@ impl<R: Runtime + 'static> PlatformExecutor<R> for MacOSExecutor<R> {
+         let result = self.window.with_webview(move |webview| unsafe {
+             let wk_webview: &WKWebView = &*webview.inner().cast();
+             let ns_script = NSString::from_str(&script_owned);
++            let mtm = MainThreadMarker::new_unchecked();
++            let content_world = WKContentWorld::pageWorld(mtm);
+ 
+             let tx = Arc::new(std::sync::Mutex::new(Some(tx)));
+             let block = RcBlock::new(move |result: *mut AnyObject, error: *mut NSError| {
+@@ -118,7 +120,12 @@ impl<R: Runtime + 'static> PlatformExecutor<R> for MacOSExecutor<R> {
+                 }
+             });
+ 
+-            wk_webview.evaluateJavaScript_completionHandler(&ns_script, Some(&block));
++            wk_webview.evaluateJavaScript_inFrame_inContentWorld_completionHandler(
++                &ns_script,
++                None,
++                &content_world,
++                Some(&block),
++            );
+         });
+ 
+         if let Err(e) = result {

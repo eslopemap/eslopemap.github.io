@@ -172,13 +172,19 @@ export const BASEMAP_LAYER_GROUPS = {
     'basemap-swiss-boundary',
     'basemap-swiss-label'
   ],
-  'kartverket': ['basemap-kartverket']
+  'kartverket': ['basemap-kartverket'],
+  'swisstopo-raster': ['basemap-swisstopo-raster'],
+  'ign-topo': ['basemap-ign-topo'],
+  'ign-ortho': ['basemap-ign-ortho']
 };
 
 export const BASEMAP_DEFAULT_VIEW = {
   'kartverket': {center: [13.0, 67], zoom: 6, bounds: [3, 57, 32, 72]},
   'ign-plan': {center: [2.35, 46.8], zoom: 6, bounds: [-5.5, 41, 10, 51.5]},
-  'swisstopo-vector': {center: [8.23, 46.82], zoom: 8, bounds: [5.9, 45.8, 10.5, 47.8]}
+  'swisstopo-vector': {center: [8.23, 46.82], zoom: 8, bounds: [5.9, 45.8, 10.5, 47.8]},
+  'swisstopo-raster': {center: [8.23, 46.82], zoom: 8, bounds: [5.9, 45.8, 10.5, 47.8]},
+  'ign-topo': {center: [2.35, 46.8], zoom: 6, bounds: [-5.5, 41, 10, 51.5]},
+  'ign-ortho': {center: [2.35, 46.8], zoom: 6, bounds: [-5.5, 41, 10, 51.5]}
 };
 
 export const OPENSKIMAP_LAYER_IDS = [
@@ -186,6 +192,15 @@ export const OPENSKIMAP_LAYER_IDS = [
   'basemap-ski-runs',
   'basemap-ski-lifts',
   'basemap-ski-spots'
+];
+
+export const SWISSTOPO_SKI_LAYER_IDS = [
+  'overlay-swisstopo-ski',
+  'overlay-swisstopo-slope30'
+];
+
+export const IGN_SKI_LAYER_IDS = [
+  'overlay-ign-slopes'
 ];
 
 export const ALL_BASEMAP_LAYER_IDS = [...new Set(Object.values(BASEMAP_LAYER_GROUPS).flat())];

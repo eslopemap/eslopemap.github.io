@@ -52,6 +52,23 @@
 </div>
 
 <script>
+document.documentElement.setAttribute('data-inline-script-probe', '1');
+window.__inlineScriptProbe = true;
+window.addEventListener('error', function (event) {
+    document.documentElement.setAttribute('data-script-error', String(event.message || 'unknown-error'));
+});
+window.addEventListener('unhandledrejection', function (event) {
+    var reason = event.reason;
+    var message = reason && reason.message ? reason.message : String(reason || 'unknown-rejection');
+    document.documentElement.setAttribute('data-script-rejection', message);
+});
+</script>
+
+<script>
+try {
+window.__pageProbe = { ready: true };
+document.documentElement.setAttribute('data-page-probe', '1');
+
 // ---------------------------------------------------------------------------
 // Runtime detection
 // ---------------------------------------------------------------------------
@@ -129,7 +146,7 @@ function init() {
 // ---------------------------------------------------------------------------
 
 function setupTauriEvents() {
-    if (window.__TAURI_INTERNALS__) {
+    if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.convertCallback === 'function') {
         const handler = (event) => {
             const events = event.payload;
             if (!Array.isArray(events)) return;
@@ -208,7 +225,11 @@ const browserFileHashes = new Map();
 async function scanBrowserFolder() {
     fileStates.clear();
     browserFileHashes.clear();
-    for await (const [name, handle] of browserDirHandle.entries()) {
+    const entries = browserDirHandle.entries();
+    while (true) {
+        const step = await entries.next();
+        if (step.done) break;
+        const [name, handle] = step.value;
         if (handle.kind === 'file' && name.endsWith('.gpx')) {
             const file = await handle.getFile();
             const text = await file.text();
@@ -228,7 +249,11 @@ function startBrowserPolling() {
 async function pollBrowserFolder() {
     if (!browserDirHandle) return;
     const currentPaths = new Set();
-    for await (const [name, handle] of browserDirHandle.entries()) {
+    const entries = browserDirHandle.entries();
+    while (true) {
+        const step = await entries.next();
+        if (step.done) break;
+        const [name, handle] = step.value;
         if (handle.kind === 'file' && name.endsWith('.gpx')) {
             currentPaths.add(name);
             const file = await handle.getFile();
@@ -302,7 +327,7 @@ function handleSyncEvent(event) {
         case 'file_renamed': {
             const oldState = fileStates.get(event.old_path);
             fileStates.delete(event.old_path);
-            fileStates.set(event.new_path, { ...(oldState || {}), path: event.new_path, status: 'clean' });
+            fileStates.set(event.new_path, Object.assign({}, oldState || {}, { path: event.new_path, status: 'clean' }));
             if (selectedPath === event.old_path) selectedPath = event.new_path;
             logEvent('file_renamed', `${event.old_path.split('/').pop()} → ${event.new_path.split('/').pop()}`);
             break;
@@ -319,9 +344,6 @@ function handleSyncEvent(event) {
 }
 
 // ---------------------------------------------------------------------------
-// File state helpers
-// ---------------------------------------------------------------------------
-
 function syncFilesFromSnapshot(snapshot) {
     fileStates.clear();
     for (const f of snapshot.files) fileStates.set(f.path, f);
@@ -339,7 +361,7 @@ function syncFilesFromSnapshot(snapshot) {
 function updateUI() {
     $folderPath.textContent = watchedFolder || 'No folder selected';
     $fileList.innerHTML = '';
-    const sortedFiles = [...fileStates.values()].sort((a, b) => a.path.localeCompare(b.path));
+    const sortedFiles = Array.from(fileStates.values()).sort((a, b) => a.path.localeCompare(b.path));
     for (const f of sortedFiles) {
         const shortName = f.path.split('/').pop() || f.path;
         const item = document.createElement('div');
@@ -460,7 +482,7 @@ async function onResolveConflict(keep) {
         editorContent = resolvedContent; originalContent = resolvedContent; $editor.value = resolvedContent; diskConflictContent = null;
         const state = fileStates.get(selectedPath);
         if (state) { state.status = 'clean'; state.content_hash = await hashString(resolvedContent); }
-        if (!isTauri) browserFileHashes.set(selectedPath, state?.content_hash || '');
+        if (!isTauri) browserFileHashes.set(selectedPath, state ? state.content_hash : '');
         logEvent('resolve', `Resolved (${keep}): ${selectedPath.split('/').pop()}`);
         updateUI();
     } catch (err) { logEvent('error', `Resolve failed: ${err}`); }
@@ -499,6 +521,10 @@ function logEvent(kind, detail) {
 
 window.__gpxSync = { watchFolderByPath };
 init();
+} catch (err) {
+    document.documentElement.setAttribute('data-script-error', String(err && err.stack ? err.stack : err));
+    throw err;
+}
 </script>
 
 </body>

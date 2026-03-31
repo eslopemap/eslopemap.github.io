@@ -23,6 +23,8 @@ export const STATE_DEFAULTS = {
   slopeOpacity: 0.45,
   showContours: true,
   showOpenSkiMap: false,
+  showSwisstopoSki: false,
+  showIgnSlopes: false,
   showTileGrid: false,
   cursorInfoMode: 'cursor',
   multiplyBlend: true,

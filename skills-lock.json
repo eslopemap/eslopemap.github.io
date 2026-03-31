@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "tauri": {
+      "source": "hairyf/skills",
+      "sourceType": "github",
+      "computedHash": "e7d2bb5e54e2430decd7c07f58366bba6771d8b58ac99fbe6dc4cf88b31f219a"
+    }
+  }
+}

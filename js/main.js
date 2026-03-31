@@ -10,6 +10,7 @@ import { createStore, STATE_DEFAULTS } from './state.js';
 import {
   parseHashParams, syncViewToUrl, updateLegend,
   applyBasemapSelection, applyContourVisibility, applyOpenSkiMapOverlay,
+  applySwisstopoSkiOverlay, applyIgnSlopesOverlay,
   applyTerrainState, applyModeState,
   basemapOpacityExpr, setGlobalStatePropertySafe, updateCursorInfoVisibility,
   setCursorInfo, showCursorTooltipAt, hideCursorTooltip,
@@ -138,6 +139,8 @@ if (persisted) {
   }
   if (persisted.showContours != null) document.getElementById('showContours').checked = state.showContours;
   if (persisted.showOpenSkiMap != null) document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
+  if (persisted.showSwisstopoSki != null) document.getElementById('showSwisstopoSki').checked = state.showSwisstopoSki;
+  if (persisted.showIgnSlopes != null) document.getElementById('showIgnSlopes').checked = state.showIgnSlopes;
   if (persisted.multiplyBlend != null) document.getElementById('multiplyBlend').checked = state.multiplyBlend;
   if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
   if (persisted.pauseThreshold != null) {
@@ -253,6 +256,48 @@ const map = new maplibregl.Map({
         maxzoom: 17,
         attribution: '&copy; Kartverket'
       },
+      'swisstopo-raster': {
+        type: 'raster',
+        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg'],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: '&copy; swisstopo'
+      },
+      igntopo: {
+        type: 'raster',
+        tiles: ['https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}'],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: '&copy; IGN France'
+      },
+      ignortho: {
+        type: 'raster',
+        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg'],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: '&copy; IGN France'
+      },
+      'swisstopo-ski': {
+        type: 'raster',
+        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-karto.skitouren/default/current/3857/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        maxzoom: 17,
+        attribution: '&copy; swisstopo / SAC'
+      },
+      'swisstopo-slope30': {
+        type: 'raster',
+        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-karto.hangneigung/default/current/3857/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        maxzoom: 17,
+        attribution: '&copy; swisstopo'
+      },
+      'ign-slopes': {
+        type: 'raster',
+        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'],
+        tileSize: 256,
+        maxzoom: 17,
+        attribution: '&copy; IGN France'
+      },
       // Separate raster-dem sources for terrain and
       // hillshade/analysis on purpose: in current MapLibre,
       // one source means one shared TileManager, and terrain changes shared DEM
@@ -298,6 +343,27 @@ const map = new maplibregl.Map({
         id: 'basemap-kartverket',
         type: 'raster',
         source: 'kartverket',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      },
+      {
+        id: 'basemap-swisstopo-raster',
+        type: 'raster',
+        source: 'swisstopo-raster',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      },
+      {
+        id: 'basemap-ign-topo',
+        type: 'raster',
+        source: 'igntopo',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      },
+      {
+        id: 'basemap-ign-ortho',
+        type: 'raster',
+        source: 'ignortho',
         layout: {visibility: 'none'},
         paint: { 'raster-opacity': basemapOpacityExpr(1) }
       },
@@ -406,6 +472,27 @@ const map = new maplibregl.Map({
           'text-halo-color': '#ffffff',
           'text-halo-width': 1
         }
+      },
+      {
+        id: 'overlay-swisstopo-ski',
+        type: 'raster',
+        source: 'swisstopo-ski',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(0.9) }
+      },
+      {
+        id: 'overlay-swisstopo-slope30',
+        type: 'raster',
+        source: 'swisstopo-slope30',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
+      },
+      {
+        id: 'overlay-ign-slopes',
+        type: 'raster',
+        source: 'ign-slopes',
+        layout: {visibility: 'none'},
+        paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
       },
       {
         id: 'dem-loader',
@@ -875,6 +962,18 @@ document.getElementById('showOpenSkiMap').addEventListener('change', (e) => {
   scheduleSettingsSave();
 });
 
+document.getElementById('showSwisstopoSki').addEventListener('change', (e) => {
+  state.showSwisstopoSki = Boolean(e.target.checked);
+  applySwisstopoSkiOverlay(map, state);
+  scheduleSettingsSave();
+});
+
+document.getElementById('showIgnSlopes').addEventListener('change', (e) => {
+  state.showIgnSlopes = Boolean(e.target.checked);
+  applyIgnSlopesOverlay(map, state);
+  scheduleSettingsSave();
+});
+
 document.getElementById('showTileGrid').addEventListener('change', (e) => {
   state.showTileGrid = Boolean(e.target.checked);
   if (map.getLayer('dem-debug-grid-line')) {
@@ -965,6 +1064,8 @@ map.on('load', () => {
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
   applyBasemapSelection(map, state);
   applyOpenSkiMapOverlay(map, state);
+  applySwisstopoSkiOverlay(map, state);
+  applyIgnSlopesOverlay(map, state);
   applyTerrainState(map, state);
   updateDebugGridSource(map);
   syncViewToUrl(map, state);

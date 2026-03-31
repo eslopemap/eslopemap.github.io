@@ -51,6 +51,55 @@ describe('Spike 2 — File-Centric GPX Sync (IPC-driven)', () => {
             assert.strictEqual(hasTauri, true);
         });
 
+        it('sync execute can see page globals', async () => {
+            await browser.pause(1000);
+
+            const diagnostics = await browser.executeAsync((done) => {
+                done({
+                    readyState: document.readyState,
+                    inlineScriptProbe: document.documentElement.getAttribute('data-inline-script-probe'),
+                    domProbe: document.documentElement.getAttribute('data-page-probe'),
+                    scriptError: document.documentElement.getAttribute('data-script-error'),
+                    scriptRejection: document.documentElement.getAttribute('data-script-rejection'),
+                    badgeText: document.getElementById('runtime-badge')?.textContent ?? null,
+                    hasPageProbe: Boolean(window.__pageProbe && window.__pageProbe.ready === true),
+                    hasGpxSync: Boolean(window.__gpxSync && typeof window.__gpxSync.watchFolderByPath === 'function'),
+                });
+            });
+            const syncInlineScriptProbe = await browser.execute(
+                () => document.documentElement.getAttribute('data-inline-script-probe')
+            );
+            const syncDomProbe = await browser.execute(
+                () => document.documentElement.getAttribute('data-page-probe')
+            );
+            const syncHasPageProbe = await browser.execute(
+                () => Boolean(window.__pageProbe && window.__pageProbe.ready === true)
+            );
+            const syncHasGpxSync = await browser.execute(
+                () => Boolean(window.__gpxSync && typeof window.__gpxSync.watchFolderByPath === 'function')
+            );
+            const asyncHasGpxSync = await browser.executeAsync((done) => {
+                done(Boolean(window.__gpxSync && typeof window.__gpxSync.watchFolderByPath === 'function'));
+            });
+            console.log('page-global diagnostics', {
+                ...diagnostics,
+                syncInlineScriptProbe,
+                syncDomProbe,
+                syncHasPageProbe,
+                syncHasGpxSync,
+                asyncHasGpxSync,
+            });
+
+            assert.strictEqual(diagnostics.inlineScriptProbe, '1');
+            assert.strictEqual(syncInlineScriptProbe, '1');
+            assert.strictEqual(diagnostics.domProbe, '1');
+            assert.strictEqual(syncDomProbe, '1');
+            assert.strictEqual(diagnostics.hasPageProbe, true);
+            assert.strictEqual(syncHasPageProbe, true);
+            assert.strictEqual(asyncHasGpxSync, true);
+            assert.strictEqual(syncHasGpxSync, true);
+        });
+
         it('screenshot primitive works', async () => {
             const filepath = await takeScreenshot(browser, '00-primitive-test');
             assert.ok(filepath.endsWith('.png'));

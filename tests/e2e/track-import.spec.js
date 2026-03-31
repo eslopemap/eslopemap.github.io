@@ -1,19 +1,8 @@
 // @ts-check
-// Track Import E2E Tests
-//
-// Tests cover: GPX import (tracks, routes, multi-segment), GeoJSON import
-// (LineString, MultiLineString, FeatureCollection).
-//
-// Key decision: we call the app's importFileContent(filename, content) function
-// directly via indirect eval, bypassing drag-and-drop. This avoids DnD emulation
-// flakiness while still exercising the full parsing + track creation pipeline.
-
 const {
-  test, expect, getTrackCount, getTrackItemCount, getTrackInfo,
+  test, expect, getTrackCount, getTrackInfo,
   importFile, evalInScope,
 } = require('./helpers');
-
-// --- Test fixtures ---
 
 const SIMPLE_GPX = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="test">
@@ -56,11 +45,7 @@ const SIMPLE_GEOJSON = JSON.stringify({
   type: 'Feature',
   geometry: {
     type: 'LineString',
-    coordinates: [
-      [6.86, 45.83, 1500],
-      [6.87, 45.84, 1600],
-      [6.88, 45.85, 1700],
-    ],
+    coordinates: [[6.86, 45.83, 1500], [6.87, 45.84, 1600], [6.88, 45.85, 1700]],
   },
   properties: {},
 });
@@ -80,94 +65,67 @@ const MULTI_LINESTRING_GEOJSON = JSON.stringify({
 const FEATURE_COLLECTION_GEOJSON = JSON.stringify({
   type: 'FeatureCollection',
   features: [
-    {
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[6.86, 45.83], [6.87, 45.84]] },
-      properties: {},
-    },
-    {
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[6.90, 45.90], [6.91, 45.91]] },
-      properties: {},
-    },
+    { type: 'Feature', geometry: { type: 'LineString', coordinates: [[6.86, 45.83], [6.87, 45.84]] }, properties: {} },
+    { type: 'Feature', geometry: { type: 'LineString', coordinates: [[6.90, 45.90], [6.91, 45.91]] }, properties: {} },
   ],
 });
 
-// --- Tests ---
-
 test.describe('Track Import', () => {
 
-  test('GPX import — simple track with name', async ({ mapPage: page }) => {
+  test('GPX import -- simple track with name', async ({ mapPage: page }) => {
     await importFile(page, 'test.gpx', SIMPLE_GPX);
     await page.waitForTimeout(300);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(1);
-
+    expect(await getTrackCount(page)).toBe(1);
     const info = await getTrackInfo(page, 0);
     expect(info.name).toBe('Test Track');
-    expect(info.statsText).toContain('3 pts');
+    expect(info.pointCount).toBe(3);
   });
 
-  test('GPX import — route element', async ({ mapPage: page }) => {
+  test('GPX import -- route element', async ({ mapPage: page }) => {
     await importFile(page, 'route.gpx', ROUTE_GPX);
     await page.waitForTimeout(300);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(1);
-
+    expect(await getTrackCount(page)).toBe(1);
     const info = await getTrackInfo(page, 0);
     expect(info.name).toBe('My Route');
-    expect(info.statsText).toContain('3 pts');
+    expect(info.pointCount).toBe(3);
   });
 
-  test('GPX import — multi-segment creates grouped tracks', async ({ mapPage: page }) => {
+  test('GPX import -- multi-segment creates multiple tracks', async ({ mapPage: page }) => {
     await importFile(page, 'multi.gpx', MULTI_SEG_GPX);
     await page.waitForTimeout(300);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(2);
-
-    // Should show a group header
-    await expect(page.locator('.track-group-header')).toHaveCount(1);
-
-    // Segments should be nested
-    await expect(page.locator('.track-item-nested')).toHaveCount(2);
+    expect(await getTrackCount(page)).toBe(2);
 
     const info0 = await getTrackInfo(page, 0);
     const info1 = await getTrackInfo(page, 1);
-    expect(info0.statsText).toContain('2 pts');
-    expect(info1.statsText).toContain('2 pts');
+    expect(info0.pointCount).toBe(2);
+    expect(info1.pointCount).toBe(2);
   });
 
-  test('GeoJSON import — LineString', async ({ mapPage: page }) => {
+  test('GeoJSON import -- LineString', async ({ mapPage: page }) => {
     await importFile(page, 'test.geojson', SIMPLE_GEOJSON);
     await page.waitForTimeout(300);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(1);
-
+    expect(await getTrackCount(page)).toBe(1);
     const info = await getTrackInfo(page, 0);
     expect(info.name).toBe('test');
-    expect(info.statsText).toContain('3 pts');
+    expect(info.pointCount).toBe(3);
   });
 
-  test('GeoJSON import — MultiLineString creates multiple tracks', async ({ mapPage: page }) => {
+  test('GeoJSON import -- MultiLineString creates multiple tracks', async ({ mapPage: page }) => {
     await importFile(page, 'multi.geojson', MULTI_LINESTRING_GEOJSON);
     await page.waitForTimeout(300);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(2);
+    expect(await getTrackCount(page)).toBe(2);
   });
 
-  test('GeoJSON import — FeatureCollection with multiple lines', async ({ mapPage: page }) => {
+  test('GeoJSON import -- FeatureCollection with multiple lines', async ({ mapPage: page }) => {
     await importFile(page, 'collection.geojson', FEATURE_COLLECTION_GEOJSON);
     await page.waitForTimeout(300);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(2);
-
-    await expect(page.locator('.track-item')).toHaveCount(2);
+    expect(await getTrackCount(page)).toBe(2);
   });
 
   test('GPX import uses filename as fallback name when track has no <name>', async ({ mapPage: page }) => {
@@ -191,13 +149,10 @@ test.describe('Track Import', () => {
     await importFile(page, 'second.gpx', ROUTE_GPX);
     await page.waitForTimeout(200);
 
-    const count = await getTrackCount(page);
-    expect(count).toBe(2);
-
-    await expect(page.locator('.track-item')).toHaveCount(2);
+    expect(await getTrackCount(page)).toBe(2);
   });
 
-  test('GPX import with waypoints — waypoints are parsed', async ({ mapPage: page }) => {
+  test('GPX import with waypoints -- waypoints are parsed', async ({ mapPage: page }) => {
     const gpxWithWpt = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="test">
   <wpt lat="45.83" lon="6.86"><ele>1500</ele><name>Summit</name><sym>Flag</sym></wpt>
@@ -213,17 +168,14 @@ test.describe('Track Import', () => {
     await importFile(page, 'wpt.gpx', gpxWithWpt);
     await page.waitForTimeout(300);
 
-    const trackCount = await getTrackCount(page);
-    expect(trackCount).toBe(1);
-
+    expect(await getTrackCount(page)).toBe(1);
     const wptCount = await evalInScope(page, 'waypoints.length');
     expect(wptCount).toBe(2);
-
     const wptName = await evalInScope(page, 'waypoints[0].name');
     expect(wptName).toBe('Summit');
   });
 
-  test('GPX with waypoints only (no tracks) — waypoints imported', async ({ mapPage: page }) => {
+  test('GPX with waypoints only (no tracks) -- waypoints imported', async ({ mapPage: page }) => {
     const gpxWptOnly = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="test">
   <wpt lat="45.83" lon="6.86"><name>Point A</name></wpt>
@@ -236,25 +188,31 @@ test.describe('Track Import', () => {
     expect(wptCount).toBe(2);
   });
 
-  test('Multi-segment group — collapse/expand', async ({ mapPage: page }) => {
+  test('Multi-segment -- collapse/expand in tree', async ({ mapPage: page }) => {
     await importFile(page, 'multi.gpx', MULTI_SEG_GPX);
     await page.waitForTimeout(300);
 
-    // Initially expanded
-    await expect(page.locator('.track-item-nested')).toHaveCount(2);
+    // Tree should show rows (file + track + segments)
+    const initialRows = await page.locator('.tree-row').count();
+    expect(initialRows).toBeGreaterThanOrEqual(2);
 
-    // Click group header to collapse
-    await page.locator('.track-group-header').click();
+    // Click a toggle to collapse
+    const toggle = page.locator('.tree-toggle').first();
+    await toggle.click();
     await page.waitForTimeout(100);
-    await expect(page.locator('.track-item-nested')).toHaveCount(0);
+
+    const afterCollapse = await page.locator('.tree-row').count();
+    expect(afterCollapse).toBeLessThan(initialRows);
 
     // Click again to expand
-    await page.locator('.track-group-header').click();
+    await toggle.click();
     await page.waitForTimeout(100);
-    await expect(page.locator('.track-item-nested')).toHaveCount(2);
+
+    const afterExpand = await page.locator('.tree-row').count();
+    expect(afterExpand).toBe(initialRows);
   });
 
-  test('GPX with extensions — round-trip preserves extensions', async ({ mapPage: page }) => {
+  test('GPX with extensions -- round-trip preserves extensions', async ({ mapPage: page }) => {
     const gpxWithExt = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="garmin">
   <trk>
@@ -272,9 +230,7 @@ test.describe('Track Import', () => {
     await importFile(page, 'ext.gpx', gpxWithExt);
     await page.waitForTimeout(300);
 
-    const trackCount = await getTrackCount(page);
-    expect(trackCount).toBe(1);
-
+    expect(await getTrackCount(page)).toBe(1);
     const info = await getTrackInfo(page, 0);
     expect(info.name).toBe('Ext Track');
   });

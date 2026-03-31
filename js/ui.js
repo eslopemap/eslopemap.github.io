@@ -2,6 +2,7 @@
 
 import {
   BASEMAP_LAYER_GROUPS, BASEMAP_DEFAULT_VIEW, OPENSKIMAP_LAYER_IDS,
+  SWISSTOPO_SKI_LAYER_IDS, IGN_SKI_LAYER_IDS,
   ALL_BASEMAP_LAYER_IDS, DEM_TERRAIN_SOURCE_ID, DEM_MAX_Z, SLOPE_RELIEF_CROSSFADE_Z,
   ANALYSIS_COLOR, COLOR_RELIEF_STOPS,
   rampToLegendCss, interpolateStopsToLegendCss,
@@ -74,6 +75,18 @@ export function applyContourVisibility(map, state) {
 export function applyOpenSkiMapOverlay(map, state) {
   for (const id of OPENSKIMAP_LAYER_IDS) {
     setLayerVisibilitySafe(map, id, state.showOpenSkiMap);
+  }
+}
+
+export function applySwisstopoSkiOverlay(map, state) {
+  for (const id of SWISSTOPO_SKI_LAYER_IDS) {
+    setLayerVisibilitySafe(map, id, state.showSwisstopoSki);
+  }
+}
+
+export function applyIgnSlopesOverlay(map, state) {
+  for (const id of IGN_SKI_LAYER_IDS) {
+    setLayerVisibilitySafe(map, id, state.showIgnSlopes);
   }
 }
 
