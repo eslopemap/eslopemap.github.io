@@ -1,4 +1,4 @@
-use http::{header::CONTENT_TYPE, Response, StatusCode, Uri};
+use http::{header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE}, Response, StatusCode, Uri};
 use spike_shared_backend::{fixture_mbtiles_path, parse_protocol_request, resolve_tile_request};
 use tauri::WebviewUrl;
 
@@ -13,6 +13,7 @@ fn main() {
                 println!("[protocol-demo] 404 invalid path: {}", request.uri());
                 return Response::builder()
                     .status(StatusCode::NOT_FOUND)
+                    .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                     .body(Vec::new())
                     .expect("failed to build 404 response");
             };
@@ -28,6 +29,7 @@ fn main() {
                     Response::builder()
                         .status(tile_response.status)
                         .header(CONTENT_TYPE, tile_response.content_type)
+                        .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                         .body(tile_response.body)
                         .expect("failed to build tile response")
                 }
@@ -36,6 +38,7 @@ fn main() {
                     Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
                         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                        .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*")
                         .body(error.to_string().into_bytes())
                         .expect("failed to build error response")
                 }

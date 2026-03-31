@@ -37,6 +37,9 @@ fn spawn_tile_server(manifest_dir: &'static str) {
                     if let Ok(header) = Header::from_bytes("Content-Type", tile_response.content_type) {
                         response = response.with_header(header);
                     }
+                    if let Ok(header) = Header::from_bytes("Access-Control-Allow-Origin", "*") {
+                        response = response.with_header(header);
+                    }
                     let _ = request.respond(response);
                 }
                 Err(error) => {
