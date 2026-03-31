@@ -29,6 +29,7 @@ import { initShortcuts, registerShortcut } from './shortcuts.js';
 import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
 import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection, getCurrentSelection } from './selection-tools.js';
 import { describeOperationConsequence } from './track-ops.js';
+import { initWebImport } from './web-import.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 
@@ -286,7 +287,7 @@ const map = new maplibregl.Map({
       },
       'swisstopo-slope30': {
         type: 'raster',
-        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-karto.hangneigung/default/current/3857/{z}/{x}/{y}.png'],
+        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hangneigung-ueber_30/default/current/3857/{z}/{x}/{y}.png'],
         tileSize: 256,
         maxzoom: 17,
         attribution: '&copy; swisstopo'
@@ -319,6 +320,13 @@ const map = new maplibregl.Map({
       },
     },
     layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: {
+          'background-color': '#ffffff'
+        }
+      },
       {
         id: 'basemap-osm',
         type: 'raster',
@@ -589,6 +597,9 @@ map.on('dragstart', () => {
 
 // ---- Init search ----
 initSearch(map);
+
+// ---- Init web import ----
+initWebImport();
 
 // ---- Init tracks & profile ----
 initTracks(map, state, updateProfile);

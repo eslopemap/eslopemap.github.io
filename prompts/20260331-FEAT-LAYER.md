@@ -29,3 +29,9 @@ https://www.gulliver.it/wp-content/uploads/2009/12/11/oserot-monte-da-bersezio_5
 I understand there may be restrictions (CORS, Referer ...), make curl tests, skip those where  some protection cannot be worked around, and handle errors gracefully with  messages.
 
 as usual, highlight  decision points
+
+
+---
+- when 'baselayer is 'None', ensure an opaque white layer is present.
+- split slope & ski for swisstopo ie  split 'overlay-swisstopo-ski' and 'overlay-swisstopo-slope30' in constants.js
+- overlays should always be on top of baselayer, it's not the case for swisstop and IGN slope
