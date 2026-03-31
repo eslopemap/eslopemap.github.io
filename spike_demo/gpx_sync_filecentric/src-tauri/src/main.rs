@@ -145,8 +145,13 @@ fn get_snapshot(state: State<'_, ManagedState>) -> Result<FolderSnapshot, String
 fn main() {
     let manager = new_shared_manager();
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init());
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_webdriver_automation::init());
+    }
+    builder
         .manage(Mutex::new(AppState {
             manager,
             watcher: None,

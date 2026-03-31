@@ -7,6 +7,9 @@
     "frontendDist": "../frontend"
   },
   "app": {
+    "security": {
+      "csp": null
+    },
     "windows": [
       {
         "title": "Spike 2 — File-Centric GPX Sync",
