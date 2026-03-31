@@ -1,12 +1,21 @@
 # Bug: `browser.execute()` runs in isolated WKWebView content world
 
-**Plugin**: [tauri-plugin-webdriver-automation](https://github.com/danielraffel/tauri-webdriver) + `tauri-wd` CLI  
-**Platform**: macOS 15, WKWebView, Tauri v2  
-**Severity**: Major
+**Affects**: ALL macOS Tauri WebDriver plugins using `WKWebView.evaluateJavaScript`  
+**Tested on**:
+- [tauri-plugin-webdriver-automation](https://github.com/danielraffel/tauri-webdriver) 0.1.x + `tauri-wd` CLI
+- [tauri-plugin-webdriver](https://github.com/Choochmeque/tauri-plugin-webdriver) 0.2.x  
+**Platform**: macOS 15 (Sequoia), WKWebView, Tauri v2  
+**Severity**: Major — standard WebDriver testing patterns broken on macOS
 
 ## Summary
 
-`browser.execute()` evaluates JS in an isolated WKWebView content world, not the page's main world. Page script `window` properties are invisible to WebDriver script execution.
+`browser.execute()` (W3C `/session/{id}/execute/sync`) evaluates JS in an
+**isolated WKWebView content world**, not the page's main world. This is a
+fundamental WKWebView behavior: `evaluateJavaScript(_:)` runs in a separate
+JS context that shares the DOM but NOT `window` properties set by page scripts.
+
+Both plugins listed above exhibit the same behavior — this is not plugin-specific
+but a WKWebView platform constraint.
 
 ## Observed behavior
 
@@ -28,9 +37,13 @@ DOM is shared (reads/writes work), but JS globals from `<script>` tags are not v
 
 `browser.execute()` should run in the page's main JavaScript world, like every other WebDriver implementation. `window` properties set by page scripts should be accessible.
 
-## Root cause hypothesis
+## Root cause
 
-The plugin likely uses `WKWebView.evaluateJavaScript(_:in:contentWorld:)` with a non-default `WKContentWorld` (or the Tauri IPC bridge world), instead of `WKContentWorld.page`.
+WKWebView's `evaluateJavaScript(_:)` and `evaluateJavaScript(_:in:contentWorld:)`
+with `WKContentWorld.defaultClient` (the default) run in an isolated JS world.
+To access the page's main world, plugins must use `WKContentWorld.page` explicitly.
+
+Both tested plugins appear to use the default content world, which is isolated.
 
 ## Impact
 
@@ -96,10 +109,31 @@ describe('repro', () => {
 });
 ```
 
+## Workaround
+
+Drive tests via Tauri IPC directly from `browser.execute()`:
+
+```js
+// Instead of relying on page script's window.__myApp:
+const result = await browser.executeAsync(async (done) => {
+    const r = await window.__TAURI_INTERNALS__.invoke('my_command', { arg: 'val' });
+    done(r);
+});
+```
+
+`__TAURI_INTERNALS__` is injected into all content worlds and IPC works correctly.
+This bypasses the frontend JS entirely — tests interact with the Rust backend directly.
+
+## Possible fix
+
+Plugins should use `WKContentWorld.page` when evaluating WebDriver `execute/sync`
+and `execute/async` scripts, so that the evaluated JS shares the same world as
+page `<script>` tags. This is how Safari's WebDriver (SafariDriver) works.
+
 ## Environment
 
 - macOS 15 (Sequoia), Apple Silicon
-- Tauri 2.x stable
-- tauri-plugin-webdriver-automation 0.1.x
-- tauri-webdriver-automation (tauri-wd) 0.1.x
+- Tauri 2.10.x
+- tauri-plugin-webdriver-automation 0.1.x (danielraffel)
+- tauri-plugin-webdriver 0.2.x (Choochmeque)
 - WebDriverIO 9.x

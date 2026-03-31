@@ -149,7 +149,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init());
     #[cfg(debug_assertions)]
     {
-        builder = builder.plugin(tauri_plugin_webdriver_automation::init());
+        builder = builder.plugin(tauri_plugin_webdriver::init());
     }
     builder
         .manage(Mutex::new(AppState {
