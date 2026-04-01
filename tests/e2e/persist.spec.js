@@ -1,5 +1,6 @@
 // @ts-check
 const {
+  APP_URL,
   test, expect, drawTrackAndFinish, getTrackCount,
   getTrackInfo, evalInScope,
 } = require('./helpers');
@@ -66,7 +67,7 @@ test.describe('Persistence', () => {
       const keys = Object.keys(localStorage);
       keys.forEach(k => localStorage.removeItem(k));
     });
-    await page.goto('/app/index.html#test_mode=true', { waitUntil: 'load' });
+    await page.goto(APP_URL, { waitUntil: 'load' });
     await page.waitForFunction(
       () => { try { return (0, eval)('mapReady'); } catch { return false; } },
       { timeout: 5_000 }

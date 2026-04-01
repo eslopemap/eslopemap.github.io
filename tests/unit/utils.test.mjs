@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { smoothArray } from '../../js/utils.js';
+import { smoothArray } from '../../app/js/utils.js';
 
 describe('smoothArray', () => {
   it('returns input unchanged when radius is 0', () => {

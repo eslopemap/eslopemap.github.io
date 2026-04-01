@@ -135,6 +135,7 @@ async function deleteActiveTrackViaMenu(page) {
 }
 
 module.exports = {
+  APP_URL,
   test, expect, clickMap, dblClickMap, clickDrawBtn, addPoints,
   evalInScope, getTrackCount, getEditingTrackId, getActiveTrackId,
   getActiveTrackPointCount, getTrackInfo, getSelectedVertexIndex,

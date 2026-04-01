@@ -10,7 +10,7 @@ import {
   saveTracks,
   saveWaypoints,
   saveWorkspace,
-} from '../../js/persist.js';
+} from '../../app/js/persist.js';
 import { installLocalStorageMock } from './test-helpers.mjs';
 
 let storage;

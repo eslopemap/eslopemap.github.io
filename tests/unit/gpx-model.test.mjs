@@ -8,7 +8,7 @@ import {
   findParentOf,
   resolveActionTargets,
   resolveDescendantsByType,
-} from '../../js/gpx-model.js';
+} from '../../app/js/gpx-model.js';
 
 describe('gpx-model', () => {
   it('supports lookup and descendant resolution helpers', () => {

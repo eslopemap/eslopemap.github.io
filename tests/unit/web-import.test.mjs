@@ -1,4 +1,4 @@
-import { mercatorToLonLat, convertC2cToGpx } from '../../js/web-import.js';
+import { mercatorToLonLat, convertC2cToGpx } from '../../app/js/web-import.js';
 
 // ---- mercatorToLonLat ----
 
