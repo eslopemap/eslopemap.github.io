@@ -2,20 +2,27 @@
 
 import {
   DEM_HD_SOURCE_ID, DEM_MAX_Z, ANALYSIS_COLOR,
-  DEM_TERRAIN_SOURCE_ID, OPENSKIMAP_LAYER_IDS,
+  DEM_TERRAIN_SOURCE_ID,
 } from './constants.js';
 
 import { createStore, STATE_DEFAULTS } from './state.js';
 
 import {
   parseHashParams, syncViewToUrl, updateLegend,
-  applyBasemapSelection, applyContourVisibility, applyOpenSkiMapOverlay,
-  applySwisstopoSkiOverlay, applySwisstopoSlopeOverlay, applyIgnSkiOverlay, applyIgnSlopesOverlay,
+  applyContourVisibility,
   applyTerrainState, applyModeState,
   basemapOpacityExpr, setGlobalStatePropertySafe, updateCursorInfoVisibility,
   setCursorInfo, showCursorTooltipAt, hideCursorTooltip,
   getVisibleTriplesForMap, initSearch,
 } from './ui.js';
+
+import { buildCatalogSources, buildCatalogLayers, getBasemaps, getOverlays, getCatalogEntry } from './layer-registry.js';
+import {
+  setBasemap, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
+  syncLayerOrder, reorderLayer, applyLayerOpacity,
+  createBookmark, applyBookmark, deleteBookmark, renameBookmark,
+  migrateSettings,
+} from './layer-engine.js';
 
 import {
   queryLoadedElevationAtLngLat,
@@ -103,11 +110,8 @@ function applyTestModeState(state) {
   state.basemap = 'none';
   state.mode = '';
   state.showContours = false;
-  state.showOpenSkiMap = false;
-  state.showSwisstopoSki = false;
-  state.showSwisstopoSlope = false;
-  state.showIgnSki = false;
-  state.showIgnSlopes = false;
+  state.activeOverlays = [];
+  state.layerOrder = [];
   state.terrain3d = false;
   state.hillshadeOpacity = 0;
 }
@@ -118,11 +122,8 @@ function syncTestModeUi(state) {
   document.getElementById('terrain3d').checked = state.terrain3d;
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
   document.getElementById('showContours').checked = state.showContours;
-  document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
-  document.getElementById('showSwisstopoSki').checked = state.showSwisstopoSki;
-  document.getElementById('showSwisstopoSlope').checked = state.showSwisstopoSlope;
-  document.getElementById('showIgnSki').checked = state.showIgnSki;
-  document.getElementById('showIgnSlopes').checked = state.showIgnSlopes;
+  // Overlay checkboxes are dynamic — sync them
+  syncOverlayCheckboxes(state);
   document.getElementById('hillshadeOpacity').value = String(state.hillshadeOpacity);
   document.getElementById('hillshadeOpacityValue').textContent = state.hillshadeOpacity.toFixed(2);
 }
@@ -132,7 +133,8 @@ function applyTestModeMapState(map, state) {
     map.setLayoutProperty('dem-loader', 'visibility', 'none');
   }
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
-  applyBasemapSelection(map, state);
+  setBasemap(map, state, state.basemap);
+  applyAllOverlays(map, state);
   applyModeState(map, state);
   applyContourVisibility(map, state);
 }
@@ -142,6 +144,8 @@ function applyTestModeMapState(map, state) {
 // Persisted settings as defaults, URL hash overrides
 const persisted = loadSettings();
 if (persisted) {
+  // Migrate legacy per-overlay booleans → activeOverlays array
+  migrateSettings(persisted);
   for (const k of Object.keys(persisted)) {
     if (persisted[k] !== undefined) state[k] = persisted[k];
   }
@@ -183,11 +187,6 @@ if (persisted) {
     document.getElementById('hillshadeMethod').value = state.hillshadeMethod;
   }
   if (persisted.showContours != null) document.getElementById('showContours').checked = state.showContours;
-  if (persisted.showOpenSkiMap != null) document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
-  if (persisted.showSwisstopoSki != null) document.getElementById('showSwisstopoSki').checked = state.showSwisstopoSki;
-  if (persisted.showSwisstopoSlope != null) document.getElementById('showSwisstopoSlope').checked = state.showSwisstopoSlope;
-  if (persisted.showIgnSki != null) document.getElementById('showIgnSki').checked = state.showIgnSki;
-  if (persisted.showIgnSlopes != null) document.getElementById('showIgnSlopes').checked = state.showIgnSlopes;
   if (persisted.multiplyBlend != null) document.getElementById('multiplyBlend').checked = state.multiplyBlend;
   if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
   if (persisted.pauseThreshold != null) {
@@ -241,6 +240,7 @@ const map = new maplibregl.Map({
     version: 8,
     glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     sources: {
+      // Non-catalog sources (DEM, contours)
       contourSource: {
         type: 'vector',
         tiles: [
@@ -262,99 +262,6 @@ const map = new maplibregl.Map({
         ],
         maxzoom: 16
       },
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      },
-      otm: {
-        type: 'raster',
-        tiles: [
-          'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-          'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
-          'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'
-        ],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; OpenStreetMap contributors, OpenTopoMap'
-      },
-      ignplan: {
-        type: 'raster',
-        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'],
-        tileSize: 256,
-        maxzoom: 18,
-        attribution: '&copy; IGN France'
-      },
-      swisstopo: {
-        type: 'vector',
-        tiles: ['https://vectortiles.geo.admin.ch/tiles/ch.swisstopo.base.vt/v1.0.0/{z}/{x}/{y}.pbf'],
-        maxzoom: 14,
-        attribution: '&copy; swisstopo'
-      },
-      openskimap: {
-        type: 'vector',
-        tiles: ['https://tiles.openskimap.org/openskimap/{z}/{x}/{y}.pbf'],
-        maxzoom: 14,
-        attribution: '&copy; OpenSkiMap, OpenStreetMap contributors'
-      },
-      kartverket: {
-        type: 'raster',
-        tiles: ['https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png'],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; Kartverket'
-      },
-      'swisstopo-raster': {
-        type: 'raster',
-        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg'],
-        tileSize: 256,
-        maxzoom: 18,
-        attribution: '&copy; swisstopo'
-      },
-      igntopo: {
-        type: 'raster',
-        tiles: ['https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}'],
-        tileSize: 256,
-        maxzoom: 18,
-        attribution: '&copy; IGN France'
-      },
-      ignortho: {
-        type: 'raster',
-        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg'],
-        tileSize: 256,
-        maxzoom: 19,
-        attribution: '&copy; IGN France'
-      },
-      'swisstopo-ski': {
-        type: 'raster',
-        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-karto.skitouren/default/current/3857/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; swisstopo / SAC'
-      },
-      'swisstopo-slope30': {
-        type: 'raster',
-        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hangneigung-ueber_30/default/current/3857/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; swisstopo'
-      },
-      'ign-ski': {
-        type: 'raster',
-        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=TRACES.RANDO.HIVERNALE&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; IGN France'
-      },
-      'ign-slopes': {
-        type: 'raster',
-        tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png'],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; IGN France'
-      },
       // Separate raster-dem sources for terrain and
       // hillshade/analysis on purpose: in current MapLibre,
       // one source means one shared TileManager, and terrain changes shared DEM
@@ -374,198 +281,17 @@ const map = new maplibregl.Map({
         maxzoom: DEM_MAX_Z,
         encoding: 'terrarium'
       },
+      // Catalog-generated sources (basemaps + overlays)
+      ...buildCatalogSources(),
     },
     layers: [
       {
         id: 'background',
         type: 'background',
-        paint: {
-          'background-color': '#ffffff'
-        }
+        paint: { 'background-color': '#ffffff' }
       },
-      {
-        id: 'basemap-osm',
-        type: 'raster',
-        source: 'osm',
-        layout: { visibility: state.basemap === 'osm' ? 'visible' : 'none' },
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-otm',
-        type: 'raster',
-        source: 'otm',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-ign',
-        type: 'raster',
-        source: 'ignplan',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-kartverket',
-        type: 'raster',
-        source: 'kartverket',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-swisstopo-raster',
-        type: 'raster',
-        source: 'swisstopo-raster',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-ign-topo',
-        type: 'raster',
-        source: 'igntopo',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-ign-ortho',
-        type: 'raster',
-        source: 'ignortho',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      },
-      {
-        id: 'basemap-swiss-landcover',
-        type: 'fill',
-        source: 'swisstopo',
-        'source-layer': 'landcover',
-        layout: {visibility: 'none'},
-        paint: { 'fill-color': '#dce7cf', 'fill-opacity': basemapOpacityExpr(0.85) }
-      },
-      {
-        id: 'basemap-swiss-water',
-        type: 'fill',
-        source: 'swisstopo',
-        'source-layer': 'water',
-        layout: {visibility: 'none'},
-        paint: { 'fill-color': '#b7d7ff', 'fill-opacity': basemapOpacityExpr(0.95) }
-      },
-      {
-        id: 'basemap-swiss-transport',
-        type: 'line',
-        source: 'swisstopo',
-        'source-layer': 'transportation',
-        layout: {visibility: 'none'},
-        paint: {
-          'line-color': '#7a7a7a',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.2, 14, 1.8],
-          'line-opacity': basemapOpacityExpr(0.9)
-        }
-      },
-      {
-        id: 'basemap-swiss-boundary',
-        type: 'line',
-        source: 'swisstopo',
-        'source-layer': 'boundary',
-        layout: {visibility: 'none'},
-        paint: {
-          'line-color': '#7f4b63',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.25, 14, 1.25],
-          'line-opacity': basemapOpacityExpr(0.75)
-        }
-      },
-      {
-        id: 'basemap-swiss-label',
-        type: 'symbol',
-        source: 'swisstopo',
-        'source-layer': 'place',
-        layout: {
-          visibility: 'none',
-          'text-field': ['coalesce', ['get', 'name'], ['get', 'name_de'], ['get', 'name_fr'], ['get', 'name_it'], ''],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 14, 13]
-        },
-        paint: {
-          'text-color': '#2e2e2e',
-          'text-opacity': basemapOpacityExpr(0.9),
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
-      },
-      {
-        id: 'basemap-ski-areas',
-        type: 'fill',
-        source: 'openskimap',
-        'source-layer': 'skiareas',
-        layout: {visibility: 'none'},
-        paint: { 'fill-color': '#dff1ff', 'fill-opacity': basemapOpacityExpr(0.35) }
-      },
-      {
-        id: 'basemap-ski-runs',
-        type: 'line',
-        source: 'openskimap',
-        'source-layer': 'runs',
-        layout: {visibility: 'none'},
-        paint: {
-          'line-color': '#0d7cff',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.9, 14, 2.6],
-          'line-opacity': basemapOpacityExpr(0.95)
-        }
-      },
-      {
-        id: 'basemap-ski-lifts',
-        type: 'line',
-        source: 'openskimap',
-        'source-layer': 'lifts',
-        layout: {visibility: 'none'},
-        paint: {
-          'line-color': '#121212',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 14, 2.0],
-          'line-opacity': basemapOpacityExpr(0.9)
-        }
-      },
-      {
-        id: 'basemap-ski-spots',
-        type: 'symbol',
-        source: 'openskimap',
-        'source-layer': 'spots',
-        layout: {
-          visibility: 'none',
-          'text-field': ['coalesce', ['get', 'name'], ''],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 12]
-        },
-        paint: {
-          'text-color': '#10243f',
-          'text-opacity': basemapOpacityExpr(0.9),
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
-      },
-      {
-        id: 'overlay-swisstopo-ski',
-        type: 'raster',
-        source: 'swisstopo-ski',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(0.9) }
-      },
-      {
-        id: 'overlay-swisstopo-slope30',
-        type: 'raster',
-        source: 'swisstopo-slope30',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
-      },
-      {
-        id: 'overlay-ign-ski',
-        type: 'raster',
-        source: 'ign-ski',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(0.9) }
-      },
-      {
-        id: 'overlay-ign-slopes',
-        type: 'raster',
-        source: 'ign-slopes',
-        layout: {visibility: 'none'},
-        paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
-      },
+      // Catalog-generated layers (all start hidden; engine toggles visibility)
+      ...buildCatalogLayers(),
       {
         id: 'dem-loader',
         type: 'hillshade',
@@ -988,8 +714,13 @@ document.getElementById('mode').addEventListener('change', (e) => {
 });
 
 document.getElementById('basemap').addEventListener('change', (e) => {
-  state.basemap = e.target.value;
-  applyBasemapSelection(map, state, true);
+  setBasemap(map, state, e.target.value, true);
+  // Auto-toggle contours for OSM
+  const shouldShowContours = (state.basemap === 'osm');
+  if (state.basemap !== 'none') state.showContours = shouldShowContours;
+  const contourCb = document.getElementById('showContours');
+  if (contourCb) contourCb.checked = state.showContours;
+  applyContourVisibility(map, state);
   syncViewToUrl(map, state);
   map.triggerRepaint();
   scheduleSettingsSave();
@@ -1035,35 +766,7 @@ document.getElementById('showContours').addEventListener('change', (e) => {
   scheduleSettingsSave();
 });
 
-document.getElementById('showOpenSkiMap').addEventListener('change', (e) => {
-  state.showOpenSkiMap = Boolean(e.target.checked);
-  applyOpenSkiMapOverlay(map, state);
-  scheduleSettingsSave();
-});
-
-document.getElementById('showSwisstopoSki').addEventListener('change', (e) => {
-  state.showSwisstopoSki = Boolean(e.target.checked);
-  applySwisstopoSkiOverlay(map, state);
-  scheduleSettingsSave();
-});
-
-document.getElementById('showSwisstopoSlope').addEventListener('change', (e) => {
-  state.showSwisstopoSlope = Boolean(e.target.checked);
-  applySwisstopoSlopeOverlay(map, state);
-  scheduleSettingsSave();
-});
-
-document.getElementById('showIgnSki').addEventListener('change', (e) => {
-  state.showIgnSki = Boolean(e.target.checked);
-  applyIgnSkiOverlay(map, state);
-  scheduleSettingsSave();
-});
-
-document.getElementById('showIgnSlopes').addEventListener('change', (e) => {
-  state.showIgnSlopes = Boolean(e.target.checked);
-  applyIgnSlopesOverlay(map, state);
-  scheduleSettingsSave();
-});
+// Overlay toggle events are wired dynamically in renderOverlayList()
 
 document.getElementById('showTileGrid').addEventListener('change', (e) => {
   state.showTileGrid = Boolean(e.target.checked);
@@ -1147,18 +850,235 @@ map.getCanvas().addEventListener('mousedown', (e) => {
 updateLegend(state, map);
 updateCursorInfoVisibility(state);
 
+// ---- Dynamic layer UI ----
+
+/** Populate basemap <select> from catalog */
+function renderBasemapSelect() {
+  const sel = document.getElementById('basemap');
+  sel.innerHTML = '';
+  for (const entry of getBasemaps()) {
+    const opt = document.createElement('option');
+    opt.value = entry.id;
+    opt.textContent = entry.label;
+    sel.appendChild(opt);
+  }
+  sel.value = state.basemap;
+}
+
+/** Populate overlay dropdown checkboxes from catalog */
+function renderOverlayList() {
+  const container = document.getElementById('overlay-list');
+  if (!container) return;
+  container.innerHTML = '';
+  const active = new Set(state.activeOverlays);
+  for (const entry of getOverlays()) {
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.dataset.overlayId = entry.id;
+    cb.checked = active.has(entry.id);
+    cb.addEventListener('change', () => {
+      setOverlay(map, state, entry.id, cb.checked);
+      renderLayerOrderPanel();
+      renderBookmarkList();
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+    label.append(cb, ` ${entry.label}`);
+    container.appendChild(label);
+  }
+}
+
+/** Sync overlay checkbox state without re-rendering */
+function syncOverlayCheckboxes(st) {
+  const container = document.getElementById('overlay-list');
+  if (!container) return;
+  const active = new Set(st.activeOverlays);
+  for (const cb of container.querySelectorAll('input[data-overlay-id]')) {
+    cb.checked = active.has(cb.dataset.overlayId);
+  }
+}
+
+/** Render the layer-order panel rows */
+function renderLayerOrderPanel() {
+  const container = document.getElementById('layer-order-list');
+  if (!container) return;
+  container.innerHTML = '';
+  const order = state.layerOrder || [];
+  const settings = state.layerSettings || {};
+
+  for (let i = order.length - 1; i >= 0; i--) {
+    const catalogId = order[i];
+    const entry = getCatalogEntry(catalogId);
+    if (!entry) continue;
+    const s = settings[catalogId] || {};
+
+    const row = document.createElement('div');
+    row.className = 'layer-order-row';
+    row.draggable = true;
+    row.dataset.index = String(i);
+
+    const handle = document.createElement('span');
+    handle.className = 'layer-order-handle';
+    handle.textContent = '☰';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'layer-order-name';
+    nameSpan.textContent = entry.label;
+
+    const opacityInput = document.createElement('input');
+    opacityInput.type = 'range';
+    opacityInput.min = '0';
+    opacityInput.max = '1';
+    opacityInput.step = '0.05';
+    opacityInput.value = String(s.opacity != null ? s.opacity : 1);
+    opacityInput.className = 'layer-order-opacity';
+    opacityInput.title = 'Layer opacity';
+    opacityInput.addEventListener('input', () => {
+      const val = Number(opacityInput.value);
+      if (!settings[catalogId]) state.layerSettings = { ...state.layerSettings, [catalogId]: {} };
+      state.layerSettings[catalogId] = { ...state.layerSettings[catalogId], opacity: val };
+      applyLayerOpacity(map, catalogId, val);
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+
+    row.append(handle, nameSpan, opacityInput);
+    container.appendChild(row);
+
+    // Drag-and-drop
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', String(i));
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      const fromIdx = Number(e.dataTransfer.getData('text/plain'));
+      // Visual order is reversed (top = last), convert back
+      const toIdx = i;
+      if (fromIdx !== toIdx) {
+        reorderLayer(map, state, fromIdx, toIdx);
+        renderLayerOrderPanel();
+        map.triggerRepaint();
+        scheduleSettingsSave();
+      }
+    });
+  }
+
+  if (order.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'layer-order-empty';
+    empty.textContent = 'No active overlays';
+    container.appendChild(empty);
+  }
+}
+
+/** Render bookmark list */
+function renderBookmarkList() {
+  const container = document.getElementById('bookmark-list');
+  if (!container) return;
+  container.innerHTML = '';
+  const bookmarks = state.bookmarks || [];
+
+  for (const bm of bookmarks) {
+    const row = document.createElement('div');
+    row.className = 'bookmark-row';
+
+    const nameBtn = document.createElement('button');
+    nameBtn.className = 'bookmark-name';
+    nameBtn.textContent = bm.name;
+    nameBtn.title = 'Apply this bookmark';
+    nameBtn.addEventListener('click', () => {
+      applyBookmark(map, state, bm);
+      document.getElementById('basemap').value = state.basemap;
+      syncOverlayCheckboxes(state);
+      renderLayerOrderPanel();
+      renderBookmarkList();
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'bookmark-edit';
+    editBtn.textContent = '✎';
+    editBtn.title = 'Rename';
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newName = window.prompt('Bookmark name:', bm.name);
+      if (newName != null && newName.trim()) {
+        renameBookmark(state, bm.id, newName.trim());
+        renderBookmarkList();
+        scheduleSettingsSave();
+      }
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'bookmark-del';
+    delBtn.textContent = '×';
+    delBtn.title = 'Delete';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteBookmark(state, bm.id);
+      renderBookmarkList();
+      scheduleSettingsSave();
+    });
+
+    row.append(nameBtn, editBtn, delBtn);
+    container.appendChild(row);
+  }
+}
+
+// Wire bookmark save button
+document.getElementById('bookmark-save-btn')?.addEventListener('click', () => {
+  createBookmark(state);
+  renderBookmarkList();
+  scheduleSettingsSave();
+});
+
+// Wire layer-order panel toggle
+const layerOrderToggleBtn = document.getElementById('layer-order-toggle');
+const layerOrderPanel = document.getElementById('layer-order-panel');
+layerOrderToggleBtn?.addEventListener('click', () => {
+  const isVisible = layerOrderPanel.classList.toggle('visible');
+  layerOrderToggleBtn.classList.toggle('active', isVisible);
+  if (isVisible) renderLayerOrderPanel();
+});
+
+// Wire overlay dropdown
+const overlayToggleBtn = document.getElementById('overlay-toggle');
+const overlayDropdown = document.getElementById('overlay-dropdown');
+overlayToggleBtn?.addEventListener('click', () => {
+  overlayDropdown.classList.toggle('visible');
+});
+document.addEventListener('click', (e) => {
+  if (overlayDropdown && !overlayDropdown.contains(e.target) && e.target !== overlayToggleBtn) {
+    overlayDropdown.classList.remove('visible');
+  }
+});
+
+// Initial render of dynamic UI
+renderBasemapSelect();
+renderOverlayList();
+renderBookmarkList();
+
 // ---- Map load ----
 
 map.on('load', () => {
   ensureDebugGridLayer(map);
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
-  applyBasemapSelection(map, state);
-  applyOpenSkiMapOverlay(map, state);
-  applySwisstopoSkiOverlay(map, state);
-  applySwisstopoSlopeOverlay(map, state);
-  applyIgnSkiOverlay(map, state);
-  applyIgnSlopesOverlay(map, state);
+  // Apply basemap + overlays via engine
+  setBasemap(map, state, state.basemap);
+  syncLayerOrder(state);
+  applyAllOverlays(map, state);
+  applyAllLayerSettings(map, state);
   applyTerrainState(map, state);
   updateDebugGridSource(map);
   syncViewToUrl(map, state);
@@ -1183,12 +1103,6 @@ map.on('load', () => {
   // Terrain analysis layers are in the initial style (right after dem-loader)
   // — just apply the mode state to set correct visibility/opacity
   applyModeState(map, state);
-
-  // Move OpenSkiMap layers above terrain-analysis so the blend mode
-  // composites cleanly against the basemap and ski overlays render on top.
-  for (const id of OPENSKIMAP_LAYER_IDS) {
-    if (map.getLayer(id)) map.moveLayer(id);
-  }
 
   // Contour lines
   map.addLayer({
@@ -1359,7 +1273,8 @@ window.addEventListener('hashchange', () => {
   updateLegend(state, map);
   map.setBearing(p.bearing);
   map.setPitch(p.pitch);
-  applyBasemapSelection(map, state, true);
+  setBasemap(map, state, state.basemap, true);
+  applyAllOverlays(map, state);
   applyModeState(map, state);
   applyTerrainState(map, state);
   if (p.testMode) {

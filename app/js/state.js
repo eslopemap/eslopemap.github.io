@@ -22,11 +22,10 @@ export const STATE_DEFAULTS = {
   hillshadeMethod: 'igor',
   slopeOpacity: 0.45,
   showContours: true,
-  showOpenSkiMap: false,
-  showSwisstopoSki: false,
-  showSwisstopoSlope: false,
-  showIgnSki: false,
-  showIgnSlopes: false,
+  activeOverlays: [],       // catalog IDs of active overlays
+  layerOrder: [],            // z-order of active overlays, bottom→top
+  layerSettings: {},         // { [catalogId]: { opacity?, blend? } }
+  bookmarks: [],             // saved layer presets
   showTileGrid: false,
   cursorInfoMode: 'cursor',
   multiplyBlend: true,

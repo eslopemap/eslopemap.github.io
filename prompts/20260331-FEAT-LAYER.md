@@ -49,3 +49,8 @@ export const IGN_SLOPE_LAYER_IDS = [
 
 ---
 change blend-mode from sof-multiply to multiply when 'multiply' checkbox is ticked and overlay opacity passes 0.7
+
+---
+incorporate in the plan :
+- a bookmark system (locally persisted) with nice automated names like "<baselayer> + <overlay> [+ <N> others]>
+- a separate z-order "Layer order" panel that allow arbitrary reordering (eg by drag and drop) and opacity/blend per layer. the current panel remains to select the layers

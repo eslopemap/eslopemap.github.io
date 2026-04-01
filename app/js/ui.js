@@ -1,13 +1,12 @@
 // UI helpers: basemap, legend, cursor info, search, mode state.
 
 import {
-  BASEMAP_LAYER_GROUPS, BASEMAP_DEFAULT_VIEW, OPENSKIMAP_LAYER_IDS,
-  SWISSTOPO_SKI_LAYER_IDS, SWISSTOPO_SLOPE_LAYER_IDS, IGN_SKI_LAYER_IDS, IGN_SLOPE_LAYER_IDS,
-  ALL_BASEMAP_LAYER_IDS, DEM_TERRAIN_SOURCE_ID, DEM_MAX_Z, SLOPE_RELIEF_CROSSFADE_Z,
+  DEM_TERRAIN_SOURCE_ID, DEM_MAX_Z, SLOPE_RELIEF_CROSSFADE_Z,
   ANALYSIS_COLOR, COLOR_RELIEF_STOPS,
   rampToLegendCss, interpolateStopsToLegendCss,
 } from './constants.js';
 
+import { getCatalogEntry } from './layer-registry.js';
 import { parseBooleanParam, lonLatToTile, normalizeTileX } from './utils.js';
 
 // ---- Layer visibility helpers ----
@@ -23,103 +22,14 @@ export function setGlobalStatePropertySafe(map, name, value) {
   }
 }
 
-export function basemapOpacityExpr(multiplier = 1) {
-  const base = ['coalesce', ['global-state', 'basemapOpacity'], 1];
-  if (multiplier === 1) return base;
-  return ['*', multiplier, base];
-}
+// Re-export from constants to keep existing imports working
+export { basemapOpacityExpr } from './constants.js';
 
-// ---- Basemap / contour / terrain ----
-
-export function applyBasemapSelection(map, state, flyIfOutside) {
-  const activeList = BASEMAP_LAYER_GROUPS[state.basemap] || [];
-  const active = new Set(activeList);
-  for (const layerId of ALL_BASEMAP_LAYER_IDS) {
-    setLayerVisibilitySafe(map, layerId, active.has(layerId));
-  }
-
-  for (const layerId of activeList) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
-    }
-  }
-  for (const layerId of OPENSKIMAP_LAYER_IDS) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
-    }
-  }
-  for (const layerId of SWISSTOPO_SKI_LAYER_IDS) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
-    }
-  }
-  for (const layerId of SWISSTOPO_SLOPE_LAYER_IDS) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
-    }
-  }
-  for (const layerId of IGN_SKI_LAYER_IDS) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
-    }
-  }
-  for (const layerId of IGN_SLOPE_LAYER_IDS) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
-    }
-  }
-
-  if (flyIfOutside) {
-    const dv = BASEMAP_DEFAULT_VIEW[state.basemap];
-    if (dv && dv.bounds) {
-      const c = map.getCenter();
-      const [w, s, e, n] = dv.bounds;
-      if (c.lng < w || c.lng > e || c.lat < s || c.lat > n) {
-        map.flyTo({center: dv.center, zoom: dv.zoom, duration: 1500});
-      }
-    }
-  }
-
-  const shouldShowContours = (state.basemap === 'osm');
-  if (state.basemap !== 'none') state.showContours = shouldShowContours;
-  const contourCb = document.getElementById('showContours');
-  if (contourCb) contourCb.checked = shouldShowContours;
-  applyContourVisibility(map, state);
-}
+// ---- Contour / terrain ----
 
 export function applyContourVisibility(map, state) {
   setLayerVisibilitySafe(map, 'contours', state.showContours);
   setLayerVisibilitySafe(map, 'contour-text', state.showContours);
-}
-
-export function applyOpenSkiMapOverlay(map, state) {
-  for (const id of OPENSKIMAP_LAYER_IDS) {
-    setLayerVisibilitySafe(map, id, state.showOpenSkiMap);
-  }
-}
-
-export function applySwisstopoSkiOverlay(map, state) {
-  for (const id of SWISSTOPO_SKI_LAYER_IDS) {
-    setLayerVisibilitySafe(map, id, state.showSwisstopoSki);
-  }
-}
-
-export function applySwisstopoSlopeOverlay(map, state) {
-  for (const id of SWISSTOPO_SLOPE_LAYER_IDS) {
-    setLayerVisibilitySafe(map, id, state.showSwisstopoSlope);
-  }
-}
-
-export function applyIgnSkiOverlay(map, state) {
-  for (const id of IGN_SKI_LAYER_IDS) {
-    setLayerVisibilitySafe(map, id, state.showIgnSki);
-  }
-}
-
-export function applyIgnSlopesOverlay(map, state) {
-  for (const id of IGN_SLOPE_LAYER_IDS) {
-    setLayerVisibilitySafe(map, id, state.showIgnSlopes);
-  }
 }
 
 export function applyTerrainState(map, state) {
@@ -311,7 +221,7 @@ export function parseHashParams() {
     return {
       center: (hasLng && hasLat) ? [lngRaw, latRaw] : fallback.center,
       zoom: hasZoom ? zoomRaw : fallback.zoom,
-      basemap: (basemapRaw && BASEMAP_LAYER_GROUPS[basemapRaw]) ? basemapRaw : null,
+      basemap: (basemapRaw && getCatalogEntry(basemapRaw)) ? basemapRaw : null,
       mode: validModes.has(modeRaw) ? modeRaw : fallback.mode,
       slopeOpacity: hasOpacity ? opacityRaw : fallback.slopeOpacity,
       terrain3d: terrain3dRaw == null ? fallback.terrain3d : terrain3dRaw,

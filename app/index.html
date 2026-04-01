@@ -23,6 +23,7 @@
   <div id="bar-left">
     <div id="panel-toggles">
       <button id="settings-controls-toggle" class="panel-toggle-btn" title="Settings">🌍 <span class="btn-label">Settings</span></button>
+      <button id="layer-order-toggle" class="panel-toggle-btn" title="Layer order">🗂 <span class="btn-label">Layers</span></button>
       <button id="profile-toggle-btn" class="panel-toggle-btn" title="Elevation profile" disabled>📈 <span class="btn-label">Profile</span></button>
       <button id="tracks-btn" class="panel-toggle-btn" title="Track list" disabled>📍 <span class="btn-label">Tracks</span></button>
     </div>
@@ -87,16 +88,19 @@
       <label><input id="showContours" type="checkbox" checked /> Contour lines</label>
     </div>
 
-    <div class="row">
-      <label><input id="showOpenSkiMap" type="checkbox" /> OpenSkiMap overlay</label>
+    <div class="row overlay-row">
+      <button id="overlay-toggle" type="button" class="overlay-toggle-btn">Overlays ▾</button>
+      <div id="overlay-dropdown" class="overlay-dropdown">
+        <div id="overlay-list"></div>
+      </div>
     </div>
-    <div class="row">
-      <label><input id="showSwisstopoSki" type="checkbox" /> SwissTopo ski routes (CH)</label>
-      <label><input id="showSwisstopoSlope" type="checkbox" /> SwissTopo slope >30° (CH)</label>
-    </div>
-    <div class="row">
-      <label><input id="showIgnSki" type="checkbox" /> IGN ski routes (FR)</label>
-      <label><input id="showIgnSlopes" type="checkbox" /> IGN slope >30° (FR)</label>
+
+    <div class="row bookmark-row">
+      <div class="bookmark-header">
+        <strong>Bookmarks</strong>
+        <button id="bookmark-save-btn" type="button" class="bookmark-save-btn" title="Save current layers as bookmark">⭐ Save</button>
+      </div>
+      <div id="bookmark-list"></div>
     </div>
 
     <div class="row">
@@ -171,6 +175,11 @@
         <label><input id="mobileModeDesktop" type="checkbox" /> Mobile editing mode (desktop)</label>
       </div>
     </div>
+  </div>
+
+  <div id="layer-order-panel" class="panel-surface panel-padded">
+    <h4 style="margin:0 0 6px; font-size:13px;">Layer order</h4>
+    <div id="layer-order-list"></div>
   </div>
 
   <div id="track-panel-shell">

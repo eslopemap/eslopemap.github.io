@@ -91,28 +91,59 @@ function renderOverlayCheckboxes(catalog) {
 }
 ```
 
-Note: the overalays should be in a dropdown (still with checkboxes) to save space
+Note: the overlays should be in a dropdown (still with checkboxes) to save space
 
-### 4. User-Built Composite Maps
+### 4. Bookmark System (Layer Presets)
 
-**Decision Point 1: Storage format**
-- Option A: Store active basemap + list of overlay IDs in a "map preset" (`{basemap: 'swisstopo-raster', overlays: ['swisstopo-ski', 'contours']}`)
-- Option B: Full serializable style-spec subset
-- **Recommendation**: Option A — simple, forward-compatible, and the catalog provides the full style data
+Locally-persisted bookmarks that capture the current layer configuration for quick recall.
 
-**Decision Point 2: UI for composite maps**
-- Option A: Named presets with save/load (like browser bookmarks)
-- Option B: A builder panel with drag-and-drop layer ordering
-- **Recommendation**: Start with Option A (save/load named presets), evolve to B later
+**Storage format**: Option A — `{basemap, overlays[], layerOrder[], layerSettings{}}` per bookmark.
 
-**Decision Point 3: Layer ordering**
-- Currently basemap layers are moved below `dem-loader` at runtime
-- For composites, user may want overlay Z-order control
-- **Recommendation**: The catalog entry order defines default Z-order. Presets can optionally store explicit ordering.
+**Auto-generated names**: Format is `"<BasemapLabel> + <OverlayLabel> [+ N others]"`.
+- 0 overlays → `"SwissTopo raster"`
+- 1 overlay → `"SwissTopo raster + ski routes (CH)"`
+- 2+ overlays → `"SwissTopo raster + ski routes (CH) + 1 other"` / `"… + 2 others"`
 
-Note: each map can have an opacity and blend-mode
+**Bookmark shape**:
+```js
+{
+  id: crypto.randomUUID(),
+  name: '<auto or user-edited>',
+  basemap: 'swisstopo-raster',
+  overlays: ['swisstopo-ski', 'contours'],
+  layerOrder: ['swisstopo-ski', 'contours'],      // z-order bottom→top
+  layerSettings: {                                  // per-overlay overrides
+    'swisstopo-ski': { opacity: 0.9, blend: 'normal' }
+  }
+}
+```
 
-### 5. Persistence
+**UI**: A dropdown/list below the overlay checkboxes:
+- ⭐ **Save** button → saves current config, auto-names it, opens inline rename
+- List of saved bookmarks → click to apply, kebab menu for rename/delete
+- Active bookmark is highlighted
+
+### 5. Layer Order Panel
+
+A **separate panel** ("Layer order") that controls z-order, per-layer opacity, and blend mode — independent from the layer *selection* panel.
+
+**Behavior**:
+- Lists only currently-active layers (basemap + active overlays)
+- Each row: drag handle, layer label, opacity slider, blend-mode toggle
+- Drag-and-drop reorders layers on the map in real time (`map.moveLayer()`)
+- Order is persisted and saved into bookmarks
+
+**UI**: Opened via a new panel-toggle button (🗂 Layers) in `#panel-toggles`.
+
+**Implementation**:
+- `state.layerOrder` — array of catalog IDs, bottom→top
+- `state.layerSettings` — `{ [catalogId]: { opacity, blend } }`
+- `layer-engine.js` owns `applyLayerOrder(map, state)` and `applyLayerSettings(map, state, catalogId)`
+- Drag-and-drop uses pointer events (no library dependency)
+
+Note: each layer can have an opacity and blend-mode
+
+### 6. Persistence
 
 Instead of per-overlay boolean keys (`showOpenSkiMap`, `showSwisstopoSki`, ...):
 
@@ -121,24 +152,30 @@ Instead of per-overlay boolean keys (`showOpenSkiMap`, `showSwisstopoSki`, ...):
 {
   basemap: 'osm',
   activeOverlays: ['contours', 'swisstopo-ski'],
-  mapPresets: [
-    { name: 'Ski CH', basemap: 'swisstopo-raster', overlays: ['swisstopo-ski'] },
-    { name: 'Rando FR', basemap: 'ign-topo', overlays: ['ign-slopes', 'contours'] }
+  layerOrder: ['contours', 'swisstopo-ski'],        // z-order
+  layerSettings: { 'swisstopo-ski': { opacity: 0.9 } },
+  bookmarks: [
+    { id: '...', name: 'Ski CH', basemap: 'swisstopo-raster',
+      overlays: ['swisstopo-ski'], layerOrder: ['swisstopo-ski'],
+      layerSettings: {} },
   ]
 }
 ```
 
-### 6. Migration Path
+Backward-compat: on load, if old boolean keys exist, migrate them to `activeOverlays`.
+
+### 7. Migration Path
 
 1. Create `layer-registry.js` with current layers expressed declaratively
-2. Create `layer-engine.js` with build/toggle functions
+2. Create `layer-engine.js` with build/toggle/order/bookmark functions
 3. Refactor `main.js` to use `buildStyleFromCatalog()` instead of inline style
 4. Refactor `ui.js` to use engine functions instead of per-overlay apply functions
-5. Generate HTML UI dynamically
-6. Migrate persistence to `activeOverlays` array (with backward-compat reader)
-7. Add preset save/load UI
+5. Generate HTML UI dynamically (basemap select, overlay dropdown, bookmark list)
+6. Add Layer Order panel with drag-and-drop, opacity, blend
+7. Migrate persistence to new shape (with backward-compat reader)
+8. Wire bookmark save/load/rename/delete UI
 
-Steps 1-4 are purely mechanical refactoring; the existing behavior is preserved. Steps 5-7 add new functionality.
+Steps 1-4 are purely mechanical refactoring; the existing behavior is preserved. Steps 5-8 add new functionality.
 
 ### Files Affected
 
@@ -146,13 +183,14 @@ Steps 1-4 are purely mechanical refactoring; the existing behavior is preserved.
 |---|---|
 | `main.js` (sources, layers, listeners) | `layer-registry.js` (data) + `layer-engine.js` (logic) + `main.js` (init call only) |
 | `constants.js` (layer group arrays) | `layer-registry.js` |
-| `state.js` (per-overlay booleans) | `state.js` (single `activeOverlays` array) |
-| `persist.js` (key list) | `persist.js` (reads `activeOverlays`) |
+| `state.js` (per-overlay booleans) | `state.js` (`activeOverlays`, `layerOrder`, `layerSettings`, `bookmarks`) |
+| `persist.js` (key list) | `persist.js` (reads new shape, migrates old booleans) |
 | `ui.js` (per-overlay apply functions) | `layer-engine.js` |
-| `index.html` (hardcoded options/checkboxes) | dynamic DOM |
+| `index.html` (hardcoded options/checkboxes) | dynamic DOM + layer-order panel + bookmark UI |
 
 ### Estimated Complexity
 
-- Registry + engine: ~200 lines of new code
-- main.js simplification: removes ~200 lines of inline style
-- Net effect: similar LOC but single-point-of-entry for layers
+- Registry + engine: ~350 lines of new code
+- Layer-order panel + bookmark UI: ~200 lines
+- main.js simplification: removes ~250 lines of inline style
+- Net effect: ~300 more LOC but single-point-of-entry for layers, reordering, and presets
