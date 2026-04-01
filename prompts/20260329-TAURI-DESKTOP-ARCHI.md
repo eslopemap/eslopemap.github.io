@@ -58,6 +58,8 @@ Wrap the existing zero-build web app in a **Tauri v2** shell, adding native capa
 | `chart.js`, `chartjs-plugin-annotation` | Same | Vendor into `vendor/chart.js/` and `vendor/chartjs-plugin-annotation/`. |
 | `@we-gold/gpxjs` | Import-map support varies across WebViews. | Vendor the ESM files and import by explicit path. Do not rely on import maps in the core runtime path. |
 
++ marked.umd.js
+
 > **DECISION POINT 1: Vendoring strategy**
 >
 > **Option A — Vendor all frontend deps into a `vendor/` dir and reference them via explicit local paths in both web and desktop.** Deterministic, offline-friendly, and keeps both runtimes aligned. ✅ Recommended.
