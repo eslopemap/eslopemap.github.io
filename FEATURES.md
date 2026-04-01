@@ -139,9 +139,9 @@
 
 ## Layer Z-Order (bottom to top)
 1. Basemap
-2. OpenSkiMap overlay
-3. Hillshade
-4. DEM analysis overlay (`Slope` / `Aspect`) or `Color relief`
+2. Hillshade
+3. DEM analysis overlay (`Slope` / `Aspect`) or `Color relief`
+4. OpenSkiMap overlay (moved above analysis on load so blend mode composites cleanly)
 5. Contour lines
 6. Track lines, vertices, hover-insert marker, and profile-hover marker
 7. Waypoint circles and labels
