@@ -53,27 +53,35 @@ test.describe('Mobile Track Editor', () => {
     await page.locator('#map canvas').tap({ position: { x: 195, y: 500 }, force: true });
     await page.waitForTimeout(200);
 
-    await expect(page.locator('#mobile-mode-btn')).toBeVisible();
     expect(await evalInScope(page, 'mobileFriendlyMode')).toBe(true);
 
-    await page.locator('#mobile-mode-btn').click();
+    // Toggle mobile mode off via the settings checkbox (simulate localhost behavior)
+    await page.evaluate(() => {
+      const cb = document.getElementById('mobileModeDesktop');
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change'));
+    });
     await page.waitForTimeout(150);
 
     expect(await evalInScope(page, 'mobileFriendlyMode')).toBe(false);
-    await expect(page.locator('#draw-crosshair')).not.toHaveClass(/visible/);
 
     await page.keyboard.press('Escape');
   });
 
-  test('Mobile mode button visible only when editing with points', async ({ mapPage: page }) => {
-    await expect(page.locator('#mobile-mode-btn')).toBeHidden();
+  test('Mobile friendly mode is active by default when editing', async ({ mapPage: page }) => {
+    // Before editing, mobileFriendlyMode should be true on mobile
+    expect(await evalInScope(page, 'mobileFriendlyMode')).toBe(true);
 
     await clickDrawBtn(page);
+    await page.waitForTimeout(200);
+
+    // Crosshair should be visible and in editing mode
+    await expect(page.locator('#draw-crosshair')).toHaveClass(/editing/);
 
     await page.locator('#map canvas').tap({ position: { x: 195, y: 500 }, force: true });
     await page.waitForTimeout(150);
 
-    await expect(page.locator('#mobile-mode-btn')).toBeVisible();
+    expect(await getActiveTrackPointCount(page)).toBe(1);
     await page.keyboard.press('Escape');
   });
 

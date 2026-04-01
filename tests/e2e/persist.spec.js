@@ -63,10 +63,10 @@ test.describe('Persistence', () => {
     await page.waitForTimeout(400);
     expect(await getTrackCount(page)).toBe(1);
 
-    await page.evaluate(() => {
-      const keys = Object.keys(localStorage);
-      keys.forEach(k => localStorage.removeItem(k));
-    });
+    // Navigate to a same-origin static resource (no app JS runs there)
+    // so we can safely clear localStorage without the app re-saving.
+    await page.goto('/app/favicon.svg', { waitUntil: 'load' });
+    await page.evaluate(() => localStorage.clear());
     await page.goto(APP_URL, { waitUntil: 'load' });
     await page.waitForFunction(
       () => { try { return (0, eval)('mapReady'); } catch { return false; } },
@@ -78,7 +78,12 @@ test.describe('Persistence', () => {
   });
 
   test('Settings persist across reload', async ({ mapPage: page }) => {
-    await page.locator('#basemap').selectOption('otm');
+    // Test a setting that test_mode does NOT override.
+    // Open advanced section and change pause threshold.
+    await page.locator('#advanced-toggle').click();
+    await page.waitForTimeout(100);
+    await page.locator('#pauseThreshold').fill('12');
+    await page.locator('#pauseThreshold').dispatchEvent('input');
     await page.waitForTimeout(400);
 
     await page.reload({ waitUntil: 'load' });
@@ -87,7 +92,10 @@ test.describe('Persistence', () => {
     );
     await page.waitForTimeout(300);
 
-    const basemap = await page.locator('#basemap').inputValue();
-    expect(basemap).toBe('otm');
+    // Open advanced section again to see the persisted value
+    await page.locator('#advanced-toggle').click();
+    await page.waitForTimeout(100);
+    const val = await page.locator('#pauseThreshold').inputValue();
+    expect(val).toBe('12');
   });
 });
