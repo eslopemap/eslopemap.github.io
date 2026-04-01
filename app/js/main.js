@@ -148,7 +148,9 @@ if (persisted) {
 }
 
 const initialView = parseHashParams();
+const hasUrlState = window.location.hash.includes('=');
 const isTestMode = Boolean(initialView.testMode);
+const shouldAttemptInitialGeolocate = !isTestMode && !hasUrlState;
 if (initialView.basemap) {
   state.basemap = initialView.basemap;
 }
@@ -798,7 +800,10 @@ function promptSplitOptions() {
 }
 
 selectionModeBtn?.addEventListener('click', () => {
-  if (!tracksState.getActiveTrack() || tracksState.editingTrackId) return;
+  if (!tracksState.getActiveTrack()) return;
+  if (tracksState.editingTrackId) {
+    tracksState.exitEditMode();
+  }
   toggleRectangleMode();
   syncOperationState();
 });
@@ -1216,6 +1221,13 @@ map.on('load', () => {
   applyContourVisibility(map, state);
   if (isTestMode) {
     applyTestModeMapState(map, state);
+  }
+  if (shouldAttemptInitialGeolocate) {
+    window.setTimeout(() => {
+      if (typeof geolocateControl.trigger === 'function') {
+        geolocateControl.trigger();
+      }
+    }, 0);
   }
 
   // Elevation sampling on mousemove
