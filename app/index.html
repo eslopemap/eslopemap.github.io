@@ -20,8 +20,12 @@
   <div id="map"></div>
 
   <div id="controls-wrapper">
-  <div id="toolbar">
-    <button id="settings-controls-toggle">🌍 Settings ▾</button>
+  <div id="bar-left">
+    <div id="panel-toggles">
+      <button id="settings-controls-toggle" class="panel-toggle-btn" title="Settings">🌍 <span class="btn-label">Settings</span></button>
+      <button id="profile-toggle-btn" class="panel-toggle-btn" title="Elevation profile" disabled>📈 <span class="btn-label">Profile</span></button>
+      <button id="tracks-btn" class="panel-toggle-btn" title="Track list" disabled>📍 <span class="btn-label">Tracks</span></button>
+    </div>
     <a id="help-link" href="./user-guide/">Help</a>
     <div id="search-box">
       <button id="search-icon">&#128269;</button>
@@ -29,6 +33,29 @@
       <div id="search-results"></div>
     </div>
   </div>
+  <div id="bar-center">
+    <button id="rail-edit-btn" class="rail-btn" title="Edit active track (E)" disabled>✎</button>
+    <button id="rail-rect-btn" class="rail-btn" title="Rectangle select (R)" disabled>⬚</button>
+  </div>
+  <div id="bar-right">
+    <div id="track-tool-row">
+      <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩ ⎌</button>
+      <button id="draw-btn" class="tb-btn" title="New track">&#43;</button>
+      <button id="import-url-btn" class="tb-btn" title="Import GPX from URL">🔗</button>
+      <button id="open-file-btn" class="tb-btn" title="Open GPX/GeoJSON file">📄</button>
+      <button id="open-folder-btn" class="tb-btn" title="Open GPX folder">📁</button>
+      <span id="importUrlStatus" style="font-size: 0.8em; color: red; display: none; padding: 0 5px;"></span>
+      <button id="active-actions-btn" class="tb-btn" title="Workspace actions">⋮</button>
+      <button id="selection-mode-btn" class="tb-btn" title="Rectangle selection (R)" disabled>▣</button>
+      <button id="densify-btn" class="tb-btn op-btn" title="Add intermediate points" disabled style="display:none">＋•</button>
+      <button id="simplify-btn" class="tb-btn op-btn" title="Simplify active span" disabled style="display:none">≈</button>
+      <button id="split-btn" class="tb-btn op-btn" title="Split active track or selection" disabled style="display:none">✂</button>
+      <button id="merge-btn" class="tb-btn op-btn" title="Merge grouped tracks or segments" disabled style="display:none">⇄</button>
+      <button id="convert-route-btn" class="tb-btn op-btn" title="Convert route to track" disabled style="display:none">⇢</button>
+    </div>
+  </div>
+  </div>
+
   <div id="controls" class="panel-surface panel-padded">
     <div class="row">
       <label for="mode"><strong>Mode</strong></label><br />
@@ -145,33 +172,8 @@
       </div>
     </div>
   </div>
-  </div>
-
-  <div id="edit-rail">
-    <button id="rail-edit-btn" class="rail-btn" title="Edit active track (E)" disabled>✎</button>
-    <button id="rail-rect-btn" class="rail-btn" title="Rectangle select (R)" disabled>⬚</button>
-
-  </div>
 
   <div id="track-panel-shell">
-    <div id="track-tool-row">
-
-      <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩ ⎌</button>
-      <button id="draw-btn" class="tb-btn" title="New track">&#43;</button>
-      <button id="import-url-btn" class="tb-btn" title="Import GPX from URL">🔗</button>
-      <button id="open-file-btn" class="tb-btn" title="Open GPX/GeoJSON file">📄</button>
-      <button id="open-folder-btn" class="tb-btn" title="Open GPX folder">📁</button>
-      <span id="importUrlStatus" style="font-size: 0.8em; color: red; display: none; padding: 0 5px;"></span>
-      <button id="profile-toggle-btn" class="tb-btn" title="Elevation profile" disabled>📈</button>
-      <button id="active-actions-btn" class="tb-btn" title="Workspace actions">⋮</button>
-      <button id="selection-mode-btn" class="tb-btn" title="Rectangle selection (R)" disabled>▣</button>
-      <button id="densify-btn" class="tb-btn op-btn" title="Add intermediate points" disabled style="display:none">＋•</button>
-      <button id="simplify-btn" class="tb-btn op-btn" title="Simplify active span" disabled style="display:none">≈</button>
-      <button id="split-btn" class="tb-btn op-btn" title="Split active track or selection" disabled style="display:none">✂</button>
-      <button id="merge-btn" class="tb-btn op-btn" title="Merge grouped tracks or segments" disabled style="display:none">⇄</button>
-      <button id="convert-route-btn" class="tb-btn op-btn" title="Convert route to track" disabled style="display:none">⇢</button>
-      <button id="tracks-btn" class="tb-btn" title="Track list" disabled>📍</button>
-    </div>
     <div id="track-panel">
       <div class="track-panel-header">
         <h3>Tracks</h3>

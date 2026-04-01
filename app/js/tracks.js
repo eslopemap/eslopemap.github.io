@@ -35,7 +35,7 @@ function scheduleSave() {
 
 // DOM refs (resolved at init)
 let tracksBtn, trackPanelShell, trackToolRow;
-let trackPanel, trackPanelHeader, trackListEl, profileToggleBtn;
+let trackPanel, trackListEl, profileToggleBtn;
 
 // ---- Helpers ----
 
@@ -471,16 +471,10 @@ function syncProfileToggleButton() {
 function syncTrackPanelShell() {
   const isVisible = trackPanel.classList.contains('visible');
   const hasTracks = tracks.length > 0;
-  const toolRowParent = isVisible ? trackPanelHeader : trackPanelShell;
-  const toolRowNextSibling = isVisible ? null : trackPanel;
-  if (trackToolRow.parentElement !== toolRowParent) {
-    toolRowParent.insertBefore(trackToolRow, toolRowNextSibling);
-  }
   trackPanelShell.classList.toggle('visible', isVisible);
   trackPanelShell.classList.toggle('panel-surface', isVisible);
   tracksBtn.disabled = !hasTracks;
   tracksBtn.classList.toggle('active', isVisible && hasTracks);
-  tracksBtn.textContent = isVisible && hasTracks ? '×' : '📍';
   tracksBtn.title = hasTracks ? (isVisible ? 'Close tracks' : 'Track list') : 'No tracks';
 }
 
@@ -1054,7 +1048,6 @@ export function initTracks(mapRef, stateRef, updateProfile) {
   trackPanelShell = document.getElementById('track-panel-shell');
   trackToolRow = document.getElementById('track-tool-row');
   trackPanel = document.getElementById('track-panel');
-  trackPanelHeader = trackPanel.querySelector('.track-panel-header');
   trackListEl = document.getElementById('track-list');
   profileToggleBtn = document.getElementById('profile-toggle-btn');
 

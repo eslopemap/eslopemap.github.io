@@ -10,18 +10,17 @@ Based on [app/index.html](cci:7://file:///Users/eoubrayrie/code/MAPS/slopedothtm
 
 ```text
 +--------------------------------------------------------------------------------------------------+
-| [Settings toggle] [Search]                               [Track tools (7 icons)] [Tracks toggle] |
-|                    [Search dropdown]                                                             |
+| [Settings] [Profile] [Tracks] [Help] [🔍]    [✎] [⬚]    [+ 🔗 📄 📁 ⋮ ▣ …]                    |
+|  #bar-left (panel toggles + help + search)  #bar-center   #bar-right (track-tool-row)            |
 | +----------------+                                                    +--------------------+     |
 | | Settings panel |                                                    |    Tracks panel    |     |
-| |                |                                                    |                    |     |
 | |                |                                                    |                    |     |
 | |                |                                                    |                    |     |
 | |                |                        [Draw crosshair]            |                    |     |
 | |                |                        [Cursor tooltip]            |                    |     |
 | +----------------+                                                    +--------------------+     |
 |                                                                                                  |
-| [Edit rail]                              [Mobile crosshair]                                      |
+|                                          [Mobile crosshair]                                      |
 |                                                                                                  |
 |                                                                                      [Geolocate] |
 |                                                                                             [+]  |
@@ -33,30 +32,27 @@ Based on [app/index.html](cci:7://file:///Users/eoubrayrie/code/MAPS/slopedothtm
 |                                         [Profile panel]                                          |
 +--------------------------------------------------------------------------------------------------+
 
-Conditional overlays / floating popups:
-- `B` can expand downward with search results under the search button/input.
+Mobile (≤640px): #controls-wrapper moves to bottom, labels hidden, search/help hidden.
+Panels (#controls, #track-panel-shell) stay at top-left/top-right respectively.
 ```
 
 ## Legend
 
-- **Settings panel** (`#controls`)
-  - Mode, basemap, overlays, 3D terrain, advanced display/profile settings.
-  - Contains the settings toggle plus the currently open settings content:
-    - mode
-    - basemap
-    - contour toggle
-    - overlay toggles
-    - 3D terrain toggle
-    - advanced section toggle
+- **Panel toggles** (`#panel-toggles`) — inside `#bar-left`
+  - Three unified toggle buttons: Settings, Profile, Tracks.
+  - Active state uses `#4a90d9` blue highlight.
 
-- **Search** widget (`#search-box`)
+- **Settings panel** (`#controls`) — positioned below `#bar-left`
+  - Mode, basemap, overlays, 3D terrain, advanced display/profile settings.
+
+- **Search** widget (`#search-box`) — inside `#bar-left`
   - Search button, expanding input, and results dropdown for place search.
 
-- **Edit rail** (`#edit-rail`) -- unclear future use
-  - Quick edit actions: edit active track.
+- **Edit buttons** (`#bar-center`)
+  - Edit active track (✎) and rectangle select (⬚) buttons.
 
-- **Top-right track toolbar row** (`#track-tool-row`)
-  - New track, import/open/export, profile toggle, workspace actions, selection/edit ops, track list.
+- **Track toolbar row** (`#track-tool-row`) — inside `#bar-right`
+  - New track, import/open/export, workspace actions, selection/edit ops.
 
 - **Legend** (`#legend`)
   - Slope color ramp, labels, cursor elevation/slope readout.
@@ -81,8 +77,14 @@ Conditional overlays / floating popups:
 
 ## Toggled panels
 
-- **Settings toggle** (`#settings-controls-toggle`)
-  - Opens/collapses the left settings panel.
+- **Settings toggle** (`#settings-controls-toggle`) — in `#panel-toggles`
+  - Opens/collapses the left settings panel. Active class highlights blue.
+
+- **Profile toggle** (`#profile-toggle-btn`) — in `#panel-toggles`
+  - Shows/hides the bottom profile panel.
+
+- **Tracks toggle** (`#tracks-btn`) — in `#panel-toggles`
+  - Opens/collapses the right track panel.
 
 - **Track panel** (`#track-panel`)
   - Track list plus export/save actions; shown under the top-right toolbar when opened.
@@ -103,9 +105,13 @@ Conditional overlays / floating popups:
 
 
 ## Placement summary
-  - Top-left: settings and search
-  - Top-right: track workspace panel
-  - Mid-left: edit rail
+  - Top bar (`#controls-wrapper`): full-width flex bar with 3 zones
+    - Left (`#bar-left`): panel toggles (Settings | Profile | Tracks), Help link, search
+    - Center (`#bar-center`): edit/rect-select buttons
+    - Right (`#bar-right`): track tool row (new, import, actions, ops)
+  - Below top-left: settings panel (`#controls`)
+  - Below top-right: track panel (`#track-panel-shell`)
   - Bottom-left: legend
   - Bottom-right: MapLibre controls
   - Bottom full width: profile panel
+  - Mobile (≤640px): top bar moves to bottom, labels hidden, panels stay at top

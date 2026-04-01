@@ -4,30 +4,65 @@
 
     #controls-wrapper {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: 0; left: 0; right: 0;
       z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      gap: 8px;
+      pointer-events: none;
+    }
+    #controls-wrapper > * {
+      pointer-events: auto;
     }
 
-    #toolbar {
+    #bar-left {
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 6px;
     }
 
-    #settings-controls-toggle {
+    #bar-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #bar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #panel-toggles {
+      display: flex;
+      gap: 4px;
+    }
+    .panel-toggle-btn {
       background: rgba(255,255,255,0.94);
       border: none;
       border-radius: 8px;
-      padding: 6px 12px;
+      padding: 6px 10px;
       box-shadow: 0 1px 6px rgba(0,0,0,0.25);
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      line-height: 1;
     }
-    #settings-controls-toggle:hover { background: rgba(240,240,240,0.97); }
+    .panel-toggle-btn:hover { background: rgba(240,240,240,0.97); }
+    .panel-toggle-btn.active { background: #4a90d9; color: #fff; box-shadow: 0 1px 6px rgba(74,144,217,0.5); }
+    .panel-toggle-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+      color: rgba(0,0,0,0.45);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .panel-toggle-btn:disabled:hover { background: rgba(255,255,255,0.94); }
 
     #help-link {
       display: inline-flex;
@@ -123,6 +158,10 @@
     }
 
     #controls {
+      position: absolute;
+      top: 46px;
+      left: 10px;
+      z-index: 10;
       min-width: 180px;
       font-size: 13px;
       max-height: calc(100vh - 60px - var(--bottom-overlay-bottom));
@@ -211,17 +250,7 @@
       opacity: 0.45;
     }
 
-    /* Left edit rail */
-    #edit-rail {
-      position: absolute;
-      left: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 11;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+    /* Edit buttons (now in bar-center) */
     .rail-btn {
       background: rgba(255,255,255,0.94);
       border: none;
@@ -244,7 +273,7 @@
 
     #track-panel-shell {
       position: absolute;
-      top: 10px;
+      top: 46px;
       right: 10px;
       z-index: 11;
       display: flex;
@@ -263,12 +292,6 @@
       justify-content: flex-end;
       gap: 6px;
       flex-wrap: wrap;
-      margin-left: auto;
-    }
-    #draw-btn,
-    #tracks-btn {
-      position: static;
-      z-index: auto;
     }
     #track-panel {
       position: static;
@@ -291,9 +314,6 @@
       border-bottom: 1px solid rgba(0,0,0,0.08);
     }
     #track-panel h3 { margin: 0; font-size: 13px; }
-    #track-panel .track-panel-header #track-tool-row {
-      flex-shrink: 0;
-    }
     #track-list {
       max-height: 50vh;
       overflow-y: auto;
@@ -852,5 +872,31 @@
     .info-save-btn:hover { background: #3a7bc8; }
     .info-cancel-btn { background: #eee; color: #333; }
     .info-cancel-btn:hover { background: #ddd; }
+
+    /* ---- Mobile: bottom nav bar ---- */
+    @media (max-width: 640px) {
+      #controls-wrapper {
+        top: auto;
+        bottom: var(--bottom-overlay-bottom);
+        padding: 6px 10px;
+        justify-content: center;
+      }
+      .btn-label { display: none; }
+      #help-link { display: none; }
+      #search-box { display: none; }
+
+      #controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        max-height: 60vh;
+        z-index: 10;
+      }
+
+      #track-panel-shell {
+        top: 10px;
+        right: 10px;
+      }
+    }
 
     /* end track editor */

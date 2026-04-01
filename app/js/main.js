@@ -636,7 +636,7 @@ const controlsPanel = document.getElementById('controls');
 const controlsToggleBtn = document.getElementById('settings-controls-toggle');
 
 function syncControlsToggleLabel() {
-  controlsToggleBtn.textContent = controlsPanel.classList.contains('collapsed') ? '🌍 Settings ▸' : '🌍 Settings ▾';
+  controlsToggleBtn.classList.toggle('active', !controlsPanel.classList.contains('collapsed'));
 }
 
 function setControlsCollapsed(collapsed) {
