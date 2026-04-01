@@ -22,6 +22,21 @@ const test = base.extend({
   },
 });
 
+async function resetState(page) {
+  await page.evaluate(() => (0, eval)('resetForTest')());
+  await page.waitForTimeout(50);
+}
+
+async function loadMapPage(page) {
+  await page.goto(APP_URL, { waitUntil: 'load' });
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(APP_URL, { waitUntil: 'load' });
+  await page.waitForFunction(
+    () => { try { return (0, eval)('mapReady'); } catch { return false; } },
+    { timeout: MAP_READY_TIMEOUT_MS }
+  );
+}
+
 async function clickMap(page, x, y) {
   // Fire MapLibre GL click event directly — Playwright force-click on #map
   // doesn't reach MapLibre when canvas overlays exist after drawing tracks
@@ -135,10 +150,11 @@ async function deleteActiveTrackViaMenu(page) {
 }
 
 module.exports = {
-  APP_URL,
+  APP_URL, MAP_READY_TIMEOUT_MS,
   test, expect, clickMap, dblClickMap, clickDrawBtn, addPoints,
   evalInScope, getTrackCount, getEditingTrackId, getActiveTrackId,
   getActiveTrackPointCount, getTrackInfo, getSelectedVertexIndex,
   getInsertAfterIdx, drawTrackAndFinish, importFile,
   clickEditBtn, deleteActiveTrackViaMenu,
+  resetState, loadMapPage,
 };

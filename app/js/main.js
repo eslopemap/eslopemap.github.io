@@ -21,7 +21,7 @@ import {
   queryLoadedElevationAtLngLat,
 } from './dem.js';
 
-import { initTracks, getTracksState } from './tracks.js';
+import { initTracks, getTracksState, resetForTest } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
 import { loadSettings, saveSettings, clearAll as clearPersistedData } from './persist.js';
@@ -1389,6 +1389,7 @@ Object.defineProperties(window, {
   importFileContent:   { get() { return importFileContent; } },
   profileChart:        { get() { return getProfileChart(); } },
   profileClosed:       { get() { return tracksState.profileClosed; } },
+  resetForTest:        { get() { return resetForTest; } },
 });
 
 

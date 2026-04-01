@@ -1,7 +1,9 @@
 // @ts-check
+const { test: base, expect } = require('@playwright/test');
 const {
-  test, expect, clickMap, clickDrawBtn,
+  clickMap, clickDrawBtn,
   getActiveTrackPointCount, getTrackCount, evalInScope,
+  resetState, loadMapPage,
 } = require('./helpers');
 
 const mobileDevice = {
@@ -11,15 +13,26 @@ const mobileDevice = {
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
 };
 
-test.describe('Mobile Track Editor', () => {
-  test.use(mobileDevice);
+base.describe('Mobile Track Editor', () => {
+  let page;
+  let context;
 
-  test('Mobile-friendly mode defaults to active on mobile', async ({ mapPage: page }) => {
+  base.beforeAll(async ({ browser }) => {
+    context = await browser.newContext(mobileDevice);
+    page = await context.newPage();
+    await loadMapPage(page);
+  });
+
+  base.afterAll(async () => { await context.close(); });
+
+  base.beforeEach(async () => { await resetState(page); });
+
+  base.test('Mobile-friendly mode defaults to active on mobile', async () => {
     const mobileFriendly = await evalInScope(page, 'mobileFriendlyMode');
     expect(mobileFriendly).toBe(true);
   });
 
-  test('Crosshair class added when entering edit mode on mobile', async ({ mapPage: page }) => {
+  base.test('Crosshair class added when entering edit mode on mobile', async () => {
     await clickDrawBtn(page);
     await page.waitForTimeout(300);
 
@@ -27,7 +40,7 @@ test.describe('Mobile Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('Tap inserts point at map center (crosshair position)', async ({ mapPage: page }) => {
+  base.test('Tap inserts point at map center (crosshair position)', async () => {
     await clickDrawBtn(page);
     await page.waitForTimeout(300);
 
@@ -46,7 +59,7 @@ test.describe('Mobile Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('Toggle mobile mode off -- switches to desktop behavior', async ({ mapPage: page }) => {
+  base.test('Toggle mobile mode off -- switches to desktop behavior', async () => {
     await clickDrawBtn(page);
     await page.waitForTimeout(300);
 
@@ -68,7 +81,7 @@ test.describe('Mobile Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('Mobile friendly mode is active by default when editing', async ({ mapPage: page }) => {
+  base.test('Mobile friendly mode is active by default when editing', async () => {
     // Before editing, mobileFriendlyMode should be true on mobile
     expect(await evalInScope(page, 'mobileFriendlyMode')).toBe(true);
 
@@ -85,7 +98,7 @@ test.describe('Mobile Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('Multiple taps create multiple points', async ({ mapPage: page }) => {
+  base.test('Multiple taps create multiple points', async () => {
     await clickDrawBtn(page);
     await page.waitForTimeout(300);
 

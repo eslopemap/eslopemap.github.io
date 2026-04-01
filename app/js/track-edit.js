@@ -397,6 +397,10 @@ export function getEditState() {
   };
 }
 
+export function resetMobileFriendlyMode() {
+  mobileFriendlyMode = isMobile;
+}
+
 // Exported for unit testing only
 export const _testUndo = { pushUndo, popUndo, clearUndoStack, get undoStack() { return undoStack; } };
 

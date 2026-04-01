@@ -5,7 +5,7 @@ import { haversineKm } from './utils.js';
 // import { state } from './state.js';
 import { DEM_MAX_Z, DEM_HD_SOURCE_ID, TRACK_COLORS } from './constants.js';
 import { queryLoadedElevationAtLngLat } from './dem.js';
-import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack } from './track-edit.js';
+import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack, resetMobileFriendlyMode } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
 import { saveTracks, loadTracks, saveWaypoints, loadWaypoints } from './persist.js';
 import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onFileBatchImported, openInfoEditor, findNodeForTrackId } from './gpx-tree.js';
@@ -974,6 +974,28 @@ function startGroupRename(groupId, nameEl) {
 
 function createNewTrack(name) {
   return createTrack(name || ('Track ' + (tracks.length + 1)), []);
+}
+
+// ---- Test-only reset (no page reload needed) ----
+
+export function resetForTest() {
+  const es = getEditState();
+  if (es.editingTrackId) exitEditMode();
+  while (tracks.length) {
+    removeTrackFromMap(tracks[0]);
+    tracks.splice(0, 1);
+  }
+  waypoints.length = 0;
+  activeTrackId = null;
+  trackColorIdx = 0;
+  profileClosed = false;
+  activeSelectionSpan = null;
+  resetMobileFriendlyMode();
+  refreshWaypointSource();
+  rebuildTree();
+  renderTrackList();
+  updateProfileFn();
+  localStorage.clear();
 }
 
 // ---- Public API ----
