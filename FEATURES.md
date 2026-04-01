@@ -12,13 +12,17 @@
 - **3D terrain** — toggle with configurable exaggeration
 
 ## Basemaps
-- **OSM** (default), **OTM**, **IGN plan (FR)**, **SwissTopo vector**, **Kartverket topo (NO)**, **None** (white background, useful for viewing overlays in isolation)
+- **OSM** (default), **OTM**, **IGN plan (FR)**, **SwissTopo vector**, **SwissTopo raster**, **IGN topo (FR)**, **IGN ortho (FR)**, **Kartverket topo (NO)**, **None** (white background, useful for viewing overlays in isolation)
 - **Basemap opacity** — slider for the visible basemap stack
 - **Auto fly-to** — selecting a regional basemap outside its supported area recenters the view
 - **URL persistence** — center, zoom, basemap, mode, opacity, terrain state, bearing, and pitch are encoded in the URL hash
 
 ## Overlays
 - **OpenSkiMap** — independent checkbox overlay (ski areas, runs, lifts, spots) on top of any basemap
+- **SwissTopo ski routes (CH)** — ski touring routes overlay from swisstopo
+- **SwissTopo slope >30° (CH)** — avalanche-relevant steep terrain overlay from swisstopo
+- **IGN ski routes (FR)** — winter hiking routes overlay from IGN
+- **IGN slope >30° (FR)** — steep terrain overlay from IGN
 - **DEM tile grid** — debug overlay toggle for visible DEM tile coverage
 
 ## Track Editor
@@ -89,6 +93,10 @@
 - **Toast notifications** — ephemeral messages for track editing hints (mobile mode, rect-delete count, editing stopped on double-click)
 - **PWA installable** — manifest.json with icons at 192, 512, 180 (apple-touch), 32, 16 sizes; SVG favicon with mountain/slope theme
 - **Localhost debug** — mobile-friendly mode toggle (📱) shown on desktop when served from localhost
+- **Help link** — toolbar link to the user guide
+- **Geolocate on first run** — triggers browser geolocation on first visit (no saved URL hash or settings)
+- **Test mode** — `#test_mode=true` URL flag disables all basemaps, overlays, and DEM rendering for fast E2E testing
+- **Root redirect** — `index.html` at repo root redirects to `app/index.html` for GitHub Pages
 
 ## Module structure
 - **index.html** — shell with HTML markup, CDN script tags, importmap for `@we-gold/gpxjs`, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
