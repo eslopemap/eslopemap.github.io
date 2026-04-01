@@ -16,7 +16,7 @@
       margin-bottom: 6px;
     }
 
-    #controls-toggle {
+    #settings-controls-toggle {
       background: rgba(255,255,255,0.94);
       border: none;
       border-radius: 8px;
@@ -27,7 +27,7 @@
       cursor: pointer;
       white-space: nowrap;
     }
-    #controls-toggle:hover { background: rgba(240,240,240,0.97); }
+    #settings-controls-toggle:hover { background: rgba(240,240,240,0.97); }
 
     #search-box {
       position: relative;

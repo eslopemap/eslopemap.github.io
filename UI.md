@@ -81,7 +81,7 @@ Conditional overlays / floating popups:
 
 ## Toggled panels
 
-- **Settings toggle** (`#controls-toggle`)
+- **Settings toggle** (`#settings-controls-toggle`)
   - Opens/collapses the left settings panel.
 
 - **Track panel** (`#track-panel`)
