@@ -1,6 +1,6 @@
 ## What Slope Mapper is for
 
-Slope combines terrain visualization with a browser-based GPX editor. You can inspect steepness, switch basemaps, import existing tracks, draw new lines directly on the map, and inspect an elevation profile without leaving the page.
+Slope Mapper combines terrain visualization with a browser-based GPX editor. You can inspect steepness, switch basemaps, import existing tracks, draw new lines directly on the map, and inspect an elevation profile without leaving the page.
 
 ![Overview map with terrain analysis and controls visible.](./assets/overview-map.png)
 

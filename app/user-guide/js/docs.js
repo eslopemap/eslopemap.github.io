@@ -4,7 +4,7 @@ const pages = [
   {
     id: 'intro',
     label: 'Quick start',
-    title: 'Get started with Slope',
+    title: 'Get started with Slope Mapper',
     summary: 'Open the map, choose a terrain view, import a GPX file, and move into editing or profile analysis.',
     path: './content/intro.md'
   },
@@ -120,7 +120,7 @@ async function renderPage() {
     const markdown = await response.text();
     contentEl.innerHTML = marked.parse(markdown);
     decorateContent();
-    document.title = `${page.title} | Slope Docs`;
+    document.title = `${page.title} | Slope Mapper User Guide`;
   } catch (error) {
     contentEl.innerHTML = `
       <div class="callout error">

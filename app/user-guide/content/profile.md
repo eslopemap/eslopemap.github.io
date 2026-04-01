@@ -32,7 +32,7 @@ Time-based modes are most useful for imported GPX files that already contain tim
 
 ## Link the chart back to the map
 
-Hovering the chart highlights the matching point on the map. If the hovered point is off screen, Slope pans to bring it back into view.
+Hovering the chart highlights the matching point on the map. If the hovered point is off screen, Slope Mapper pans to bring it back into view.
 
 If you have an active rectangle selection on the track, the profile narrows to that span and shows a reset control so you can return to the full line.
 

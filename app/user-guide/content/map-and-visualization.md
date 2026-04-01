@@ -10,7 +10,7 @@ The `Mode` menu controls which terrain layer is drawn above the basemap.
 
 ## Work with basemaps and overlays
 
-The `Basemap` menu switches the reference map underneath the analysis layer. Some overlays are specific to a region, so Slope recenters automatically when needed.
+The `Basemap` menu switches the reference map underneath the analysis layer. Some overlays are specific to a region, so Slope Mapper recenters automatically when needed.
 
 Use the checkboxes for:
 

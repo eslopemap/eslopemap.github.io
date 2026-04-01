@@ -5,6 +5,6 @@ No. The app and this guide are both static pages. You can host them on any stati
 
 ## Are my imported tracks uploaded anywhere?
 
-No. Slope works in the browser and stores workspace state locally unless you explicitly export files yourself.
+No. Slope Mapper works in the browser and stores workspace state locally unless you explicitly export files yourself.
 
 That local-first behavior is also why the same workspace will only reappear when you reopen the app in the same browser.

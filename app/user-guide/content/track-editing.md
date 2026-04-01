@@ -2,7 +2,7 @@
 
 Select `+` to create a new track. Each click on the map adds a vertex. Press `Escape` or double-click to finish the line.
 
-When a new track is finished, Slope opens the info editor so you can name it before continuing.
+When a new track is finished, Slope Mapper opens the info editor so you can name it before continuing.
 
 ## Enter edit mode for an existing track
 
@@ -21,7 +21,7 @@ While editing, you can:
 - use the small `+` popup near the selected vertex to insert the next point after it,
 - delete a vertex with modifier-click or with `Delete` and `Backspace`.
 
-Desktop and mobile editing behave differently by design. On mobile, Slope prefers center-crosshair editing so you can pan the map to position a selected point precisely.
+Desktop and mobile editing behave differently by design. On mobile, Slope Mapper prefers center-crosshair editing so you can pan the map to position a selected point precisely.
 
 ![Track edit mode with the line selected for editing.](./assets/edit-mode.png)
 
