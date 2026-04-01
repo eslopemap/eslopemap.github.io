@@ -57,9 +57,10 @@ Recommend **localhost-first** for production.
 Reasoning:
 
 - Both approaches work, but localhost requires no special handling — standard HTTP semantics
-- The custom protocol required a CORS fix (`Access-Control-Allow-Origin`) that wouldn't have been needed with localhost, illustrating the kind of subtle WebView-specific friction that custom schemes introduce
 - Localhost logs are more natural and debuggable (plain HTTP paths vs custom scheme URIs)
 - HTTP routing is trivially extensible to mixed raster/vector tile serving and future PMTiles support
 - The custom protocol approach remains a viable fallback if localhost proves problematic in specific deployment scenarios (e.g. port conflicts, sandboxing restrictions)
 
 **Decision**: Use `tauri-plugin-localhost` + `tiny_http` tile server for offline MBTiles serving in the production Tauri app.
+
+Ed's note: I am not convinced.

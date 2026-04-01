@@ -726,4 +726,181 @@ mod tests {
 
         fs::remove_dir_all(dir).unwrap();
     }
+
+    // --- Integration: live watcher ---
+    //
+    // These tests exercise the real `notify` watcher + debouncer. Key details:
+    // - macOS resolves /tmp → /private/var/..., so we canonicalize all paths.
+    // - The debouncer has a 500ms window; we sleep 800ms after the action to
+    //   let it fire, and use a generous recv timeout.
+    // - We collect events across multiple callback batches for robustness.
+
+    fn make_canonical_temp_dir(name: &str) -> PathBuf {
+        let dir = make_temp_dir(name);
+        // Resolve symlinks (macOS: /var → /private/var) to match watcher paths
+        fs::canonicalize(&dir).unwrap_or(dir)
+    }
+
+    /// Collect all sync events arriving within `duration`, across multiple batches.
+    fn collect_events(
+        rx: &std::sync::mpsc::Receiver<Vec<SyncEvent>>,
+        duration: std::time::Duration,
+    ) -> Vec<SyncEvent> {
+        let deadline = std::time::Instant::now() + duration;
+        let mut all = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() { break; }
+            match rx.recv_timeout(remaining) {
+                Ok(batch) => all.extend(batch),
+                Err(_) => break,
+            }
+        }
+        all
+    }
+
+    #[test]
+    fn live_watcher_detects_external_create() {
+        let dir = make_canonical_temp_dir("live-create");
+        fs::write(dir.join("existing.gpx"), sample_gpx("Existing")).unwrap();
+
+        let manager = new_shared_manager();
+        {
+            let mut mgr = manager.lock().unwrap();
+            mgr.watch_folder(&dir).unwrap();
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<SyncEvent>>();
+        let _watcher = start_watcher(&dir, manager.clone(), move |events| {
+            let _ = tx.send(events);
+        })
+        .unwrap();
+
+        // Let watcher settle past initial registration noise
+        std::thread::sleep(std::time::Duration::from_millis(800));
+
+        fs::write(dir.join("new.gpx"), sample_gpx("New")).unwrap();
+
+        let events = collect_events(&rx, std::time::Duration::from_secs(5));
+        assert!(
+            events.iter().any(|e| matches!(e, SyncEvent::FileAdded { .. })),
+            "Expected FileAdded, got: {events:?}"
+        );
+
+        let mgr = manager.lock().unwrap();
+        assert_eq!(mgr.files.len(), 2);
+
+        drop(_watcher);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn live_watcher_detects_external_modify() {
+        let dir = make_canonical_temp_dir("live-modify");
+        let gpx_path = dir.join("track.gpx");
+        fs::write(&gpx_path, sample_gpx("Original")).unwrap();
+
+        let manager = new_shared_manager();
+        {
+            let mut mgr = manager.lock().unwrap();
+            mgr.watch_folder(&dir).unwrap();
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<SyncEvent>>();
+        let _watcher = start_watcher(&dir, manager.clone(), move |events| {
+            let _ = tx.send(events);
+        })
+        .unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(800));
+
+        fs::write(&gpx_path, sample_gpx("Modified")).unwrap();
+
+        let events = collect_events(&rx, std::time::Duration::from_secs(5));
+        assert!(
+            events.iter().any(|e| matches!(e, SyncEvent::FileChanged { .. })),
+            "Expected FileChanged, got: {events:?}"
+        );
+
+        let mgr = manager.lock().unwrap();
+        assert_eq!(mgr.files[&gpx_path].status, FileStatus::ChangedOnDisk);
+
+        drop(_watcher);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn live_watcher_detects_external_delete() {
+        let dir = make_canonical_temp_dir("live-delete");
+        let gpx_path = dir.join("track.gpx");
+        fs::write(&gpx_path, sample_gpx("ToDelete")).unwrap();
+
+        let manager = new_shared_manager();
+        {
+            let mut mgr = manager.lock().unwrap();
+            mgr.watch_folder(&dir).unwrap();
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<SyncEvent>>();
+        let _watcher = start_watcher(&dir, manager.clone(), move |events| {
+            let _ = tx.send(events);
+        })
+        .unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(800));
+
+        fs::remove_file(&gpx_path).unwrap();
+
+        let events = collect_events(&rx, std::time::Duration::from_secs(5));
+        assert!(
+            events.iter().any(|e| matches!(e, SyncEvent::FileRemoved { .. })),
+            "Expected FileRemoved, got: {events:?}"
+        );
+
+        let mgr = manager.lock().unwrap();
+        assert!(mgr.files.is_empty());
+
+        drop(_watcher);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn live_watcher_suppresses_self_write() {
+        let dir = make_canonical_temp_dir("live-suppress");
+        let gpx_path = dir.join("track.gpx");
+        fs::write(&gpx_path, sample_gpx("Original")).unwrap();
+
+        let manager = new_shared_manager();
+        {
+            let mut mgr = manager.lock().unwrap();
+            mgr.watch_folder(&dir).unwrap();
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<SyncEvent>>();
+        let _watcher = start_watcher(&dir, manager.clone(), move |events| {
+            let _ = tx.send(events);
+        })
+        .unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(800));
+
+        // Save via manager (adds path to suppression list)
+        {
+            let mut mgr = manager.lock().unwrap();
+            mgr.save_gpx(&gpx_path, &sample_gpx("App Save")).unwrap();
+        }
+
+        // Collect events over a window; suppression means either no events or empty batches.
+        let events = collect_events(&rx, std::time::Duration::from_secs(3));
+        assert!(
+            events.is_empty(),
+            "Expected no sync events after self-write, got: {events:?}"
+        );
+
+        let mgr = manager.lock().unwrap();
+        assert_eq!(mgr.files[&gpx_path].status, FileStatus::Clean);
+
+        drop(_watcher);
+        fs::remove_dir_all(dir).unwrap();
+    }
 }
