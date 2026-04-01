@@ -2,7 +2,7 @@
 
 import {
   DEM_HD_SOURCE_ID, DEM_MAX_Z, ANALYSIS_COLOR,
-  DEM_TERRAIN_SOURCE_ID,
+  DEM_TERRAIN_SOURCE_ID, OPENSKIMAP_LAYER_IDS,
 } from './constants.js';
 
 import { createStore, STATE_DEFAULTS } from './state.js';
@@ -385,6 +385,7 @@ const map = new maplibregl.Map({
         id: 'basemap-osm',
         type: 'raster',
         source: 'osm',
+        layout: { visibility: state.basemap === 'osm' ? 'visible' : 'none' },
         paint: { 'raster-opacity': basemapOpacityExpr(1) }
       },
       {
@@ -1177,6 +1178,12 @@ map.on('load', () => {
   // Terrain analysis layers are in the initial style (right after dem-loader)
   // — just apply the mode state to set correct visibility/opacity
   applyModeState(map, state);
+
+  // Move OpenSkiMap layers above terrain-analysis so the blend mode
+  // composites cleanly against the basemap and ski overlays render on top.
+  for (const id of OPENSKIMAP_LAYER_IDS) {
+    if (map.getLayer(id)) map.moveLayer(id);
+  }
 
   // Contour lines
   map.addLayer({
