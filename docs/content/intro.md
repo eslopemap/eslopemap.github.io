@@ -1,4 +1,4 @@
-## What Slope is for
+## What Slope Mapper is for
 
 Slope combines terrain visualization with a browser-based GPX editor. You can inspect steepness, switch basemaps, import existing tracks, draw new lines directly on the map, and inspect an elevation profile without leaving the page.
 
@@ -14,6 +14,8 @@ Slope combines terrain visualization with a browser-based GPX editor. You can in
 4. Use the track panel to select the active item.
 5. Open the profile panel with `Profile` to inspect elevation and slope.
 
+If you are opening Slope Mapper for the first time, it helps to leave the default terrain mode enabled until you have imported one track. That makes it easier to understand where the route sits on the relief before you start editing.
+
 ## The main areas of the interface
 
 | Area | What it does |
@@ -24,8 +26,12 @@ Slope combines terrain visualization with a browser-based GPX editor. You can in
 | Profile panel | Shows elevation, slope, pauses, and time-based views for the active track. |
 | Map canvas | The main surface for navigation, drawing, moving vertices, and reading terrain. |
 
-## Recommended first workflow
 
-Start by importing one GPX file so the app can auto-select a track and open the profile. After that, switch between `Slope + Color relief` and `Slope` to understand how the route lines up with the terrain, then enter edit mode if you need to clean up vertices.
+## Choose your next section
 
 > The guide is split by task. If you already know the basics, jump straight to the Track editing or Elevation profile sections from the sidebar.
+
+- To understand the terrain styling first, go to `Map and visualization`.
+- To organize your next adventure, go to `Track editing`.
+- To compare climb, descent, pauses, or timing, go to `Elevation profile`.
+- To bring files in or save results out, go to `Import and export`.

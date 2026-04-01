@@ -2,7 +2,7 @@
 
 The `Mode` menu controls which terrain layer is drawn above the basemap.
 
-- `Slope + Color relief` is the best default for route planning because it shows both steepness and elevation context.
+- `Slope + Color relief` (defualt)  shows both steepness (at high zoom) and a color-relief at lower zoom.
 - `Slope` isolates steep terrain.
 - `Aspect` colors terrain by direction.
 - `Color relief` emphasizes elevation bands.
@@ -36,6 +36,8 @@ The legend updates automatically for the active analysis mode. Cursor elevation 
 
 On mobile, a center crosshair keeps the terrain readout stable while you pan.
 
+If the cursor readout feels distracting during editing, you can move it to the corner or turn it off completely in the Advanced settings.
+
 ## When to use each view
 
 | Goal | Recommended setup |
@@ -44,3 +46,8 @@ On mobile, a center crosshair keeps the terrain readout stable while you pan.
 | Compare elevation bands over a route | `Color relief` with medium basemap opacity |
 | Inspect direction of terrain faces | `Aspect` |
 | Focus only on imported tracks | Basemap opacity reduced, analysis opacity increased |
+
+## Quick troubleshooting
+
+- If the map looks too busy or labels are hard to read, reduce either `Analysis opacity` or the number of active overlays.
+- If 3D terrain makes the route hard to follow, lower `Terrain exaggeration` or switch back to 2D before editing geometry.

@@ -1,6 +1,6 @@
 ## Import files
 
-Slope accepts GPX and GeoJSON data through:
+Slope Mapper accepts GPX and GeoJSON data through:
 
 - `Open file`,
 - drag and drop,
@@ -33,7 +33,7 @@ Context menus also expose GPX export for a file, track, or route. On supported b
 
 ## What is preserved
 
-During import and export, Slope keeps as much structure as possible:
+During import and export, Slope Mapper keeps as much structure as possible:
 
 - grouped GPX segments remain grouped,
 - waypoints stay attached to the workspace,
