@@ -1,6 +1,6 @@
 # UI Layout
 
-This ASCII sketch reflects the current **edit mode** layout as seen in `app/docs/assets/edit-mode.png`, cross-checked with `app/index.html`, `app/css/main.css`, and the MapLibre `addControl(...)` setup in `app/js/main.js`.
+This ASCII sketch reflects the current **edit mode** layout as seen in `app/user-guide/assets/edit-mode.png`, cross-checked with `app/index.html`, `app/css/main.css`, and the MapLibre `addControl(...)` setup in `app/js/main.js`.
 
 
 

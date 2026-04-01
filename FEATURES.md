@@ -1,4 +1,4 @@
-# Slope viewer & editor — Feature summary
+# Slope Mapper — Feature summary
 
 ## Map & Visualization
 - **Analysis modes** — `Slope + Color relief` (default), `Slope`, `Aspect`, `Color relief`, and an empty `none` mode that disables the DEM analysis overlay entirely
@@ -91,7 +91,7 @@
 - **Localhost debug** — mobile-friendly mode toggle (📱) shown on desktop when served from localhost
 
 ## Module structure
-- **slope.html** — shell with HTML markup, CDN script tags, importmap for `@we-gold/gpxjs`, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
+- **index.html** — shell with HTML markup, CDN script tags, importmap for `@we-gold/gpxjs`, `<link>` to css/main.css, `<script type="module" src="js/main.js">`
 - **css/main.css** — all styles including track group nesting, workspace tree, context menu, Info editor, left edit rail
 - **js/main.js** — entry point: creates map, imports all modules, wires settings event handlers, persistence, shortcuts, left rail, exposes window getters for tests
 - **js/constants.js** — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers

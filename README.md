@@ -2,13 +2,13 @@
 
 Slope Mapper is a static browser app for exploring terrain with slope-focused map layers and editing, inspecting, and exporting GPX tracks.
 
-- Docs: [https://eslopemap.github.io/app/docs/](https://eslopemap.github.io/app/docs/)
-- In-repo docs entry: [`app/docs/`](app/docs/)
+- Docs: [https://eslopemap.github.io/app/user-guide/](https://eslopemap.github.io/app/user-guide/)
+- In-repo docs entry: [`app/user-guide/`](app/user-guide/)
 - App entry: [`app/index.html`](app/index.html)
 - Contributing guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Screenshot file: [`app/docs/assets/edit-mode.png`](app/docs/assets/edit-mode.png)
+- Screenshot file: [`app/user-guide/assets/edit-mode.png`](app/user-guide/assets/edit-mode.png)
 
-![Slope Mapper edit mode screenshot](app/docs/assets/edit-mode.png)
+![Slope Mapper edit mode screenshot](app/user-guide/assets/edit-mode.png)
 
 ## What it includes
 
@@ -22,11 +22,11 @@ Slope Mapper is a static browser app for exploring terrain with slope-focused ma
 
 User documentation is published here:
 
-- [https://eslopemap.github.io/app/docs/](https://eslopemap.github.io/app/docs/)
+- [https://eslopemap.github.io/app/user-guide/](https://eslopemap.github.io/app/user-guide/)
 
 The same docs live in this repository under:
 
-- [`app/docs/`](app/docs/)
+- [`app/user-guide/`](app/user-guide/)
 
 ## Quick start
 
@@ -43,7 +43,7 @@ python3 -m http.server 8089
 Then open:
 
 - App: `http://localhost:8089/app/index.html`
-- Docs: `http://localhost:8089/app/docs/`
+- Docs: `http://localhost:8089/app/user-guide/`
 
 ### Install test dependencies
 
@@ -75,7 +75,7 @@ npm test
 
 - `app/` — shipped application and docs
 - `app/js/` — application modules
-- `app/docs/` — static user documentation
+- `app/user-guide/` — static user documentation
 - `app/vendor/` — vendored third-party browser assets and generated import maps
 - `tests/unit/` — unit tests
 - `tests/e2e/` — Playwright tests

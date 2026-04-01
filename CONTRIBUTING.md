@@ -65,7 +65,7 @@ python3 -m http.server 8089
 Then open:
 
 - App: `http://localhost:8089/app/index.html`
-- Docs: `http://localhost:8089/app/docs/`
+- Docs: `http://localhost:8089/app/user-guide/`
 
 You can use another static file server if you prefer, but the current Playwright setup uses Python's built-in server on port `8089`.
 
@@ -169,10 +169,10 @@ When changing behavior:
 ## Useful locations
 
 - App entry: `app/index.html`
-- Docs entry: `app/docs/index.html`
+- Docs entry: `app/user-guide/index.html`
 - App code: `app/js/`
 - Styles: `app/css/`
-- Docs content: `app/docs/content/`
+- Docs content: `app/user-guide/content/`
 - Tests: `tests/unit/`, `tests/e2e/`
 - Vendoring manifest: `deps.json`
 - Vendoring script: `scripts/vendor-deps.mjs`
