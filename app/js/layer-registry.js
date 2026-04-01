@@ -12,6 +12,7 @@ import { basemapOpacityExpr } from './constants.js';
  * @property {{center:[number,number], zoom:number}|null} defaultView - fly-to when selected
  * @property {Object} sources - MapLibre source definitions keyed by source id
  * @property {Object[]} layers - MapLibre layer definitions
+ * @property {string|null} [styleUrl] - optional external MapLibre style URL for style-backed basemaps
  */
 
 /** @type {CatalogEntry[]} */
@@ -28,7 +29,7 @@ export const LAYER_CATALOG = [
   },
   {
     id: 'osm',
-    label: 'OSM',
+    label: 'OpenStreetMap',
     category: 'basemap',
     region: null,
     defaultView: null,
@@ -52,7 +53,7 @@ export const LAYER_CATALOG = [
   },
   {
     id: 'otm',
-    label: 'OTM',
+    label: 'OpenTopoMap',
     category: 'basemap',
     region: null,
     defaultView: null,
@@ -103,123 +104,6 @@ export const LAYER_CATALOG = [
     ]
   },
   {
-    id: 'swisstopo-vector',
-    label: 'SwissTopo vector',
-    category: 'basemap',
-    region: [5.9, 45.8, 10.5, 47.8],
-    defaultView: { center: [8.23, 46.82], zoom: 8 },
-    sources: {
-      swisstopo: {
-        type: 'vector',
-        tiles: ['https://vectortiles.geo.admin.ch/tiles/ch.swisstopo.base.vt/v1.0.0/{z}/{x}/{y}.pbf'],
-        maxzoom: 14,
-        attribution: '&copy; swisstopo'
-      }
-    },
-    layers: [
-      {
-        id: 'basemap-swiss-landcover',
-        type: 'fill',
-        source: 'swisstopo',
-        'source-layer': 'landcover',
-        paint: { 'fill-color': '#dce7cf', 'fill-opacity': basemapOpacityExpr(0.85) }
-      },
-      {
-        id: 'basemap-swiss-water',
-        type: 'fill',
-        source: 'swisstopo',
-        'source-layer': 'water',
-        paint: { 'fill-color': '#b7d7ff', 'fill-opacity': basemapOpacityExpr(0.95) }
-      },
-      {
-        id: 'basemap-swiss-transport',
-        type: 'line',
-        source: 'swisstopo',
-        'source-layer': 'transportation',
-        paint: {
-          'line-color': '#7a7a7a',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.2, 14, 1.8],
-          'line-opacity': basemapOpacityExpr(0.9)
-        }
-      },
-      {
-        id: 'basemap-swiss-boundary',
-        type: 'line',
-        source: 'swisstopo',
-        'source-layer': 'boundary',
-        paint: {
-          'line-color': '#7f4b63',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.25, 14, 1.25],
-          'line-opacity': basemapOpacityExpr(0.75)
-        }
-      },
-      {
-        id: 'basemap-swiss-label',
-        type: 'symbol',
-        source: 'swisstopo',
-        'source-layer': 'place',
-        layout: {
-          'text-field': ['coalesce', ['get', 'name'], ['get', 'name_de'], ['get', 'name_fr'], ['get', 'name_it'], ''],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 14, 13]
-        },
-        paint: {
-          'text-color': '#2e2e2e',
-          'text-opacity': basemapOpacityExpr(0.9),
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
-      }
-    ]
-  },
-  {
-    id: 'kartverket',
-    label: 'Kartverket topo (NO)',
-    category: 'basemap',
-    region: [3, 57, 32, 72],
-    defaultView: { center: [13.0, 67], zoom: 6 },
-    sources: {
-      kartverket: {
-        type: 'raster',
-        tiles: ['https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png'],
-        tileSize: 256,
-        maxzoom: 17,
-        attribution: '&copy; Kartverket'
-      }
-    },
-    layers: [
-      {
-        id: 'basemap-kartverket',
-        type: 'raster',
-        source: 'kartverket',
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      }
-    ]
-  },
-  {
-    id: 'swisstopo-raster',
-    label: 'SwissTopo raster',
-    category: 'basemap',
-    region: [5.9, 45.8, 10.5, 47.8],
-    defaultView: { center: [8.23, 46.82], zoom: 8 },
-    sources: {
-      'swisstopo-raster': {
-        type: 'raster',
-        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg'],
-        tileSize: 256,
-        maxzoom: 18,
-        attribution: '&copy; swisstopo'
-      }
-    },
-    layers: [
-      {
-        id: 'basemap-swisstopo-raster',
-        type: 'raster',
-        source: 'swisstopo-raster',
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      }
-    ]
-  },
-  {
     id: 'ign-topo',
     label: 'IGN topo (FR)',
     category: 'basemap',
@@ -263,6 +147,64 @@ export const LAYER_CATALOG = [
         id: 'basemap-ign-ortho',
         type: 'raster',
         source: 'ignortho',
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      }
+    ]
+  },
+  {
+    id: 'swisstopo-vector',
+    label: 'SwissTopo vector',
+    category: 'basemap',
+    region: [5.9, 45.8, 10.5, 47.8],
+    defaultView: { center: [8.23, 46.82], zoom: 8 },
+    styleUrl: 'https://vectortiles.geo.admin.ch/styles/ch.swisstopo.basemap.vt/style.json',
+    sources: {},
+    layers: []
+  },
+  {
+    id: 'swisstopo-raster',
+    label: 'SwissTopo raster',
+    category: 'basemap',
+    region: [5.9, 45.8, 10.5, 47.8],
+    defaultView: { center: [8.23, 46.82], zoom: 8 },
+    sources: {
+      'swisstopo-raster': {
+        type: 'raster',
+        tiles: ['https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg'],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: '&copy; swisstopo'
+      }
+    },
+    layers: [
+      {
+        id: 'basemap-swisstopo-raster',
+        type: 'raster',
+        source: 'swisstopo-raster',
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      }
+    ]
+  },
+  {
+    id: 'kartverket',
+    label: 'Kartverket topo (NO)',
+    category: 'basemap',
+    region: [3, 57, 32, 72],
+    defaultView: { center: [13.0, 67], zoom: 6 },
+    sources: {
+      kartverket: {
+        type: 'raster',
+        tiles: ['https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png'],
+        tileSize: 256,
+        maxzoom: 17,
+        attribution: '&copy; Kartverket'
+      }
+    },
+    layers: [
+      {
+        id: 'basemap-kartverket',
+        type: 'raster',
+        source: 'kartverket',
         paint: { 'raster-opacity': basemapOpacityExpr(1) }
       }
     ]

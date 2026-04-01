@@ -290,8 +290,6 @@ const map = new maplibregl.Map({
         type: 'background',
         paint: { 'background-color': '#ffffff' }
       },
-      // Catalog-generated layers (all start hidden; engine toggles visibility)
-      ...buildCatalogLayers(),
       {
         id: 'dem-loader',
         type: 'hillshade',
@@ -330,7 +328,9 @@ const map = new maplibregl.Map({
           'color': ANALYSIS_COLOR['color-relief'],
           'blend-mode': state.multiplyBlend ? (state.slopeOpacity > 0.7 ? 'multiply' : 'soft-multiply') : 'normal'
         }
-      }
+      },
+      // Catalog-generated layers (all start hidden; engine toggles visibility)
+      ...buildCatalogLayers()
     ]
   },
   canvasContextAttributes: {antialias: true}
