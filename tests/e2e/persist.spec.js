@@ -62,14 +62,14 @@ test.describe('Persistence', () => {
     await page.waitForTimeout(400);
     expect(await getTrackCount(page)).toBe(1);
 
-    // Call clearAll directly and reload (bypasses confirm dialog)
     await page.evaluate(() => {
       const keys = Object.keys(localStorage);
       keys.forEach(k => localStorage.removeItem(k));
     });
-    await page.goto('/index.html', { waitUntil: 'load' });
+    await page.goto('/app/index.html#test_mode=true', { waitUntil: 'load' });
     await page.waitForFunction(
       () => { try { return (0, eval)('mapReady'); } catch { return false; } },
+      { timeout: 5_000 }
     );
     await page.waitForTimeout(300);
 

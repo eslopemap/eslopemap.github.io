@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+
 const pages = [
   {
     id: 'intro',

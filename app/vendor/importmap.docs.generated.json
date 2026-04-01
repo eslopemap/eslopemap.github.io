@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "marked": "../vendor/marked/17.0.5/lib/marked.esm.js"
+  }
+}

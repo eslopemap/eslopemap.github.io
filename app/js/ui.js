@@ -280,6 +280,7 @@ export function parseHashParams() {
     slopeOpacity: 0.45,
     terrain3d: false,
     terrainExaggeration: 1.4,
+    testMode: false,
     bearing: 0,
     pitch: 0
   };
@@ -294,6 +295,7 @@ export function parseHashParams() {
     const opacityRaw = Number(params.get('opacity'));
     const terrain3dRaw = parseBooleanParam(params.get('terrain'));
     const terrainExaggerationRaw = Number(params.get('exaggeration'));
+    const testModeRaw = parseBooleanParam(params.get('test_mode'));
     const bearingRaw = Number(params.get('bearing'));
     const pitchRaw = Number(params.get('pitch'));
 
@@ -314,6 +316,7 @@ export function parseHashParams() {
       slopeOpacity: hasOpacity ? opacityRaw : fallback.slopeOpacity,
       terrain3d: terrain3dRaw == null ? fallback.terrain3d : terrain3dRaw,
       terrainExaggeration: hasTerrainExaggeration ? terrainExaggerationRaw : fallback.terrainExaggeration,
+      testMode: testModeRaw == null ? fallback.testMode : testModeRaw,
       bearing: hasBearing ? bearingRaw : fallback.bearing,
       pitch: hasPitch ? pitchRaw : fallback.pitch
     };
@@ -327,6 +330,7 @@ export function syncViewToUrl(map, state) {
   const zoom = map.getZoom();
   const bearing = map.getBearing();
   const pitch = map.getPitch();
+  const currentHashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const params = new URLSearchParams();
   params.set('lng', center.lng.toFixed(6));
   params.set('lat', center.lat.toFixed(6));
@@ -336,6 +340,9 @@ export function syncViewToUrl(map, state) {
   params.set('opacity', state.slopeOpacity.toFixed(2));
   params.set('terrain', state.terrain3d ? '1' : '0');
   params.set('exaggeration', state.terrainExaggeration.toFixed(2));
+  if (parseBooleanParam(currentHashParams.get('test_mode'))) {
+    params.set('test_mode', 'true');
+  }
   params.set('bearing', bearing.toFixed(2));
   params.set('pitch', pitch.toFixed(2));
   const hash = `#${params.toString()}`;

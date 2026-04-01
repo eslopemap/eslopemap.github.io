@@ -6,13 +6,17 @@
 
 const { test: base, expect } = require('@playwright/test');
 
+const APP_URL = '/app/index.html#test_mode=true';
+const MAP_READY_TIMEOUT_MS = 5_000;
+
 const test = base.extend({
   mapPage: async ({ page }, use) => {
-    await page.goto('/index.html', { waitUntil: 'load' });
+    await page.goto(APP_URL, { waitUntil: 'load' });
     await page.evaluate(() => localStorage.clear());
-    await page.goto('/index.html', { waitUntil: 'load' });
+    await page.goto(APP_URL, { waitUntil: 'load' });
     await page.waitForFunction(
       () => { try { return (0, eval)('mapReady'); } catch { return false; } },
+      { timeout: MAP_READY_TIMEOUT_MS }
     );
     await use(page);
   },

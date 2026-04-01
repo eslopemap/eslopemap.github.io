@@ -99,6 +99,44 @@ function ensureDebugGridLayer(map) {
   }
 }
 
+function applyTestModeState(state) {
+  state.basemap = 'none';
+  state.mode = '';
+  state.showContours = false;
+  state.showOpenSkiMap = false;
+  state.showSwisstopoSki = false;
+  state.showSwisstopoSlope = false;
+  state.showIgnSki = false;
+  state.showIgnSlopes = false;
+  state.terrain3d = false;
+  state.hillshadeOpacity = 0;
+}
+
+function syncTestModeUi(state) {
+  document.getElementById('basemap').value = state.basemap;
+  document.getElementById('mode').value = state.mode;
+  document.getElementById('terrain3d').checked = state.terrain3d;
+  document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
+  document.getElementById('showContours').checked = state.showContours;
+  document.getElementById('showOpenSkiMap').checked = state.showOpenSkiMap;
+  document.getElementById('showSwisstopoSki').checked = state.showSwisstopoSki;
+  document.getElementById('showSwisstopoSlope').checked = state.showSwisstopoSlope;
+  document.getElementById('showIgnSki').checked = state.showIgnSki;
+  document.getElementById('showIgnSlopes').checked = state.showIgnSlopes;
+  document.getElementById('hillshadeOpacity').value = String(state.hillshadeOpacity);
+  document.getElementById('hillshadeOpacityValue').textContent = state.hillshadeOpacity.toFixed(2);
+}
+
+function applyTestModeMapState(map, state) {
+  if (map.getLayer('dem-loader')) {
+    map.setLayoutProperty('dem-loader', 'visibility', 'none');
+  }
+  setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
+  applyBasemapSelection(map, state);
+  applyModeState(map, state);
+  applyContourVisibility(map, state);
+}
+
 // ---- Initial view from URL hash + persisted settings ----
 
 // Persisted settings as defaults, URL hash overrides
@@ -110,6 +148,7 @@ if (persisted) {
 }
 
 const initialView = parseHashParams();
+const isTestMode = Boolean(initialView.testMode);
 if (initialView.basemap) {
   state.basemap = initialView.basemap;
 }
@@ -117,6 +156,9 @@ state.mode = initialView.mode;
 state.slopeOpacity = initialView.slopeOpacity;
 state.terrain3d = initialView.terrain3d;
 state.terrainExaggeration = initialView.terrainExaggeration;
+if (isTestMode) {
+  applyTestModeState(state);
+}
 document.getElementById('basemap').value = state.basemap;
 document.getElementById('mode').value = state.mode;
 document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
@@ -154,6 +196,9 @@ if (persisted) {
     document.getElementById('profileSmoothing').value = String(state.profileSmoothing);
     document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
   }
+}
+if (isTestMode) {
+  syncTestModeUi(state);
 }
 
 // On mobile, default to corner cursor-info mode (center crosshair acts as pointer)
@@ -522,6 +567,7 @@ const map = new maplibregl.Map({
         id: 'dem-loader',
         type: 'hillshade',
         source: DEM_HD_SOURCE_ID,
+        layout: { visibility: isTestMode ? 'none' : 'visible' },
         paint: {
           'hillshade-method': state.hillshadeMethod,
           'hillshade-exaggeration': ['coalesce', ['global-state', 'hillshadeOpacity'], 0.35],
@@ -1161,6 +1207,9 @@ map.on('load', () => {
     }
   });
   applyContourVisibility(map, state);
+  if (isTestMode) {
+    applyTestModeMapState(map, state);
+  }
 
   // Elevation sampling on mousemove
   const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -1272,6 +1321,9 @@ window.addEventListener('hashchange', () => {
   state.slopeOpacity = p.slopeOpacity;
   state.terrain3d = p.terrain3d;
   state.terrainExaggeration = p.terrainExaggeration;
+  if (p.testMode) {
+    applyTestModeState(state);
+  }
 
   document.getElementById('basemap').value = state.basemap;
   document.getElementById('mode').value = state.mode;
@@ -1281,6 +1333,9 @@ window.addEventListener('hashchange', () => {
   document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
   document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+  if (p.testMode) {
+    syncTestModeUi(state);
+  }
 
   updateLegend(state, map);
   map.setBearing(p.bearing);
@@ -1288,6 +1343,9 @@ window.addEventListener('hashchange', () => {
   applyBasemapSelection(map, state, true);
   applyModeState(map, state);
   applyTerrainState(map, state);
+  if (p.testMode) {
+    applyTestModeMapState(map, state);
+  }
   hashNavInProgress = false;
   syncViewToUrl(map, state);
   map.triggerRepaint();

@@ -1,0 +1,92 @@
+{
+  "minimumAgeDays": 7,
+  "cdnBaseUrl": "https://cdn.jsdelivr.net/npm",
+  "registryBaseUrl": "https://registry.npmjs.org",
+  "packages": [
+    {
+      "name": "@eslopemap/maplibre-gl",
+      "range": "5.21.9",
+      "files": [
+        "dist/maplibre-gl.js",
+        "dist/maplibre-gl.css"
+      ],
+      "importMap": {}
+    },
+    {
+      "name": "maplibre-contour",
+      "range": "^0.1.0",
+      "files": [
+        "dist/index.min.js"
+      ],
+      "importMap": {}
+    },
+    {
+      "name": "marked",
+      "range": "^17",
+      "files": [
+        "lib/marked.esm.js"
+      ],
+      "importMap": {
+        "docs": {
+          "marked": "lib/marked.esm.js"
+        }
+      }
+    },
+    {
+      "name": "@we-gold/gpxjs",
+      "range": "^1.1.0",
+      "files": [
+        "dist/gpxjs.js"
+      ],
+      "importMap": {
+        "app": {
+          "@we-gold/gpxjs": "dist/gpxjs.js"
+        }
+      }
+    },
+    {
+      "name": "chart.js",
+      "range": "^4",
+      "files": [
+        "auto/auto.js",
+        "dist/chart.js",
+        "dist/helpers.js",
+        "helpers/helpers.js"
+      ],
+      "directories": [
+        "dist/chunks"
+      ],
+      "importMap": {
+        "app": {
+          "chart.js": "dist/chart.js",
+          "chart.js/auto": "auto/auto.js",
+          "chart.js/helpers": "helpers/helpers.js"
+        }
+      }
+    },
+    {
+      "name": "@kurkle/color",
+      "range": "^0.4.0",
+      "files": [
+        "dist/color.esm.js"
+      ],
+      "importMap": {
+        "app": {
+          "@kurkle/color": "dist/color.esm.js"
+        }
+      }
+    },
+    {
+      "name": "chartjs-plugin-annotation",
+      "range": "^3",
+      "files": [
+        "dist/chartjs-plugin-annotation.esm.js"
+      ],
+      "importMap": {
+        "app": {
+          "chartjs-plugin-annotation": "dist/chartjs-plugin-annotation.esm.js"
+        }
+      }
+    }
+  ]
+}

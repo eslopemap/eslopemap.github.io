@@ -2,7 +2,11 @@
 // Features: elevation, track slope, terrain slope, horizontal speed, vertical speed,
 // pause detection, multiple x-axis modes, display settings menu.
 
+import Chart from 'chart.js/auto';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import { haversineKm, smoothArray } from './utils.js';
+
+Chart.register(annotationPlugin);
 
 function clampTo90th(arr) {
   const valid = arr.filter(v => v != null && !isNaN(v) && isFinite(v));

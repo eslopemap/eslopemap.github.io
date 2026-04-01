@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-04-01T11:39:00.011Z",
+  "minimumAgeDays": 7,
+  "packages": [
+    {
+      "name": "@eslopemap/maplibre-gl",
+      "range": "5.21.9",
+      "version": "5.21.9",
+      "publishedAt": "2026-03-29T11:47:03.474Z",
+      "files": [
+        {
+          "path": "dist/maplibre-gl.css",
+          "size": 70024,
+          "integrity": "sha256-dhoRMPCWDqNp2RfshD99GvXKHc8ncBrvHZ1Zghs7qyU=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/@eslopemap/maplibre-gl@5.21.9/dist/maplibre-gl.css"
+        },
+        {
+          "path": "dist/maplibre-gl.js",
+          "size": 1057186,
+          "integrity": "sha256-c/KGWrmEnKgLDFB3agltIRk9Ef6kst4KelffT2VPyaw=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/@eslopemap/maplibre-gl@5.21.9/dist/maplibre-gl.js"
+        }
+      ],
+      "importMap": {}
+    },
+    {
+      "name": "maplibre-contour",
+      "range": "^0.1.0",
+      "version": "0.1.0",
+      "publishedAt": "2024-12-21T10:44:45.371Z",
+      "files": [
+        {
+          "path": "dist/index.min.js",
+          "size": 31197,
+          "integrity": "sha256-5ViyMSWhTYX8/7e1xVa6u9e5nNtjNaKsX6AiHErlQ24=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/maplibre-contour@0.1.0/dist/index.min.js"
+        }
+      ],
+      "importMap": {}
+    },
+    {
+      "name": "marked",
+      "range": "^17",
+      "version": "17.0.5",
+      "publishedAt": "2026-03-20T15:13:52.293Z",
+      "files": [
+        {
+          "path": "lib/marked.esm.js",
+          "size": 41661,
+          "integrity": "sha256-C0SHNZzmuFEIcI56Uy4SQqJ/RxgkHnst4QmsbNMH0tw=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/marked@17.0.5/lib/marked.esm.js"
+        }
+      ],
+      "importMap": {
+        "docs": {
+          "marked": "lib/marked.esm.js"
+        }
+      }
+    },
+    {
+      "name": "@we-gold/gpxjs",
+      "range": "^1.1.0",
+      "version": "1.1.0",
+      "publishedAt": "2024-12-31T20:36:51.121Z",
+      "files": [
+        {
+          "path": "dist/gpxjs.js",
+          "size": 22722,
+          "integrity": "sha256-R5tWjNyUhh3ewELWLB1QsQlJ2bDptQPStLFPazh69qU=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/@we-gold/gpxjs@1.1.0/dist/gpxjs.js"
+        }
+      ],
+      "importMap": {
+        "app": {
+          "@we-gold/gpxjs": "dist/gpxjs.js"
+        }
+      }
+    },
+    {
+      "name": "chart.js",
+      "range": "^4",
+      "version": "4.5.1",
+      "publishedAt": "2025-10-13T08:54:35.850Z",
+      "files": [
+        {
+          "path": "auto/auto.js",
+          "size": 147,
+          "integrity": "sha256-fhlNvlNuMzy0QeLUdzTlv/HTesgViGt8xsstdjI+F8o=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/auto/auto.js"
+        },
+        {
+          "path": "dist/chart.js",
+          "size": 408255,
+          "integrity": "sha256-ArWpwWwmqgJlhNZOGLwpmAXrLoZbOCnauRRIRFWaW7U=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.js"
+        },
+        {
+          "path": "dist/chunks/helpers.dataset.cjs",
+          "size": 98754,
+          "integrity": "sha256-O6OPPk2XvDohh8fbNeMYanLByql/l41AgRaDwhsqvfk=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chunks/helpers.dataset.cjs"
+        },
+        {
+          "path": "dist/chunks/helpers.dataset.cjs.map",
+          "size": 235863,
+          "integrity": "sha256-IdRpPzOugZPf3KEfW5cBOseLk0rUtdtfyoNzRwrn5l8=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chunks/helpers.dataset.cjs.map"
+        },
+        {
+          "path": "dist/chunks/helpers.dataset.js",
+          "size": 96538,
+          "integrity": "sha256-bPJ+YAbwgLUqVxrRwfNoP5q8lnQ/kpCS3Gd/9qYQ9Vo=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chunks/helpers.dataset.js"
+        },
+        {
+          "path": "dist/chunks/helpers.dataset.js.map",
+          "size": 235735,
+          "integrity": "sha256-01oNFXfOsyQhbpAL10uaYs/Lo6Gi23AKaZKQdtwoc/Y=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chunks/helpers.dataset.js.map"
+        },
+        {
+          "path": "dist/helpers.js",
+          "size": 2628,
+          "integrity": "sha256-C/W+ZVp+H09zt2n5ehIMAv2/oTGzWYNPMzJWcFh/2Vs=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/helpers.js"
+        },
+        {
+          "path": "helpers/helpers.js",
+          "size": 36,
+          "integrity": "sha256-q7mp0ZHjisV7lZdT6VS/bo9gA5AhowqBPiS6hrCSX5o=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/helpers/helpers.js"
+        }
+      ],
+      "importMap": {
+        "app": {
+          "chart.js": "dist/chart.js",
+          "chart.js/auto": "auto/auto.js",
+          "chart.js/helpers": "helpers/helpers.js"
+        }
+      }
+    },
+    {
+      "name": "@kurkle/color",
+      "range": "^0.4.0",
+      "version": "0.4.0",
+      "publishedAt": "2025-05-29T06:41:46.255Z",
+      "files": [
+        {
+          "path": "dist/color.esm.js",
+          "size": 12705,
+          "integrity": "sha256-dKTzHPtYC3mpGN/S4Yk3kTRXGFdO+ZI601gZ5fPiQuM=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/@kurkle/color@0.4.0/dist/color.esm.js"
+        }
+      ],
+      "importMap": {
+        "app": {
+          "@kurkle/color": "dist/color.esm.js"
+        }
+      }
+    },
+    {
+      "name": "chartjs-plugin-annotation",
+      "range": "^3",
+      "version": "3.1.0",
+      "publishedAt": "2024-10-16T16:25:24.278Z",
+      "files": [
+        {
+          "path": "dist/chartjs-plugin-annotation.esm.js",
+          "size": 91028,
+          "integrity": "sha256-CDkO/lvnGhHz1AVz9sJunZfaLQK2iO4aytO8nzrZGjE=",
+          "sourceUrl": "https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.esm.js"
+        }
+      ],
+      "importMap": {
+        "app": {
+          "chartjs-plugin-annotation": "dist/chartjs-plugin-annotation.esm.js"
+        }
+      }
+    }
+  ]
+}
