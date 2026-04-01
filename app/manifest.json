@@ -1,6 +1,6 @@
 {
-  "name": "Slope viewer & editor",
-  "short_name": "Slope",
+  "name": "Slope Mapper",
+  "short_name": "Slope Mapper",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",

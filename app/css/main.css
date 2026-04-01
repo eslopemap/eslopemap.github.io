@@ -29,6 +29,23 @@
     }
     #settings-controls-toggle:hover { background: rgba(240,240,240,0.97); }
 
+    #help-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      padding: 0 12px;
+      border-radius: 8px;
+      background: rgba(74,144,217,0.94);
+      box-shadow: 0 1px 6px rgba(0,0,0,0.25);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    #help-link:hover { background: rgba(58,123,200,0.97); }
+
     #search-box {
       position: relative;
       display: flex;
