@@ -94,6 +94,127 @@ function installCanvasDocumentMock() {
   };
 }
 
+describe('user source registry', () => {
+  let registry;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    installCanvasDocumentMock();
+    registry = await import('../../app/js/layer-registry.js');
+    registry.clearUserSources();
+  });
+
+  afterEach(() => {
+    registry.clearUserSources();
+    vi.restoreAllMocks();
+    delete globalThis.document;
+  });
+
+  it('registerUserSource adds entry to catalog lookups', () => {
+    const entry = {
+      id: 'user-mytiles', label: 'My Tiles', category: 'basemap',
+      region: null, defaultView: null,
+      sources: { 'user-src-mytiles': { type: 'raster', tiles: ['http://localhost/tiles/mytiles/{z}/{x}/{y}.png'], tileSize: 256 } },
+      layers: [{ id: 'basemap-user-mytiles', type: 'raster', source: 'user-src-mytiles', paint: {} }],
+    };
+    registry.registerUserSource(entry);
+
+    expect(registry.getCatalogEntry('user-mytiles')).toBeTruthy();
+    expect(registry.getCatalogEntry('user-mytiles').userDefined).toBe(true);
+    expect(registry.getBasemaps().some(e => e.id === 'user-mytiles')).toBe(true);
+    expect(registry.getUserSources()).toHaveLength(1);
+  });
+
+  it('unregisterUserSource removes entry', () => {
+    registry.registerUserSource({ id: 'user-x', label: 'X', category: 'overlay', region: null, defaultView: null, sources: {}, layers: [] });
+    expect(registry.getCatalogEntry('user-x')).toBeTruthy();
+
+    const removed = registry.unregisterUserSource('user-x');
+    expect(removed).toBe(true);
+    expect(registry.getCatalogEntry('user-x')).toBeNull();
+    expect(registry.unregisterUserSource('user-x')).toBe(false);
+  });
+
+  it('clearUserSources removes all user entries', () => {
+    registry.registerUserSource({ id: 'user-a', label: 'A', category: 'basemap', region: null, defaultView: null, sources: {}, layers: [] });
+    registry.registerUserSource({ id: 'user-b', label: 'B', category: 'basemap', region: null, defaultView: null, sources: {}, layers: [] });
+    expect(registry.getUserSources()).toHaveLength(2);
+
+    registry.clearUserSources();
+    expect(registry.getUserSources()).toHaveLength(0);
+    expect(registry.getCatalogEntry('user-a')).toBeNull();
+  });
+
+  it('registerUserSource replaces existing entry with same id', () => {
+    registry.registerUserSource({ id: 'user-dup', label: 'V1', category: 'basemap', region: null, defaultView: null, sources: {}, layers: [] });
+    registry.registerUserSource({ id: 'user-dup', label: 'V2', category: 'basemap', region: null, defaultView: null, sources: {}, layers: [] });
+    expect(registry.getUserSources()).toHaveLength(1);
+    expect(registry.getCatalogEntry('user-dup').label).toBe('V2');
+  });
+
+  it('user sources do not shadow built-in entries', () => {
+    // Built-in 'osm' should still exist
+    expect(registry.getCatalogEntry('osm')).toBeTruthy();
+    expect(registry.getCatalogEntry('osm').userDefined).toBeUndefined();
+  });
+
+  it('getBasemaps includes user basemaps', () => {
+    const builtInCount = registry.getBasemaps().length;
+    registry.registerUserSource({ id: 'user-bm', label: 'UBM', category: 'basemap', region: null, defaultView: null, sources: {}, layers: [] });
+    expect(registry.getBasemaps().length).toBe(builtInCount + 1);
+  });
+
+  it('getOverlays includes user overlays', () => {
+    const builtInCount = registry.getOverlays().length;
+    registry.registerUserSource({ id: 'user-ov', label: 'UOV', category: 'overlay', region: null, defaultView: null, sources: {}, layers: [] });
+    expect(registry.getOverlays().length).toBe(builtInCount + 1);
+  });
+
+  it('buildCatalogEntryFromTileSource creates valid entry for mbtiles', () => {
+    const src = { name: 'alps-topo', path: '/data/alps.mbtiles', kind: 'mbtiles' };
+    const entry = registry.buildCatalogEntryFromTileSource(src, 'http://127.0.0.1:14321');
+
+    expect(entry.id).toBe('user-alps-topo');
+    expect(entry.label).toBe('alps-topo');
+    expect(entry.category).toBe('basemap');
+    expect(entry.userDefined).toBe(true);
+    expect(entry.localPath).toBe('/data/alps.mbtiles');
+    expect(entry.tileSourceKind).toBe('mbtiles');
+    expect(entry.sources['user-src-alps-topo'].tiles[0]).toContain('/tiles/alps-topo/');
+    expect(entry.layers).toHaveLength(1);
+    expect(entry.layers[0].id).toBe('basemap-user-alps-topo');
+  });
+
+  it('buildCatalogEntryFromTileSource creates valid entry for pmtiles', () => {
+    const src = { name: 'satellite', path: '/data/sat.pmtiles', kind: 'pmtiles' };
+    const entry = registry.buildCatalogEntryFromTileSource(src, 'http://127.0.0.1:14321', 'overlay');
+
+    expect(entry.id).toBe('user-satellite');
+    expect(entry.category).toBe('overlay');
+    expect(entry.tileSourceKind).toBe('pmtiles');
+  });
+
+  it('buildCatalogSources includes user sources', () => {
+    const entry = registry.buildCatalogEntryFromTileSource(
+      { name: 'test', path: '/x.mbtiles', kind: 'mbtiles' },
+      'http://localhost:14321'
+    );
+    registry.registerUserSource(entry);
+    const sources = registry.buildCatalogSources();
+    expect(sources['user-src-test']).toBeTruthy();
+  });
+
+  it('buildCatalogLayers includes user layers', () => {
+    const entry = registry.buildCatalogEntryFromTileSource(
+      { name: 'test2', path: '/x.mbtiles', kind: 'mbtiles' },
+      'http://localhost:14321'
+    );
+    registry.registerUserSource(entry);
+    const layers = registry.buildCatalogLayers();
+    expect(layers.some(l => l.id === 'basemap-user-test2')).toBe(true);
+  });
+});
+
 describe('layer-engine style basemaps', () => {
   beforeEach(() => {
     vi.resetModules();

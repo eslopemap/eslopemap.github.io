@@ -371,9 +371,93 @@ export const LAYER_CATALOG = [
   },
 ];
 
+// ── Dynamic user source registry ─────────────────────────────────────
+
+/** @type {CatalogEntry[]} */
+const _userSources = [];
+
+/**
+ * Register a user-defined tile source as a catalog entry.
+ * If an entry with the same id already exists it is replaced.
+ * @param {CatalogEntry} entry — must have `userDefined: true`
+ */
+export function registerUserSource(entry) {
+  if (!entry || !entry.id) throw new Error('entry.id is required');
+  unregisterUserSource(entry.id);
+  _userSources.push({ ...entry, userDefined: true });
+  _rebuildIndex();
+}
+
+/** Remove a user source by id. Returns true if found. */
+export function unregisterUserSource(id) {
+  const idx = _userSources.findIndex(e => e.id === id);
+  if (idx >= 0) { _userSources.splice(idx, 1); _rebuildIndex(); return true; }
+  return false;
+}
+
+/** Remove all user sources. */
+export function clearUserSources() {
+  _userSources.length = 0;
+  _rebuildIndex();
+}
+
+/** Read-only snapshot of current user sources. */
+export function getUserSources() {
+  return [..._userSources];
+}
+
+/**
+ * Build a CatalogEntry from a Tauri TileSourceEntry.
+ * @param {{name: string, path: string, kind: 'mbtiles'|'pmtiles'}} src
+ * @param {string} tileBaseUrl — e.g. 'http://127.0.0.1:14321'
+ * @param {'basemap'|'overlay'} [category='basemap']
+ * @returns {CatalogEntry}
+ */
+export function buildCatalogEntryFromTileSource(src, tileBaseUrl, category = 'basemap') {
+  const id = `user-${src.name}`;
+  const ext = src.kind === 'pmtiles' ? 'png' : 'png'; // default; MBTiles metadata could refine this
+  const sourceId = `user-src-${src.name}`;
+  return {
+    id,
+    label: src.name,
+    category,
+    region: null,
+    defaultView: null,
+    userDefined: true,
+    localPath: src.path,
+    tileSourceKind: src.kind,
+    sources: {
+      [sourceId]: {
+        type: 'raster',
+        tiles: [`${tileBaseUrl}/tiles/${encodeURIComponent(src.name)}/{z}/{x}/{y}.${ext}`],
+        tileSize: 256,
+        maxzoom: 18,
+      }
+    },
+    layers: [
+      {
+        id: `basemap-${id}`,
+        type: 'raster',
+        source: sourceId,
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      }
+    ]
+  };
+}
+
 // ── Lookup helpers ──────────────────────────────────────────────────
 
-const _byId = new Map(LAYER_CATALOG.map(e => [e.id, e]));
+let _byId = new Map(LAYER_CATALOG.map(e => [e.id, e]));
+
+/** Rebuild the lookup index after user sources change. */
+function _rebuildIndex() {
+  _byId = new Map([...LAYER_CATALOG, ..._userSources].map(e => [e.id, e]));
+}
+
+/** All catalog entries (built-in + user). */
+export function getAllEntries() {
+  return [...LAYER_CATALOG, ..._userSources];
+}
 
 /** Get a catalog entry by id */
 export function getCatalogEntry(id) {
@@ -382,12 +466,12 @@ export function getCatalogEntry(id) {
 
 /** All basemap entries */
 export function getBasemaps() {
-  return LAYER_CATALOG.filter(e => e.category === 'basemap');
+  return getAllEntries().filter(e => e.category === 'basemap');
 }
 
 /** All overlay entries */
 export function getOverlays() {
-  return LAYER_CATALOG.filter(e => e.category === 'overlay');
+  return getAllEntries().filter(e => e.category === 'overlay');
 }
 
 /** All MapLibre layer IDs owned by a catalog entry */
@@ -409,7 +493,7 @@ export function getAllOverlayLayerIds() {
 /** Build aggregated sources object from the full catalog (for initial style) */
 export function buildCatalogSources() {
   const sources = {};
-  for (const entry of LAYER_CATALOG) {
+  for (const entry of getAllEntries()) {
     Object.assign(sources, entry.sources);
   }
   return sources;
@@ -418,7 +502,7 @@ export function buildCatalogSources() {
 /** Build aggregated layers array from the full catalog (all start hidden) */
 export function buildCatalogLayers() {
   const layers = [];
-  for (const entry of LAYER_CATALOG) {
+  for (const entry of getAllEntries()) {
     for (const layer of entry.layers) {
       layers.push({
         ...layer,
