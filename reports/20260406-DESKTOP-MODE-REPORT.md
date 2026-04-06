@@ -39,14 +39,39 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - [x] GPX sync event listener in main.js: auto-imports tracks on file_added/file_changed
 - [x] Logs file_removed and conflict events (UI handling deferred to next iteration)
 
+### Phase 5: Conflict Detection UI ✅
+
+- [x] Simple `confirm()` dialog on GPX sync conflict (OK=disk, Cancel=keep app)
+- [x] Calls `resolveConflict` IPC with user's choice
+
+### Phase 6: DEM Loading E2E Test ✅
+
+- [x] `tests/e2e/dem-loading.spec.js` — basemap=none + mode=color-relief at zoom 10
+- [x] Reads WebGL pixels inside `render` event (avoids buffer-clear issue)
+- [x] Confirms DEM loads correctly in web mode (47% non-white pixels, 21 tile requests at z10)
+
+### Phase 7: Dynamic Tile Source Management ✅
+
+- [x] `SharedTileSources` (Arc<Mutex>) for runtime add/remove
+- [x] `TileSourceKind` enum: Mbtiles (working) + Pmtiles (501 stub)
+- [x] `detect_source_kind()` auto-detects .mbtiles/.pmtiles extensions
+- [x] Tauri commands: `add_tile_source`, `list_tile_sources`, `remove_tile_source`
+- [x] JS bridge: `addTileSource`, `listTileSources`, `removeTileSource`
+
+### Phase 8: Unified Basemap UI Plan ✅
+
+- [x] Detailed plan in `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md`
+- Multi-basemap stack, merged online+local catalog, folder scanning, PMTiles support
+
 ### Test Summary
 
 | Suite | Count | Status |
 |---|---|---|
-| Rust unit tests (cargo test) | 24 | ✅ all pass |
-| JS unit tests (vitest) | 53 | ✅ all pass (14 new bridge + 39 existing) |
+| Rust unit tests (cargo test) | 26 | ✅ all pass |
+| JS unit tests (vitest) | 57 | ✅ all pass (18 bridge + 39 existing) |
 | Playwright e2e (persist) | 5 | ✅ pass |
 | Playwright e2e (track-import) | 12 | ✅ pass |
+| Playwright e2e (dem-loading) | 1 | ✅ pass |
 
 ## Decisions Made
 
@@ -65,14 +90,16 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - `src-tauri/build.rs` — standard tauri-build
 - `src-tauri/tauri.conf.json` — app config, frontendDist=../app
 - `src-tauri/capabilities/default.json` — core + dialog + shell permissions
-- `src-tauri/src/main.rs` — entry point, state mgmt, 9 Tauri commands, setup hook
+- `src-tauri/src/main.rs` — entry point, state mgmt, 12 Tauri commands, setup hook
 - `src-tauri/src/gpx_sync.rs` — file-centric sync manager (15 tests)
-- `src-tauri/src/tile_server.rs` — localhost MBTiles tile server (7 tests)
+- `src-tauri/src/tile_server.rs` — localhost tile server with shared source registry (9 tests)
 - `app/js/tauri-bridge.js` — runtime adapter module
-- `tests/unit/tauri-bridge.test.mjs` — 14 bridge unit tests
+- `tests/unit/tauri-bridge.test.mjs` — 18 bridge unit tests
+- `tests/e2e/dem-loading.spec.js` — DEM rendering regression test
+- `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md` — unified basemap UI plan
 
 ### Modified files
-- `app/js/main.js` — import getDemTileUrl, replace hardcoded DEM URLs
+- `app/js/main.js` — DEM tile URLs via bridge, GPX sync listener, conflict UI
 - `app/js/io.js` — import bridge, add Tauri-aware openFolder/saveToFolder
 
 ## Commits
@@ -82,12 +109,16 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 3. `f7c1ada` feat: wire DEM tile URLs through tauri-bridge in main.js
 4. `1a71790` feat: wire tauri-bridge into io.js for desktop folder open/save
 5. `f81a354` feat: add GPX sync event listener in main.js for desktop auto-reload
+6. `560c40d` chore: update desktop mode report with final progress and next steps
+7. `559bb0d` feat: add DEM loading e2e test (color-relief non-white check)
+8. `9e095f5` feat: simple conflict detection UI via confirm() dialog
+9. `65b84b9` feat: add dynamic MBTiles/PMTiles tile source management
 
 ## Next Steps
 
-- [ ] Add MBTiles source configuration command (allow user to point to their tile files)
-- [ ] Conflict resolution UI (prompt user to keep disk or app version)
+- [ ] Implement unified basemap UI (see `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md`)
+- [ ] PMTiles serving implementation (replace 501 stub)
 - [ ] File removal handling (remove tracks from map when GPX deleted on disk)
 - [ ] Tauri integration tests (WebDriver-based, as in spike_demo)
 - [ ] Bundle and test on macOS (`cargo tauri build`)
-- [ ] Add desktop-specific UI elements (e.g. native menu bar, window title with folder name)
+- [ ] Desktop-specific UI: native menu bar, window title with folder name
