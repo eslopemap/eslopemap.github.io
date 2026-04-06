@@ -277,7 +277,14 @@ fn main() {
                 r#"window.__SLOPE_RUNTIME__ = 'tauri';
 window.__SLOPE_DESKTOP_CONFIG__ = {{
     tileBaseUrl: 'http://127.0.0.1:{tile_port_val}'
-}};"#
+}};
+// Forward uncaught JS errors to console.error so they appear in cargo tauri dev output
+window.addEventListener('error', function(e) {{
+    console.error('[SLOPE JS ERROR]', e.message, 'at', e.filename + ':' + e.lineno + ':' + e.colno);
+}});
+window.addEventListener('unhandledrejection', function(e) {{
+    console.error('[SLOPE UNHANDLED REJECTION]', e.reason);
+}});"#
             );
             window.eval(&script).ok();
             Ok(())
