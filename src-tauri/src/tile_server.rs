@@ -2,13 +2,44 @@
 // Refactored from spike_demo/shared_backend + spike_demo/mbtiles_to_localhost.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use http::StatusCode;
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Response, Server};
 
 pub const DEFAULT_TILE_PORT: u16 = 14321;
+
+// ---------------------------------------------------------------------------
+// Tile source types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TileSourceKind {
+    Mbtiles,
+    Pmtiles,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TileSourceEntry {
+    pub name: String,
+    pub path: PathBuf,
+    pub kind: TileSourceKind,
+}
+
+pub type SharedTileSources = Arc<Mutex<Vec<TileSourceEntry>>>;
+
+/// Detect source kind from file extension.
+pub fn detect_source_kind(path: &Path) -> Option<TileSourceKind> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "mbtiles" => Some(TileSourceKind::Mbtiles),
+        "pmtiles" => Some(TileSourceKind::Pmtiles),
+        _ => None,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Tile request/response types
@@ -81,14 +112,14 @@ pub fn load_tile_bytes(mbtiles_path: &Path, z: u32, x: u32, y: u32) -> Result<Op
     Ok(None)
 }
 
-/// Resolve a tile request against a known MBTiles source.
+/// Resolve a tile request against known sources.
 pub fn resolve_tile_request(
-    sources: &[(String, PathBuf)],
+    sources: &[TileSourceEntry],
     request: &TileRequest,
 ) -> TileResponse {
-    let mbtiles_path = sources.iter().find(|(name, _)| name == &request.source).map(|(_, p)| p);
+    let entry = sources.iter().find(|e| e.name == request.source);
 
-    let Some(mbtiles_path) = mbtiles_path else {
+    let Some(entry) = entry else {
         return TileResponse {
             status: 404,
             content_type: "text/plain; charset=utf-8",
@@ -96,6 +127,21 @@ pub fn resolve_tile_request(
         };
     };
 
+    match entry.kind {
+        TileSourceKind::Mbtiles => resolve_mbtiles_request(&entry.path, request),
+        TileSourceKind::Pmtiles => {
+            // PMTiles support is a stub — returns 501 for now.
+            // Full implementation will use the pmtiles crate.
+            TileResponse {
+                status: 501,
+                content_type: "text/plain; charset=utf-8",
+                body: b"PMTiles serving not yet implemented".to_vec(),
+            }
+        }
+    }
+}
+
+fn resolve_mbtiles_request(mbtiles_path: &Path, request: &TileRequest) -> TileResponse {
     match load_tile_bytes(mbtiles_path, request.z, request.x, request.y) {
         Ok(Some(bytes)) => TileResponse {
             status: 200,
@@ -123,8 +169,8 @@ pub fn resolve_tile_request(
 // ---------------------------------------------------------------------------
 
 /// Spawn a localhost-only tile server on the given port.
-/// `sources` maps source names to MBTiles file paths.
-pub fn spawn_tile_server(port: u16, sources: Vec<(String, PathBuf)>) {
+/// Sources are shared so they can be added/removed at runtime.
+pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
     thread::spawn(move || {
         let addr = format!("127.0.0.1:{port}");
         let server = match Server::http(&addr) {
@@ -135,8 +181,10 @@ pub fn spawn_tile_server(port: u16, sources: Vec<(String, PathBuf)>) {
             }
         };
         println!("[tile-server] listening on http://{addr}");
-        for (name, path) in &sources {
-            println!("[tile-server] source '{name}' -> {}", path.display());
+        if let Ok(srcs) = sources.lock() {
+            for entry in srcs.iter() {
+                println!("[tile-server] source '{}' ({:?}) -> {}", entry.name, entry.kind, entry.path.display());
+            }
         }
 
         for request in server.incoming_requests() {
@@ -146,7 +194,10 @@ pub fn spawn_tile_server(port: u16, sources: Vec<(String, PathBuf)>) {
                 continue;
             };
 
-            let tile_response = resolve_tile_request(&sources, &parsed);
+            let tile_response = {
+                let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
+                resolve_tile_request(&srcs, &parsed)
+            };
             let mut response = Response::from_data(tile_response.body)
                 .with_status_code(tile_response.status);
             if let Ok(header) = Header::from_bytes("Content-Type", tile_response.content_type) {
@@ -251,12 +302,40 @@ mod tests {
 
     #[test]
     fn resolve_returns_404_for_unknown_source() {
-        let sources = vec![("known".to_string(), PathBuf::from("/nonexistent"))];
+        let sources = vec![TileSourceEntry {
+            name: "known".to_string(),
+            path: PathBuf::from("/nonexistent"),
+            kind: TileSourceKind::Mbtiles,
+        }];
         let req = TileRequest {
             source: "unknown".to_string(),
             z: 1, x: 0, y: 0, ext: "png".to_string(),
         };
         let resp = resolve_tile_request(&sources, &req);
         assert_eq!(resp.status, 404);
+    }
+
+    #[test]
+    fn detects_source_kinds() {
+        assert_eq!(detect_source_kind(Path::new("foo.mbtiles")), Some(TileSourceKind::Mbtiles));
+        assert_eq!(detect_source_kind(Path::new("bar.pmtiles")), Some(TileSourceKind::Pmtiles));
+        assert_eq!(detect_source_kind(Path::new("baz.MBTILES")), Some(TileSourceKind::Mbtiles));
+        assert_eq!(detect_source_kind(Path::new("nope.zip")), None);
+        assert_eq!(detect_source_kind(Path::new("noext")), None);
+    }
+
+    #[test]
+    fn pmtiles_returns_501_stub() {
+        let sources = vec![TileSourceEntry {
+            name: "pm".to_string(),
+            path: PathBuf::from("/some/file.pmtiles"),
+            kind: TileSourceKind::Pmtiles,
+        }];
+        let req = TileRequest {
+            source: "pm".to_string(),
+            z: 1, x: 0, y: 0, ext: "png".to_string(),
+        };
+        let resp = resolve_tile_request(&sources, &req);
+        assert_eq!(resp.status, 501);
     }
 }

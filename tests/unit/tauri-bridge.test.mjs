@@ -8,6 +8,7 @@ import {
   getDesktopConfig, onGpxSyncEvents,
   pickAndWatchFolder, listFolderGpx, loadGpx, markDirty,
   saveGpxFile, acceptChange, resolveConflict, getSnapshot,
+  addTileSource, listTileSources, removeTileSource,
 } from '../../app/js/tauri-bridge.js';
 
 function clearGlobals() {
@@ -54,6 +55,12 @@ describe('tauri-bridge in web mode (default)', () => {
     await expect(acceptChange('/tmp/a.gpx')).rejects.toThrow('requires Tauri');
     await expect(resolveConflict('/tmp/a.gpx', 'disk')).rejects.toThrow('requires Tauri');
     await expect(getSnapshot()).rejects.toThrow('requires Tauri');
+  });
+
+  it('tile source commands: listTileSources returns empty in web, add/remove throw', async () => {
+    expect(await listTileSources()).toEqual([]);
+    await expect(addTileSource('dem', '/tmp/dem.mbtiles')).rejects.toThrow('requires Tauri');
+    await expect(removeTileSource('dem')).rejects.toThrow('requires Tauri');
   });
 });
 
@@ -127,5 +134,24 @@ describe('tauri-bridge in desktop mode', () => {
   it('onGpxSyncEvents registers listener', async () => {
     const unlisten = await onGpxSyncEvents(() => {});
     expect(typeof unlisten).toBe('function');
+  });
+
+  it('addTileSource invokes correct command', async () => {
+    await addTileSource('dem', '/tmp/dem.mbtiles');
+    expect(invokeLog).toEqual([
+      { cmd: 'add_tile_source', args: { name: 'dem', path: '/tmp/dem.mbtiles' } },
+    ]);
+  });
+
+  it('listTileSources invokes correct command', async () => {
+    await listTileSources();
+    expect(invokeLog.some(l => l.cmd === 'list_tile_sources')).toBe(true);
+  });
+
+  it('removeTileSource invokes correct command', async () => {
+    await removeTileSource('dem');
+    expect(invokeLog).toEqual([
+      { cmd: 'remove_tile_source', args: { name: 'dem' } },
+    ]);
   });
 });

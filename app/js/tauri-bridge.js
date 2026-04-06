@@ -146,6 +146,25 @@ export async function getDesktopConfig() {
 }
 
 // ---------------------------------------------------------------------------
+// Tile source management (desktop only)
+// ---------------------------------------------------------------------------
+
+export async function addTileSource(name, path) {
+  if (!isTauri()) throw new Error('addTileSource requires Tauri');
+  return invoke('add_tile_source', { name, path });
+}
+
+export async function listTileSources() {
+  if (!isTauri()) return [];
+  return invoke('list_tile_sources');
+}
+
+export async function removeTileSource(name) {
+  if (!isTauri()) throw new Error('removeTileSource requires Tauri');
+  return invoke('remove_tile_source', { name });
+}
+
+// ---------------------------------------------------------------------------
 // Event listeners (desktop only)
 // ---------------------------------------------------------------------------
 

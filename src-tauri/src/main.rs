@@ -12,6 +12,7 @@ use std::sync::Mutex;
 use gpx_sync::{
     new_shared_manager, start_watcher, FileState, FolderSnapshot, SharedSyncManager,
 };
+use tile_server::{SharedTileSources, TileSourceEntry, TileSourceKind, detect_source_kind};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -24,6 +25,7 @@ struct AppState {
     #[allow(dead_code)]
     watcher: Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>>,
     tile_port: u16,
+    tile_sources: SharedTileSources,
 }
 
 type ManagedState = Mutex<AppState>;
@@ -147,6 +149,60 @@ fn get_snapshot(state: State<'_, ManagedState>) -> Result<FolderSnapshot, String
 }
 
 // ---------------------------------------------------------------------------
+// Tauri commands — tile source management
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn add_tile_source(
+    state: State<'_, ManagedState>,
+    name: String,
+    path: String,
+) -> Result<TileSourceEntry, String> {
+    let file_path = PathBuf::from(&path);
+    if !file_path.exists() {
+        return Err(format!("File not found: {path}"));
+    }
+    let kind = detect_source_kind(&file_path)
+        .ok_or_else(|| format!("Unsupported file type: {path}. Use .mbtiles or .pmtiles"))?;
+
+    let entry = TileSourceEntry {
+        name: name.clone(),
+        path: file_path,
+        kind,
+    };
+
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let mut sources = app_state.tile_sources.lock().map_err(|e| e.to_string())?;
+
+    // Replace existing source with same name
+    sources.retain(|e| e.name != name);
+    sources.push(entry.clone());
+    println!("[tile-server] added source '{}' ({:?}) -> {}", entry.name, entry.kind, entry.path.display());
+
+    Ok(entry)
+}
+
+#[tauri::command]
+fn list_tile_sources(state: State<'_, ManagedState>) -> Result<Vec<TileSourceEntry>, String> {
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let sources = app_state.tile_sources.lock().map_err(|e| e.to_string())?;
+    Ok(sources.clone())
+}
+
+#[tauri::command]
+fn remove_tile_source(state: State<'_, ManagedState>, name: String) -> Result<bool, String> {
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let mut sources = app_state.tile_sources.lock().map_err(|e| e.to_string())?;
+    let before = sources.len();
+    sources.retain(|e| e.name != name);
+    let removed = sources.len() < before;
+    if removed {
+        println!("[tile-server] removed source '{name}'");
+    }
+    Ok(removed)
+}
+
+// ---------------------------------------------------------------------------
 // Tauri commands — desktop config
 // ---------------------------------------------------------------------------
 
@@ -173,15 +229,21 @@ fn main() {
     let manager = new_shared_manager();
     let tile_port = tile_server::DEFAULT_TILE_PORT;
 
-    // Start the tile server (initially with no sources; sources added via commands later)
-    // For now, serve the test fixture if it exists
+    // Shared tile source registry
+    let tile_sources: SharedTileSources = std::sync::Arc::new(Mutex::new(Vec::new()));
+
+    // Seed with test fixture if it exists
     let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../tests/fixtures/tiles/dummy-z1-z3.mbtiles");
-    let mut sources = Vec::new();
     if fixture_path.exists() {
-        sources.push(("dummy".to_string(), fixture_path));
+        tile_sources.lock().unwrap().push(TileSourceEntry {
+            name: "dummy".to_string(),
+            path: fixture_path,
+            kind: TileSourceKind::Mbtiles,
+        });
     }
-    tile_server::spawn_tile_server(tile_port, sources);
+
+    tile_server::spawn_tile_server(tile_port, tile_sources.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -190,6 +252,7 @@ fn main() {
             manager,
             watcher: None,
             tile_port,
+            tile_sources,
         }))
         .invoke_handler(tauri::generate_handler![
             pick_and_watch_folder,
@@ -201,6 +264,9 @@ fn main() {
             resolve_conflict,
             get_snapshot,
             get_desktop_config,
+            add_tile_source,
+            list_tile_sources,
+            remove_tile_source,
         ])
         .setup(move |app| {
             // Inject the desktop bootstrap globals into the webview
