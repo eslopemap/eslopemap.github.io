@@ -3,6 +3,7 @@
 
 import { parseGPX as gpxjsParse, stringifyGPX } from '@we-gold/gpxjs';
 import { downloadFile } from './utils.js';
+import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile, onGpxSyncEvents } from './tauri-bridge.js';
 
 let tracksFns = {};  // wired at init
 
@@ -615,10 +616,10 @@ export function initIO(deps) {
     openFolderBtn.addEventListener('click', openFolder);
   }
 
-  // Save to folder button (only if File System Access API available)
+  // Save to folder button (File System Access API or Tauri IPC)
   const saveFolderBtn = document.getElementById('save-folder-btn');
   if (saveFolderBtn) {
-    if ('showDirectoryPicker' in window) {
+    if (isTauri() || 'showDirectoryPicker' in window) {
       saveFolderBtn.addEventListener('click', saveToFolder);
     } else {
       saveFolderBtn.style.display = 'none';
@@ -677,6 +678,13 @@ function openFile() {
 
 /** Open folder: use best available API */
 async function openFolder() {
+  // Desktop mode: use Tauri dialog + file watcher
+  if (isTauri()) {
+    try { await openFolderTauri(); } catch (e) {
+      console.error('[io] Tauri openFolder failed:', e);
+    }
+    return;
+  }
   if ('showDirectoryPicker' in window) {
     try { await openDirectoryPicker(); return; } catch (e) {
       if (e.name === 'AbortError') return; // user cancelled
@@ -686,8 +694,48 @@ async function openFolder() {
   openDirectoryInput();
 }
 
+/** Desktop: pick folder via Tauri dialog, scan + watch for GPX files */
+async function openFolderTauri() {
+  // Use Tauri dialog plugin to pick a folder
+  const internals = globalThis.__TAURI_INTERNALS__ ?? globalThis.__TAURI__;
+  let folderPath;
+  if (internals?.invoke) {
+    // Use the dialog plugin's open command
+    folderPath = await internals.invoke('plugin:dialog|open', {
+      directory: true,
+      multiple: false,
+      title: 'Open GPX Folder',
+    });
+  }
+  if (!folderPath) return; // user cancelled
+
+  const result = await pickAndWatchFolder(folderPath);
+  if (!result?.snapshot?.files?.length) {
+    console.info('[io] Folder has no GPX files:', folderPath);
+    return;
+  }
+
+  // Load and import each GPX file from the snapshot
+  for (const fileState of result.snapshot.files) {
+    try {
+      const content = await loadGpx(fileState.path);
+      const name = fileState.path.split('/').pop() || 'track.gpx';
+      importFileContent(name, content);
+    } catch (e) {
+      console.warn('[io] Failed to load GPX:', fileState.path, e);
+    }
+  }
+}
+
 /** Save all tracks to a folder (Tier 1 only — File System Access API) */
 async function saveToFolder() {
+  // Desktop mode: save via Tauri IPC (atomic writes + watcher suppression)
+  if (isTauri()) {
+    try { await saveToFolderTauri(); } catch (e) {
+      console.error('[io] Tauri saveToFolder failed:', e);
+    }
+    return;
+  }
   const tracks = tracksFns.getTracks();
   if (!tracks.length) return;
   const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
@@ -697,6 +745,39 @@ async function saveToFolder() {
     const writable = await fileHandle.createWritable();
     await writable.write(buildTrackGPXString(t.name, t.coords));
     await writable.close();
+  }
+}
+
+/** Desktop: save tracks to the watched folder via Tauri IPC */
+async function saveToFolderTauri() {
+  const tracks = tracksFns.getTracks();
+  if (!tracks.length) return;
+
+  // Use Tauri dialog to pick a folder if none is being watched
+  const internals = globalThis.__TAURI_INTERNALS__ ?? globalThis.__TAURI__;
+  let snapshot;
+  try {
+    const { getSnapshot } = await import('./tauri-bridge.js');
+    snapshot = await getSnapshot();
+  } catch { /* ignore */ }
+
+  let folder = snapshot?.folder;
+  if (!folder) {
+    if (internals?.invoke) {
+      folder = await internals.invoke('plugin:dialog|open', {
+        directory: true,
+        multiple: false,
+        title: 'Save GPX Files To',
+      });
+    }
+    if (!folder) return;
+  }
+
+  for (const t of tracks) {
+    const safeName = t.name.replace(/[^a-z0-9._-]/gi, '_');
+    const filePath = `${folder}/${safeName}.gpx`;
+    const gpxContent = buildTrackGPXString(t.name, t.coords);
+    await saveGpxFile(filePath, gpxContent);
   }
 }
 
