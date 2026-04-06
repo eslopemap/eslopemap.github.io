@@ -39,6 +39,7 @@ import { describeOperationConsequence } from './track-ops.js';
 import { initWebImport } from './web-import.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
+import { getDemTileUrl } from './tauri-bridge.js';
 
 // ---- State (reactive via Proxy) ----
 const state = createStore(STATE_DEFAULTS);
@@ -218,8 +219,10 @@ function scheduleSettingsSave() {
 
 // ---- Contour line source ----
 
+const demTileUrl = getDemTileUrl();
+
 const demContourSource = new mlcontour.DemSource({
-  url: 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp',
+  url: demTileUrl,
   encoding: 'terrarium',
   maxzoom: 12,
   worker: true
@@ -253,7 +256,7 @@ function buildContourSourceDefinition() {
 function buildTerrainSourceDefinition() {
   return {
     type: 'raster-dem',
-    tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+    tiles: [demTileUrl],
     tileSize: 512,
     maxzoom: DEM_MAX_Z,
     encoding: 'terrarium'
