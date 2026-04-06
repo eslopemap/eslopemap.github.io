@@ -39,7 +39,7 @@ import { describeOperationConsequence } from './track-ops.js';
 import { initWebImport } from './web-import.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
-import { getDemTileUrl, isTauri, onGpxSyncEvents } from './tauri-bridge.js';
+import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx } from './tauri-bridge.js';
 
 // ---- State (reactive via Proxy) ----
 const state = createStore(STATE_DEFAULTS);
@@ -1383,9 +1383,21 @@ if (isTauri()) {
         case 'file_removed':
           console.info(`[gpx-sync] removed: ${event.path}`);
           break;
-        case 'conflict':
-          console.warn(`[gpx-sync] conflict: ${event.path}`);
+        case 'conflict': {
+          const cName = event.path.split('/').pop() || 'file';
+          console.warn(`[gpx-sync] conflict: ${cName}`);
+          const keepDisk = confirm(
+            `"${cName}" was changed both on disk and in the app.\n\nOK = load disk version\nCancel = keep your edits`
+          );
+          resolveConflict(event.path, keepDisk ? 'disk' : 'app', null)
+            .then(() => {
+              if (keepDisk && event.disk_content) {
+                importFileContent(cName, event.disk_content);
+              }
+            })
+            .catch(e => console.error('[gpx-sync] resolve failed:', e));
           break;
+        }
         default:
           console.debug('[gpx-sync] unhandled event:', event);
       }
