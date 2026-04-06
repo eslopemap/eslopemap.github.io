@@ -39,7 +39,7 @@ import { describeOperationConsequence } from './track-ops.js';
 import { initWebImport } from './web-import.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
-import { getDemTileUrl } from './tauri-bridge.js';
+import { getDemTileUrl, isTauri, onGpxSyncEvents } from './tauri-bridge.js';
 
 // ---- State (reactive via Proxy) ----
 const state = createStore(STATE_DEFAULTS);
@@ -1366,6 +1366,32 @@ window.addEventListener('hashchange', async () => {
 map.on('error', (e) => {
   console.error('Map error:', e && e.error ? e.error.message : e);
 });
+
+// ---- Desktop: GPX sync event listener ----
+
+if (isTauri()) {
+  onGpxSyncEvents((events) => {
+    for (const event of events) {
+      switch (event.kind) {
+        case 'file_added':
+        case 'file_changed': {
+          const name = event.path.split('/').pop() || 'track.gpx';
+          console.info(`[gpx-sync] ${event.kind}: ${name}`);
+          importFileContent(name, event.content);
+          break;
+        }
+        case 'file_removed':
+          console.info(`[gpx-sync] removed: ${event.path}`);
+          break;
+        case 'conflict':
+          console.warn(`[gpx-sync] conflict: ${event.path}`);
+          break;
+        default:
+          console.debug('[gpx-sync] unhandled event:', event);
+      }
+    }
+  }).catch(e => console.warn('[gpx-sync] listener setup failed:', e));
+}
 
 // ---- Expose key variables for E2E tests ----
 
