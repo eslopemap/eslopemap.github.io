@@ -415,8 +415,28 @@ export function getUserSources() {
  */
 export function buildCatalogEntryFromTileSource(src, tileBaseUrl, category = 'basemap') {
   const id = `user-${src.name}`;
-  const ext = src.kind === 'pmtiles' ? 'png' : 'png'; // default; MBTiles metadata could refine this
   const sourceId = `user-src-${src.name}`;
+
+  let sourceDef;
+  if (src.kind === 'pmtiles') {
+    // PMTiles: use pmtiles:// protocol URL pointing at the local range-serving endpoint.
+    // The pmtiles JS library's Protocol class handles tile extraction via Range requests.
+    sourceDef = {
+      type: 'raster',
+      url: `pmtiles://${tileBaseUrl}/pmtiles/${encodeURIComponent(src.name)}`,
+      tileSize: 256,
+      maxzoom: 18,
+    };
+  } else {
+    // MBTiles: standard XYZ tile URL served by the tile server.
+    sourceDef = {
+      type: 'raster',
+      tiles: [`${tileBaseUrl}/tiles/${encodeURIComponent(src.name)}/{z}/{x}/{y}.png`],
+      tileSize: 256,
+      maxzoom: 18,
+    };
+  }
+
   return {
     id,
     label: src.name,
@@ -426,14 +446,7 @@ export function buildCatalogEntryFromTileSource(src, tileBaseUrl, category = 'ba
     userDefined: true,
     localPath: src.path,
     tileSourceKind: src.kind,
-    sources: {
-      [sourceId]: {
-        type: 'raster',
-        tiles: [`${tileBaseUrl}/tiles/${encodeURIComponent(src.name)}/{z}/{x}/{y}.${ext}`],
-        tileSize: 256,
-        maxzoom: 18,
-      }
-    },
+    sources: { [sourceId]: sourceDef },
     layers: [
       {
         id: `basemap-${id}`,

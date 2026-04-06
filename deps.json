@@ -77,6 +77,18 @@
       }
     },
     {
+      "name": "pmtiles",
+      "range": "^4",
+      "files": [
+        "dist/esm/index.js"
+      ],
+      "importMap": {
+        "app": {
+          "pmtiles": "dist/esm/index.js"
+        }
+      }
+    },
+    {
       "name": "chartjs-plugin-annotation",
       "range": "^3",
       "files": [

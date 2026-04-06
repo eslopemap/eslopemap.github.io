@@ -40,6 +40,7 @@ import { initWebImport } from './web-import.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx } from './tauri-bridge.js';
+import { initPmtilesProtocol } from './pmtiles-protocol.js';
 
 // ---- State (reactive via Proxy) ----
 const state = createStore(STATE_DEFAULTS);
@@ -228,6 +229,7 @@ const demContourSource = new mlcontour.DemSource({
   worker: true
 });
 demContourSource.setupMaplibre(maplibregl);
+initPmtilesProtocol(maplibregl);
 
 function buildContourSourceDefinition() {
   return {

@@ -1,6 +1,9 @@
-// Localhost tile server for offline MBTiles serving.
-// Refactored from spike_demo/shared_backend + spike_demo/mbtiles_to_localhost.
+// Localhost tile server for offline MBTiles + PMTiles serving.
+// MBTiles: served via /tiles/{source}/{z}/{x}/{y}.{ext} (server-side tile lookup)
+// PMTiles: served via /pmtiles/{source} with HTTP Range support (client-side tile extraction)
 
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -130,12 +133,12 @@ pub fn resolve_tile_request(
     match entry.kind {
         TileSourceKind::Mbtiles => resolve_mbtiles_request(&entry.path, request),
         TileSourceKind::Pmtiles => {
-            // PMTiles support is a stub — returns 501 for now.
-            // Full implementation will use the pmtiles crate.
+            // PMTiles sources are served via /pmtiles/{source} with Range support.
+            // Individual /tiles/ requests are not supported for PMTiles.
             TileResponse {
-                status: 501,
+                status: 400,
                 content_type: "text/plain; charset=utf-8",
-                body: b"PMTiles serving not yet implemented".to_vec(),
+                body: b"Use /pmtiles/{source} with Range requests for PMTiles".to_vec(),
             }
         }
     }
@@ -165,11 +168,107 @@ fn resolve_mbtiles_request(mbtiles_path: &Path, request: &TileRequest) -> TileRe
 }
 
 // ---------------------------------------------------------------------------
+// PMTiles range serving
+// ---------------------------------------------------------------------------
+
+/// Parse `/pmtiles/<source>` from an HTTP request path.
+pub fn parse_pmtiles_path(path: &str) -> Option<String> {
+    let clean = path.split('?').next()?;
+    let segs: Vec<&str> = clean.trim_start_matches('/').split('/').collect();
+    if segs.len() == 2 && segs[0] == "pmtiles" && !segs[1].is_empty() {
+        Some(segs[1].to_string())
+    } else {
+        None
+    }
+}
+
+/// Parse an HTTP Range header value like "bytes=100-199".
+fn parse_range_header(value: &str) -> Option<(u64, u64)> {
+    let s = value.strip_prefix("bytes=")?;
+    let (start_s, end_s) = s.split_once('-')?;
+    let start: u64 = start_s.parse().ok()?;
+    let end: u64 = if end_s.is_empty() {
+        u64::MAX // open-ended range
+    } else {
+        end_s.parse().ok()?
+    };
+    Some((start, end))
+}
+
+/// Serve a PMTiles file with HTTP Range support.
+/// Returns (status, content_type, body, extra_headers).
+fn serve_pmtiles_range(
+    file_path: &Path,
+    range_header: Option<&str>,
+) -> (u16, &'static str, Vec<u8>, Vec<(String, String)>) {
+    let mut file = match File::open(file_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[tile-server] pmtiles open error: {e}");
+            return (500, "text/plain", e.to_string().into_bytes(), vec![]);
+        }
+    };
+    let file_len = match file.metadata() {
+        Ok(m) => m.len(),
+        Err(e) => {
+            return (500, "text/plain", e.to_string().into_bytes(), vec![]);
+        }
+    };
+
+    let mut headers = vec![
+        ("Accept-Ranges".to_string(), "bytes".to_string()),
+    ];
+
+    if let Some(range_val) = range_header {
+        if let Some((start, end_req)) = parse_range_header(range_val) {
+            let end = end_req.min(file_len.saturating_sub(1));
+            if start >= file_len {
+                headers.push(("Content-Range".to_string(), format!("bytes */{file_len}")));
+                return (416, "text/plain", b"Range Not Satisfiable".to_vec(), headers);
+            }
+            let len = end - start + 1;
+            let mut buf = vec![0u8; len as usize];
+            if let Err(e) = file.seek(SeekFrom::Start(start)) {
+                return (500, "text/plain", format!("seek error: {e}").into_bytes(), vec![]);
+            }
+            match file.read_exact(&mut buf) {
+                Ok(()) => {}
+                Err(e) => {
+                    // Partial read at end of file
+                    let mut buf2 = vec![0u8; len as usize];
+                    let _ = file.seek(SeekFrom::Start(start));
+                    let n = file.read(&mut buf2).unwrap_or(0);
+                    if n == 0 {
+                        return (500, "text/plain", format!("read error: {e}").into_bytes(), vec![]);
+                    }
+                    buf2.truncate(n);
+                    let actual_end = start + n as u64 - 1;
+                    headers.push(("Content-Range".to_string(), format!("bytes {start}-{actual_end}/{file_len}")));
+                    return (206, "application/octet-stream", buf2, headers);
+                }
+            }
+            headers.push(("Content-Range".to_string(), format!("bytes {start}-{end}/{file_len}")));
+            return (206, "application/octet-stream", buf, headers);
+        }
+    }
+
+    // No Range header — serve entire file (for small files / initial probes)
+    let mut buf = Vec::with_capacity(file_len as usize);
+    if let Err(e) = file.read_to_end(&mut buf) {
+        return (500, "text/plain", e.to_string().into_bytes(), vec![]);
+    }
+    headers.push(("Content-Length".to_string(), file_len.to_string()));
+    (200, "application/octet-stream", buf, headers)
+}
+
+// ---------------------------------------------------------------------------
 // Tile server lifecycle
 // ---------------------------------------------------------------------------
 
 /// Spawn a localhost-only tile server on the given port.
-/// Sources are shared so they can be added/removed at runtime.
+/// Routes:
+/// - `/tiles/{source}/{z}/{x}/{y}.{ext}` — MBTiles tile lookup
+/// - `/pmtiles/{source}` — PMTiles file with Range support
 pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
     thread::spawn(move || {
         let addr = format!("127.0.0.1:{port}");
@@ -189,6 +288,55 @@ pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
 
         for request in server.incoming_requests() {
             let raw_url = request.url().to_string();
+
+            // --- CORS preflight ---
+            if request.method().as_str().eq_ignore_ascii_case("OPTIONS") {
+                let mut resp = Response::empty(204);
+                for (k, v) in [
+                    ("Access-Control-Allow-Origin", "*"),
+                    ("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS"),
+                    ("Access-Control-Allow-Headers", "Range"),
+                    ("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length"),
+                ] {
+                    if let Ok(h) = Header::from_bytes(k, v) { resp = resp.with_header(h); }
+                }
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            // --- PMTiles range serving ---
+            if let Some(source_name) = parse_pmtiles_path(&raw_url) {
+                let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
+                let entry = srcs.iter().find(|e| e.name == source_name && e.kind == TileSourceKind::Pmtiles);
+
+                if let Some(entry) = entry {
+                    let range_val = request.headers().iter()
+                        .find(|h| h.field.as_str() == "Range" || h.field.as_str() == "range")
+                        .map(|h| h.value.as_str().to_string());
+                    let file_path = entry.path.clone();
+                    drop(srcs); // release lock before I/O
+
+                    let (status, ct, body, extra_headers) =
+                        serve_pmtiles_range(&file_path, range_val.as_deref());
+
+                    let mut response = Response::from_data(body).with_status_code(status);
+                    if let Ok(h) = Header::from_bytes("Content-Type", ct) { response = response.with_header(h); }
+                    if let Ok(h) = Header::from_bytes("Access-Control-Allow-Origin", "*") { response = response.with_header(h); }
+                    if let Ok(h) = Header::from_bytes("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length") {
+                        response = response.with_header(h);
+                    }
+                    for (k, v) in extra_headers {
+                        if let Ok(h) = Header::from_bytes(k.as_bytes(), v.as_bytes()) { response = response.with_header(h); }
+                    }
+                    let _ = request.respond(response);
+                } else {
+                    drop(srcs);
+                    let _ = request.respond(Response::empty(StatusCode::NOT_FOUND.as_u16()));
+                }
+                continue;
+            }
+
+            // --- MBTiles tile serving ---
             let Some(parsed) = parse_tile_path(&raw_url) else {
                 let _ = request.respond(Response::empty(StatusCode::NOT_FOUND.as_u16()));
                 continue;
@@ -325,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn pmtiles_returns_501_stub() {
+    fn pmtiles_tile_request_returns_400() {
         let sources = vec![TileSourceEntry {
             name: "pm".to_string(),
             path: PathBuf::from("/some/file.pmtiles"),
@@ -336,6 +484,85 @@ mod tests {
             z: 1, x: 0, y: 0, ext: "png".to_string(),
         };
         let resp = resolve_tile_request(&sources, &req);
-        assert_eq!(resp.status, 501);
+        assert_eq!(resp.status, 400);
+    }
+
+    #[test]
+    fn parses_pmtiles_paths() {
+        assert_eq!(parse_pmtiles_path("/pmtiles/terrain"), Some("terrain".to_string()));
+        assert_eq!(parse_pmtiles_path("/pmtiles/my-source"), Some("my-source".to_string()));
+        assert_eq!(parse_pmtiles_path("/pmtiles/my-source?v=1"), Some("my-source".to_string()));
+        assert!(parse_pmtiles_path("/pmtiles/").is_none());
+        assert!(parse_pmtiles_path("/pmtiles").is_none());
+        assert!(parse_pmtiles_path("/tiles/src/1/2/3.png").is_none());
+    }
+
+    #[test]
+    fn parses_range_headers() {
+        assert_eq!(parse_range_header("bytes=0-99"), Some((0, 99)));
+        assert_eq!(parse_range_header("bytes=100-199"), Some((100, 199)));
+        assert_eq!(parse_range_header("bytes=512-"), Some((512, u64::MAX)));
+        assert!(parse_range_header("invalid").is_none());
+        assert!(parse_range_header("bytes=abc-def").is_none());
+    }
+
+    #[test]
+    fn serves_pmtiles_full_file_without_range() {
+        let path = std::env::temp_dir().join("test-pmtiles-full.bin");
+        fs::write(&path, b"PMTiles-test-data-1234567890").unwrap();
+
+        let (status, ct, body, headers) = serve_pmtiles_range(&path, None);
+        assert_eq!(status, 200);
+        assert_eq!(ct, "application/octet-stream");
+        assert_eq!(body, b"PMTiles-test-data-1234567890");
+        assert!(headers.iter().any(|(k, _)| k == "Accept-Ranges"));
+        assert!(headers.iter().any(|(k, _)| k == "Content-Length"));
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn serves_pmtiles_range_request() {
+        let path = std::env::temp_dir().join("test-pmtiles-range.bin");
+        fs::write(&path, b"ABCDEFGHIJKLMNOPQRSTUVWXYZ").unwrap();
+
+        let (status, _, body, headers) = serve_pmtiles_range(&path, Some("bytes=5-9"));
+        assert_eq!(status, 206);
+        assert_eq!(body, b"FGHIJ");
+        let cr = headers.iter().find(|(k, _)| k == "Content-Range").unwrap();
+        assert_eq!(cr.1, "bytes 5-9/26");
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn serves_pmtiles_open_ended_range() {
+        let path = std::env::temp_dir().join("test-pmtiles-open.bin");
+        fs::write(&path, b"0123456789").unwrap();
+
+        let (status, _, body, headers) = serve_pmtiles_range(&path, Some("bytes=7-"));
+        assert_eq!(status, 206);
+        assert_eq!(body, b"789");
+        let cr = headers.iter().find(|(k, _)| k == "Content-Range").unwrap();
+        assert_eq!(cr.1, "bytes 7-9/10");
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn serves_pmtiles_416_for_out_of_range() {
+        let path = std::env::temp_dir().join("test-pmtiles-416.bin");
+        fs::write(&path, b"short").unwrap();
+
+        let (status, _, _, _) = serve_pmtiles_range(&path, Some("bytes=100-200"));
+        assert_eq!(status, 416);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn serves_pmtiles_500_for_missing_file() {
+        let (status, _, _, _) = serve_pmtiles_range(Path::new("/nonexistent/file.pmtiles"), None);
+        assert_eq!(status, 500);
     }
 }

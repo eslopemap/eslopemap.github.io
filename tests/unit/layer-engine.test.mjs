@@ -192,6 +192,10 @@ describe('user source registry', () => {
     expect(entry.id).toBe('user-satellite');
     expect(entry.category).toBe('overlay');
     expect(entry.tileSourceKind).toBe('pmtiles');
+    // PMTiles sources use pmtiles:// protocol URL, not tiles array
+    const srcDef = entry.sources['user-src-satellite'];
+    expect(srcDef.url).toBe('pmtiles://http://127.0.0.1:14321/pmtiles/satellite');
+    expect(srcDef.tiles).toBeUndefined();
   });
 
   it('buildCatalogSources includes user sources', () => {
