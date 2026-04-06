@@ -44,16 +44,19 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - [x] Simple `confirm()` dialog on GPX sync conflict (OK=disk, Cancel=keep app)
 - [x] Calls `resolveConflict` IPC with user's choice
 
-### Phase 6: DEM Loading E2E Test ✅
+### Phase 6: DEM E2E Tests with Synthetic Tiles ✅
 
-- [x] `tests/e2e/dem-loading.spec.js` — basemap=none + mode=color-relief at zoom 10
-- [x] Reads WebGL pixels inside `render` event (avoids buffer-clear issue)
-- [x] Confirms DEM loads correctly in web mode (47% non-white pixels, 21 tile requests at z10)
+- [x] `tests/fixtures/tiles/build_dem_fixtures.py` — generates 19 Terrarium-encoded 512×512 tiles (z0/z10/z12)
+- [x] `tests/e2e/dem-loading.spec.js` — 3 tests: color-relief, slope+relief, slope
+- [x] Synthetic tiles served via Playwright route interception (no network)
+- [x] Tests run in normal mode (not test_mode) at explicit z12 with deterministic coords
+- [x] Screenshot baselines for visual regression: `dem-color-relief`, `dem-slope-relief`, `dem-slope`
+- [x] Pixel checks: 99.9% non-white (color-relief), 78.7% non-white (slope modes)
 
 ### Phase 7: Dynamic Tile Source Management ✅
 
 - [x] `SharedTileSources` (Arc<Mutex>) for runtime add/remove
-- [x] `TileSourceKind` enum: Mbtiles (working) + Pmtiles (501 stub)
+- [x] `TileSourceKind` enum: Mbtiles + Pmtiles
 - [x] `detect_source_kind()` auto-detects .mbtiles/.pmtiles extensions
 - [x] Tauri commands: `add_tile_source`, `list_tile_sources`, `remove_tile_source`
 - [x] JS bridge: `addTileSource`, `listTileSources`, `removeTileSource`
@@ -63,15 +66,41 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - [x] Detailed plan in `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md`
 - Multi-basemap stack, merged online+local catalog, folder scanning, PMTiles support
 
+### Phase 9: JS Error Forwarding to Tauri Console ✅
+
+- [x] `window.error` + `unhandledrejection` listeners in WebView init script
+- [x] Errors prefixed `[SLOPE JS ERROR]` / `[SLOPE UNHANDLED REJECTION]` in cargo tauri dev output
+
+### Phase 10: Dynamic User Source Registry (Basemap Plan Phase 1) ✅
+
+- [x] `registerUserSource` / `unregisterUserSource` / `clearUserSources` / `getUserSources`
+- [x] `buildCatalogEntryFromTileSource` — auto-generates CatalogEntry from Tauri tile sources
+- [x] All lookup helpers merge built-in + user sources (getBasemaps, getOverlays, etc.)
+- [x] 11 new unit tests for user source registry
+
+### Phase 11: PMTiles Serving with HTTP Range Support (Basemap Plan Phase 5) ✅
+
+- [x] `/pmtiles/{source}` endpoint in Rust tile server with full HTTP Range support
+- [x] `parse_pmtiles_path`, `parse_range_header`, `serve_pmtiles_range` helpers
+- [x] CORS preflight (OPTIONS) for Range header access
+- [x] `pmtiles` 4.4.0 JS library vendored (ESM build)
+- [x] `app/js/pmtiles-protocol.js` — lazy dynamic import, registers pmtiles:// protocol with MapLibre
+- [x] `buildCatalogEntryFromTileSource` generates `pmtiles://` URLs for PMTiles sources
+- [x] 6 new Rust tests: path parsing, range requests, 206/416/500 edge cases
+
 ### Test Summary
 
 | Suite | Count | Status |
 |---|---|---|
-| Rust unit tests (cargo test) | 26 | ✅ all pass |
-| JS unit tests (vitest) | 57 | ✅ all pass (18 bridge + 39 existing) |
-| Playwright e2e (persist) | 5 | ✅ pass |
-| Playwright e2e (track-import) | 12 | ✅ pass |
-| Playwright e2e (dem-loading) | 1 | ✅ pass |
+| Rust unit tests (cargo test) | 33 | ✅ all pass |
+| JS unit tests (vitest) | 68 | ✅ all pass |
+| Playwright e2e (total) | 47 | ✅ all pass |
+| — persist | 5 | ✅ |
+| — track-import | 12 | ✅ |
+| — dem-loading | 3 | ✅ (with screenshots) |
+| — track-desktop | 4 | ✅ |
+| — profile | 6 | ✅ |
+| — track-mobile | 5 | ✅ |
 
 ## Decisions Made
 
@@ -90,17 +119,22 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - `src-tauri/build.rs` — standard tauri-build
 - `src-tauri/tauri.conf.json` — app config, frontendDist=../app
 - `src-tauri/capabilities/default.json` — core + dialog + shell permissions
-- `src-tauri/src/main.rs` — entry point, state mgmt, 12 Tauri commands, setup hook
+- `src-tauri/src/main.rs` — entry point, state mgmt, 12 Tauri commands, setup hook, JS error forwarding
 - `src-tauri/src/gpx_sync.rs` — file-centric sync manager (15 tests)
-- `src-tauri/src/tile_server.rs` — localhost tile server with shared source registry (9 tests)
+- `src-tauri/src/tile_server.rs` — localhost tile server with MBTiles + PMTiles Range support (15 tests)
 - `app/js/tauri-bridge.js` — runtime adapter module
+- `app/js/pmtiles-protocol.js` — PMTiles protocol registration for MapLibre
 - `tests/unit/tauri-bridge.test.mjs` — 18 bridge unit tests
-- `tests/e2e/dem-loading.spec.js` — DEM rendering regression test
+- `tests/e2e/dem-loading.spec.js` — 3 DEM rendering tests with screenshot baselines
+- `tests/fixtures/tiles/build_dem_fixtures.py` — synthetic DEM tile generator
+- `tests/fixtures/tiles/dem/` — 19 synthetic Terrarium-encoded DEM tiles
 - `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md` — unified basemap UI plan
 
 ### Modified files
-- `app/js/main.js` — DEM tile URLs via bridge, GPX sync listener, conflict UI
+- `app/js/main.js` — DEM tile URLs via bridge, GPX sync listener, conflict UI, PMTiles protocol init
 - `app/js/io.js` — import bridge, add Tauri-aware openFolder/saveToFolder
+- `app/js/layer-registry.js` — dynamic user source registry, merged catalog lookups
+- `deps.json` — added pmtiles dependency
 
 ## Commits
 
@@ -113,11 +147,17 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 7. `559bb0d` feat: add DEM loading e2e test (color-relief non-white check)
 8. `9e095f5` feat: simple conflict detection UI via confirm() dialog
 9. `65b84b9` feat: add dynamic MBTiles/PMTiles tile source management
+10. `46a7b37` feat: DEM e2e tests with synthetic tiles and screenshot matching
+11. `bc47a0c` feat: forward JS errors/rejections to Tauri dev console
+12. `7a28162` feat: Phase 1 — dynamic user source registry in layer-registry
+13. `19318ed` feat: Phase 5 — PMTiles serving with HTTP Range support + JS protocol
 
 ## Next Steps
 
-- [ ] Implement unified basemap UI (see `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md`)
-- [ ] PMTiles serving implementation (replace 501 stub)
+- [ ] Implement unified basemap UI phases 2-4 (see `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md`)
+  - Phase 2: Multi-basemap stacking UI
+  - Phase 3: Desktop folder scanning for local tile files
+  - Phase 4: Merged catalog UI (online + local sources)
 - [ ] File removal handling (remove tracks from map when GPX deleted on disk)
 - [ ] Tauri integration tests (WebDriver-based, as in spike_demo)
 - [ ] Bundle and test on macOS (`cargo tauri build`)
