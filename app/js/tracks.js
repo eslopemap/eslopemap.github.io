@@ -361,7 +361,7 @@ function ensureWaypointLayer() {
         'text-size': 12,
         'text-offset': [0, 1.5],
         'text-anchor': 'top',
-        'text-font': ['Noto Sans Bold'],
+        'text-font': ['Frutiger Neue Regular'],
       },
       paint: {
         'text-color': '#1e293b',
@@ -987,12 +987,21 @@ export function resetForTest() {
   resetMobileFriendlyMode();
   refreshWaypointSource();
   rebuildTree();
-  renderTrackList();
-  updateProfileFn();
-  localStorage.clear();
 }
 
 // ---- Public API ----
+
+function rehydrateTrackLayers() {
+  mapReady = true;
+  ensureProfileHoverLayer();
+  ensureWaypointLayer();
+  for (const t of tracks) {
+    if (!map.getSource(trackSourceId(t))) addTrackToMap(t);
+  }
+  refreshSelectionHighlight();
+  const es = getEditState();
+  updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
+}
 
 export function getTracksState() {
   const es = getEditState();
@@ -1034,6 +1043,7 @@ export function getTracksState() {
     wireRectangleSelectionCheck(fn) {
       if (_editFns) _editFns.isRectangleSelectionActive = fn;
     },
+    rehydrateTrackLayers,
   };
 }
 
@@ -1194,11 +1204,6 @@ export function initTracks(mapRef, stateRef, updateProfile) {
 
   // Add map layers for tracks once map is loaded
   map.on('load', () => {
-    mapReady = true;
-    ensureProfileHoverLayer();
-    ensureWaypointLayer();
-    for (const t of tracks) {
-      if (!map.getSource(trackSourceId(t))) addTrackToMap(t);
-    }
+    rehydrateTrackLayers();
   });
 }

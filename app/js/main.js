@@ -133,7 +133,7 @@ function applyTestModeMapState(map, state) {
     map.setLayoutProperty('dem-loader', 'visibility', 'none');
   }
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
-  setBasemap(map, state, state.basemap);
+  void setBasemap(map, state, state.basemap);
   applyAllOverlays(map, state);
   applyModeState(map, state);
   applyContourVisibility(map, state);
@@ -226,7 +226,179 @@ const demContourSource = new mlcontour.DemSource({
 });
 demContourSource.setupMaplibre(maplibregl);
 
-// ---- Map ----
+function buildContourSourceDefinition() {
+  return {
+    type: 'vector',
+    tiles: [
+      demContourSource.contourProtocolUrl({
+        multiplier: 1,
+        overzoom: 1,
+        thresholds: {
+          10: [200, 1000],
+          11: [100, 500],
+          12: [100, 500],
+          13: [50, 200],
+          14: [20, 100],
+          16: [10, 50]
+        },
+        elevationKey: 'ele',
+        levelKey: 'level',
+        contourLayer: 'contours'
+      })
+    ],
+    maxzoom: 16
+  };
+}
+
+function buildTerrainSourceDefinition() {
+  return {
+    type: 'raster-dem',
+    tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+    tileSize: 512,
+    maxzoom: DEM_MAX_Z,
+    encoding: 'terrarium'
+  };
+}
+
+function buildDemLoaderLayer() {
+  return {
+    id: 'dem-loader',
+    type: 'hillshade',
+    source: DEM_HD_SOURCE_ID,
+    layout: { visibility: isTestMode ? 'none' : 'visible' },
+    paint: {
+      'hillshade-method': state.hillshadeMethod,
+      'hillshade-exaggeration': ['coalesce', ['global-state', 'hillshadeOpacity'], 0.35],
+      'hillshade-shadow-color': '#000000',
+      'hillshade-highlight-color': '#ffffff',
+      'hillshade-accent-color': '#000000',
+    }
+  };
+}
+
+function buildAnalysisLayer() {
+  return {
+    id: 'analysis',
+    type: 'terrain-analysis',
+    source: DEM_HD_SOURCE_ID,
+    layout: { visibility: 'none' },
+    paint: {
+      'attribute': 'slope',
+      'opacity': state.slopeOpacity,
+      'color': ANALYSIS_COLOR.slope,
+      'blend-mode': state.multiplyBlend ? (state.slopeOpacity > 0.7 ? 'multiply' : 'soft-multiply') : 'normal'
+    }
+  };
+}
+
+function buildAnalysisReliefLayer() {
+  return {
+    id: 'analysis-relief',
+    type: 'terrain-analysis',
+    source: DEM_HD_SOURCE_ID,
+    layout: { visibility: 'none' },
+    paint: {
+      'attribute': 'elevation',
+      'opacity': state.slopeOpacity,
+      'color': ANALYSIS_COLOR['color-relief'],
+      'blend-mode': state.multiplyBlend ? (state.slopeOpacity > 0.7 ? 'multiply' : 'soft-multiply') : 'normal'
+    }
+  };
+}
+
+function buildAppStyle() {
+  return {
+    version: 8,
+    glyphs: 'https://vectortiles.geo.admin.ch/fonts/{fontstack}/{range}.pbf',
+    sprite: 'https://vectortiles.geo.admin.ch/styles/ch.swisstopo.basemap.vt/sprite/sprite',
+    sources: {
+      contourSource: buildContourSourceDefinition(),
+      // Separate raster-dem sources for terrain and
+      // hillshade/analysis on purpose: in current MapLibre,
+      // one source means one shared TileManager, and terrain changes shared DEM
+      // tile selection/preparation toward coarser tiles for performance. A
+      // larger shared tile cache does not isolate those different behaviors.
+      [DEM_TERRAIN_SOURCE_ID]: buildTerrainSourceDefinition(),
+      [DEM_HD_SOURCE_ID]: buildTerrainSourceDefinition(),
+      ...buildCatalogSources(),
+    },
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: { 'background-color': '#ffffff' }
+      },
+      buildDemLoaderLayer(),
+      buildAnalysisLayer(),
+      buildAnalysisReliefLayer(),
+      ...buildCatalogLayers()
+    ]
+  };
+}
+
+function ensureSource(map, sourceId, sourceDefinition) {
+  if (!map.getSource(sourceId)) {
+    map.addSource(sourceId, sourceDefinition);
+  }
+}
+
+function ensureLayer(map, layerDefinition, beforeId) {
+  if (!map.getLayer(layerDefinition.id)) {
+    map.addLayer(layerDefinition, beforeId);
+  }
+}
+
+function ensureCatalogRuntimeLayers(map) {
+  const sources = buildCatalogSources();
+  for (const [sourceId, sourceDefinition] of Object.entries(sources)) {
+    ensureSource(map, sourceId, sourceDefinition);
+  }
+  for (const layer of buildCatalogLayers()) {
+    ensureLayer(map, layer, 'dem-loader');
+  }
+}
+
+function ensureContourLayers(map) {
+  ensureLayer(map, {
+    id: 'contours',
+    type: 'line',
+    source: 'contourSource',
+    'source-layer': 'contours',
+    paint: {
+      'line-opacity': 0.2,
+      'line-width': ['match', ['get', 'level'], 1, 1, 0.5]
+    }
+  });
+  ensureLayer(map, {
+    id: 'contour-text',
+    type: 'symbol',
+    source: 'contourSource',
+    'source-layer': 'contours',
+    filter: ['>', ['get', 'level'], 0],
+    paint: {
+      'text-halo-color': 'white',
+      'text-halo-width': 1
+    },
+    layout: {
+      'symbol-placement': 'line',
+      'text-size': 10,
+      'text-field': ['concat', ['number-format', ['get', 'ele'], {}], 'm'],
+      'text-font': ['Frutiger Neue Regular']
+    }
+  });
+}
+
+function ensureAppRuntimeLayers(map) {
+  ensureSource(map, 'contourSource', buildContourSourceDefinition());
+  ensureSource(map, DEM_TERRAIN_SOURCE_ID, buildTerrainSourceDefinition());
+  ensureSource(map, DEM_HD_SOURCE_ID, buildTerrainSourceDefinition());
+  ensureLayer(map, buildDemLoaderLayer());
+  ensureLayer(map, buildAnalysisLayer());
+  ensureLayer(map, buildAnalysisReliefLayer());
+  ensureCatalogRuntimeLayers(map);
+  ensureContourLayers(map);
+  ensureDebugGridLayer(map);
+}
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -236,103 +408,7 @@ const map = new maplibregl.Map({
   pitch: initialView.pitch,
   maxTileCacheZoomLevels: 20,
   attributionControl: false,
-  style: {
-    version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-    sources: {
-      // Non-catalog sources (DEM, contours)
-      contourSource: {
-        type: 'vector',
-        tiles: [
-          demContourSource.contourProtocolUrl({
-            multiplier: 1,
-            overzoom: 1,
-            thresholds: {
-              10: [200, 1000],
-              11: [100, 500],
-              12: [100, 500],
-              13: [50, 200],
-              14: [20, 100],
-              16: [10, 50]
-            },
-            elevationKey: 'ele',
-            levelKey: 'level',
-            contourLayer: 'contours'
-          })
-        ],
-        maxzoom: 16
-      },
-      // Separate raster-dem sources for terrain and
-      // hillshade/analysis on purpose: in current MapLibre,
-      // one source means one shared TileManager, and terrain changes shared DEM
-      // tile selection/preparation toward coarser tiles for performance. A
-      // larger shared tile cache does not isolate those different behaviors.
-      [DEM_TERRAIN_SOURCE_ID]: {
-        type: 'raster-dem',
-        tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
-        tileSize: 512,
-        maxzoom: DEM_MAX_Z,
-        encoding: 'terrarium'
-      },
-      [DEM_HD_SOURCE_ID]: {
-        type: 'raster-dem',
-        tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
-        tileSize: 512,
-        maxzoom: DEM_MAX_Z,
-        encoding: 'terrarium'
-      },
-      // Catalog-generated sources (basemaps + overlays)
-      ...buildCatalogSources(),
-    },
-    layers: [
-      {
-        id: 'background',
-        type: 'background',
-        paint: { 'background-color': '#ffffff' }
-      },
-      {
-        id: 'dem-loader',
-        type: 'hillshade',
-        source: DEM_HD_SOURCE_ID,
-        layout: { visibility: isTestMode ? 'none' : 'visible' },
-        paint: {
-          'hillshade-method': state.hillshadeMethod,
-          'hillshade-exaggeration': ['coalesce', ['global-state', 'hillshadeOpacity'], 0.35],
-          'hillshade-shadow-color': '#000000',
-          'hillshade-highlight-color': '#ffffff',
-          'hillshade-accent-color': '#000000',
-        }
-      },
-      // Terrain analysis layers — must be right after dem-loader for 3D terrain compatibility.
-      // Start hidden; applyModeState() sets visibility on load.
-      {
-        id: 'analysis',
-        type: 'terrain-analysis',
-        source: DEM_HD_SOURCE_ID,
-        layout: { visibility: 'none' },
-        paint: {
-          'attribute': 'slope',
-          'opacity': state.slopeOpacity,
-          'color': ANALYSIS_COLOR.slope,
-          'blend-mode': state.multiplyBlend ? (state.slopeOpacity > 0.7 ? 'multiply' : 'soft-multiply') : 'normal'
-        }
-      },
-      {
-        id: 'analysis-relief',
-        type: 'terrain-analysis',
-        source: DEM_HD_SOURCE_ID,
-        layout: { visibility: 'none' },
-        paint: {
-          'attribute': 'elevation',
-          'opacity': state.slopeOpacity,
-          'color': ANALYSIS_COLOR['color-relief'],
-          'blend-mode': state.multiplyBlend ? (state.slopeOpacity > 0.7 ? 'multiply' : 'soft-multiply') : 'normal'
-        }
-      },
-      // Catalog-generated layers (all start hidden; engine toggles visibility)
-      ...buildCatalogLayers()
-    ]
-  },
+  style: buildAppStyle(),
   canvasContextAttributes: {antialias: true}
 });
 
@@ -396,6 +472,32 @@ initWebImport();
 initTracks(map, state, updateProfile);
 const tracksState = getTracksState();
 initProfile(map, state, tracksState);
+const APP_STYLE_MODE = '__app_style__';
+map.__activeStyleMode = APP_STYLE_MODE;
+map.__nativeStyleBasemapLayerIds = new Map();
+
+map.__ensureBasemapStyle = async (catalogId) => {
+  const entry = getCatalogEntry(catalogId);
+  const targetMode = entry?.styleUrl ? entry.id : APP_STYLE_MODE;
+  if (map.__activeStyleMode === targetMode) return;
+  const styleReady = new Promise(resolve => map.once('style.load', resolve));
+  map.__activeStyleMode = targetMode;
+  map.setStyle(entry?.styleUrl ? entry.styleUrl : buildAppStyle());
+  await styleReady;
+};
+
+map.on('style.load', () => {
+  const entry = getCatalogEntry(state.basemap);
+  if (entry?.styleUrl) {
+    map.__nativeStyleBasemapLayerIds.set(entry.id, (map.getStyle()?.layers || []).map(layer => layer.id));
+  }
+  ensureAppRuntimeLayers(map);
+  tracksState.rehydrateTrackLayers();
+  setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
+  setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
+  if (state.showTileGrid) updateDebugGridSource(map);
+});
+
 initSelectionTools(map, {
   getActiveTrack: () => tracksState.getActiveTrack(),
   onSelectionChanged: (selectionSpan) => {
@@ -714,22 +816,25 @@ document.getElementById('mode').addEventListener('change', (e) => {
 });
 
 document.getElementById('basemap').addEventListener('change', (e) => {
-  setBasemap(map, state, e.target.value, true);
+  void (async () => {
+    await setBasemap(map, state, e.target.value, true);
   // Auto-toggle contours for OSM
-  const shouldShowContours = (state.basemap === 'osm');
-  if (state.basemap !== 'none') state.showContours = shouldShowContours;
-  const contourCb = document.getElementById('showContours');
-  if (contourCb) contourCb.checked = state.showContours;
-  applyContourVisibility(map, state);
-  syncViewToUrl(map, state);
-  map.triggerRepaint();
-  scheduleSettingsSave();
+    const shouldShowContours = (state.basemap === 'osm');
+    if (state.basemap !== 'none') state.showContours = shouldShowContours;
+    const contourCb = document.getElementById('showContours');
+    if (contourCb) contourCb.checked = state.showContours;
+    applyContourVisibility(map, state);
+    syncViewToUrl(map, state);
+    map.triggerRepaint();
+    scheduleSettingsSave();
+  })();
 });
 
 document.getElementById('basemapOpacity').addEventListener('input', (e) => {
   state.basemapOpacity = Number(e.target.value);
   document.getElementById('basemapOpacityValue').textContent = state.basemapOpacity.toFixed(2);
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
+  applyLayerOpacity(map, state.basemap, state.basemapOpacity);
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -996,13 +1101,15 @@ function renderBookmarkList() {
     nameBtn.textContent = bm.name;
     nameBtn.title = 'Apply this bookmark';
     nameBtn.addEventListener('click', () => {
-      applyBookmark(map, state, bm);
+      void (async () => {
+        await applyBookmark(map, state, bm);
       document.getElementById('basemap').value = state.basemap;
       syncOverlayCheckboxes(state);
       renderLayerOrderPanel();
       renderBookmarkList();
       map.triggerRepaint();
       scheduleSettingsSave();
+      })();
     });
 
     const editBtn = document.createElement('button');
@@ -1070,17 +1177,19 @@ renderBookmarkList();
 
 // ---- Map load ----
 
-map.on('load', () => {
-  ensureDebugGridLayer(map);
+map.on('load', async () => {
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
-  // Apply basemap + overlays via engine
-  setBasemap(map, state, state.basemap);
+  ensureAppRuntimeLayers(map);
+  tracksState.rehydrateTrackLayers();
+  await setBasemap(map, state, state.basemap);
   syncLayerOrder(state);
   applyAllOverlays(map, state);
   applyAllLayerSettings(map, state);
+  applyModeState(map, state);
   applyTerrainState(map, state);
-  updateDebugGridSource(map);
+  applyContourVisibility(map, state);
+  if (state.showTileGrid) updateDebugGridSource(map);
   syncViewToUrl(map, state);
   map.on('moveend', () => {
     syncViewToUrl(map, state);
@@ -1100,39 +1209,6 @@ map.on('load', () => {
   map.on('pitchend', () => {
     syncViewToUrl(map, state);
   });
-  // Terrain analysis layers are in the initial style (right after dem-loader)
-  // — just apply the mode state to set correct visibility/opacity
-  applyModeState(map, state);
-
-  // Contour lines
-  map.addLayer({
-    id: 'contours',
-    type: 'line',
-    source: 'contourSource',
-    'source-layer': 'contours',
-    paint: {
-      'line-opacity': 0.2,
-      'line-width': ['match', ['get', 'level'], 1, 1, 0.5]
-    }
-  });
-  map.addLayer({
-    id: 'contour-text',
-    type: 'symbol',
-    source: 'contourSource',
-    'source-layer': 'contours',
-    filter: ['>', ['get', 'level'], 0],
-    paint: {
-      'text-halo-color': 'white',
-      'text-halo-width': 1
-    },
-    layout: {
-      'symbol-placement': 'line',
-      'text-size': 10,
-      'text-field': ['concat', ['number-format', ['get', 'ele'], {}], 'm'],
-      'text-font': ['Noto Sans Bold']
-    }
-  });
-  applyContourVisibility(map, state);
   if (isTestMode) {
     applyTestModeMapState(map, state);
   }
@@ -1244,7 +1320,7 @@ map.on('load', () => {
 // ---- Hashchange navigation ----
 
 let hashNavInProgress = false;
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', async () => {
   if (hashNavInProgress) return;
   const p = parseHashParams();
   hashNavInProgress = true;
@@ -1273,7 +1349,7 @@ window.addEventListener('hashchange', () => {
   updateLegend(state, map);
   map.setBearing(p.bearing);
   map.setPitch(p.pitch);
-  setBasemap(map, state, state.basemap, true);
+  await setBasemap(map, state, state.basemap, true);
   applyAllOverlays(map, state);
   applyModeState(map, state);
   applyTerrainState(map, state);

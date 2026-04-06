@@ -13,6 +13,69 @@ function setLayerVisibilitySafe(map, layerId, visible) {
   map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
 }
 
+function getStyleRuntimeBasemapLayerIds(map) {
+  if (!map.__nativeStyleBasemapLayerIds) {
+    map.__nativeStyleBasemapLayerIds = new Map();
+  }
+  return map.__nativeStyleBasemapLayerIds;
+}
+
+function getCatalogLayerIdsForMap(map, catalogId) {
+  const runtimeIds = getStyleRuntimeBasemapLayerIds(map).get(catalogId);
+  return runtimeIds ? [...runtimeIds] : getLayerIds(catalogId);
+}
+
+function getAllBasemapLayerIdsForMap(map) {
+  const runtimeIds = [...getStyleRuntimeBasemapLayerIds(map).values()].flat();
+  return [...getAllBasemapLayerIds(), ...runtimeIds];
+}
+
+function getOpacityPaintProperties(layerType) {
+  if (layerType === 'raster') return ['raster-opacity'];
+  if (layerType === 'fill') return ['fill-opacity'];
+  if (layerType === 'line') return ['line-opacity'];
+  if (layerType === 'symbol') return ['text-opacity', 'icon-opacity'];
+  if (layerType === 'background') return ['background-opacity'];
+  if (layerType === 'circle') return ['circle-opacity'];
+  return [];
+}
+
+function setOpacityForLayerType(map, layerId, layerType, opacity) {
+  for (const property of getOpacityPaintProperties(layerType)) {
+    map.setPaintProperty(layerId, property, opacity);
+  }
+}
+
+function getNativeBasemapOpacityDefaults(map) {
+  if (!map.__nativeStyleBasemapOpacityDefaults) {
+    map.__nativeStyleBasemapOpacityDefaults = new Map();
+  }
+  return map.__nativeStyleBasemapOpacityDefaults;
+}
+
+function scaleOpacityValue(baseValue, opacity) {
+  if (typeof baseValue === 'number') return baseValue * opacity;
+  if (opacity === 1) return baseValue;
+  return ['*', baseValue, opacity];
+}
+
+function setScaledNativeOpacityForLayer(map, layerId, layer, opacity) {
+  const defaultsByLayer = getNativeBasemapOpacityDefaults(map);
+  let layerDefaults = defaultsByLayer.get(layerId);
+  if (!layerDefaults) {
+    layerDefaults = {};
+    defaultsByLayer.set(layerId, layerDefaults);
+  }
+
+  for (const property of getOpacityPaintProperties(layer.type)) {
+    if (!(property in layerDefaults)) {
+      layerDefaults[property] = layer.paint?.[property];
+    }
+    if (layerDefaults[property] == null) continue;
+    map.setPaintProperty(layerId, property, scaleOpacityValue(layerDefaults[property], opacity));
+  }
+}
+
 // ── Basemap ─────────────────────────────────────────────────────────
 
 /**
@@ -20,26 +83,32 @@ function setLayerVisibilitySafe(map, layerId, visible) {
  * Moves active basemap layers below `dem-loader`.
  * Optionally flies to the basemap's default view if camera is outside its region.
  */
-export function setBasemap(map, state, id, flyIfOutside = false) {
+export async function setBasemap(map, state, id, flyIfOutside = false) {
   state.basemap = id;
 
-  const activeIds = new Set(getLayerIds(id));
-  for (const layerId of getAllBasemapLayerIds()) {
+  const entry = getCatalogEntry(id);
+  if (typeof map.__ensureBasemapStyle === 'function') {
+    await map.__ensureBasemapStyle(id);
+  }
+
+  const activeIds = new Set(getCatalogLayerIdsForMap(map, id));
+  for (const layerId of getAllBasemapLayerIdsForMap(map)) {
     setLayerVisibilitySafe(map, layerId, activeIds.has(layerId));
   }
 
   // Move active basemap layers below dem-loader
-  for (const layerId of getLayerIds(id)) {
+  for (const layerId of getCatalogLayerIdsForMap(map, id)) {
     if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
       map.moveLayer(layerId, 'dem-loader');
     }
   }
 
+  applyLayerOpacity(map, id, state.basemapOpacity ?? 1);
+
   // Move overlay layers below dem-loader too (preserve z-order)
   applyLayerOrder(map, state);
 
   if (flyIfOutside) {
-    const entry = getCatalogEntry(id);
     if (entry?.defaultView && entry.region) {
       const c = map.getCenter();
       const [w, s, e, n] = entry.region;
@@ -144,17 +213,18 @@ export function reorderLayer(map, state, fromIndex, toIndex) {
 export function applyLayerOpacity(map, catalogId, opacity) {
   const entry = getCatalogEntry(catalogId);
   if (!entry) return;
+  const runtimeIds = getStyleRuntimeBasemapLayerIds(map).get(catalogId);
+  if (runtimeIds?.length) {
+    for (const layerId of runtimeIds) {
+      const layer = map.getLayer(layerId);
+      if (!layer) continue;
+      setScaledNativeOpacityForLayer(map, layerId, layer, opacity);
+    }
+    return;
+  }
   for (const layer of entry.layers) {
     if (!map.getLayer(layer.id)) continue;
-    if (layer.type === 'raster') {
-      map.setPaintProperty(layer.id, 'raster-opacity', opacity);
-    } else if (layer.type === 'fill') {
-      map.setPaintProperty(layer.id, 'fill-opacity', opacity);
-    } else if (layer.type === 'line') {
-      map.setPaintProperty(layer.id, 'line-opacity', opacity);
-    } else if (layer.type === 'symbol') {
-      map.setPaintProperty(layer.id, 'text-opacity', opacity);
-    }
+    setOpacityForLayerType(map, layer.id, layer.type, opacity);
   }
 }
 
@@ -200,13 +270,13 @@ export function createBookmark(state) {
 /**
  * Apply a bookmark to state + map.
  */
-export function applyBookmark(map, state, bookmark) {
+export async function applyBookmark(map, state, bookmark) {
   state.basemap = bookmark.basemap;
   state.activeOverlays = [...bookmark.overlays];
   state.layerOrder = [...(bookmark.layerOrder || bookmark.overlays)];
   state.layerSettings = JSON.parse(JSON.stringify(bookmark.layerSettings || {}));
 
-  setBasemap(map, state, bookmark.basemap);
+  await setBasemap(map, state, bookmark.basemap);
   applyAllOverlays(map, state);
   applyAllLayerSettings(map, state);
 }
