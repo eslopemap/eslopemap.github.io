@@ -108,13 +108,13 @@ describe('layer-engine style basemaps', () => {
   it('loads and activates a style-backed basemap from the catalog', async () => {
     ({ applyLayerOpacity, setBasemap } = await import('../../app/js/layer-engine.js'));
     const map = createMapMock();
-    map.__nativeStyleBasemapLayerIds = new Map();
+    map.__nativeBasemapLayerIds = new Map();
     map.__ensureBasemapStyle = vi.fn(async (catalogId) => {
       if (catalogId !== 'swisstopo-vector') return;
       map.layers.set('swiss-background', { id: 'swiss-background', type: 'background', layout: { visibility: 'none' }, paint: {} });
       map.layers.set('swiss-land', { id: 'swiss-land', type: 'fill', layout: { visibility: 'none' }, paint: { 'fill-opacity': 0.75 } });
       map.layers.set('swiss-labels', { id: 'swiss-labels', type: 'symbol', layout: { visibility: 'none' }, paint: { 'text-opacity': 0.4, 'icon-opacity': 0.8 } });
-      map.__nativeStyleBasemapLayerIds.set('swisstopo-vector', ['swiss-background', 'swiss-land', 'swiss-labels']);
+      map.__nativeBasemapLayerIds.set('swisstopo-vector', ['swiss-background', 'swiss-land', 'swiss-labels']);
     });
     const state = {
       basemap: 'osm',
@@ -156,13 +156,13 @@ describe('layer-engine style basemaps', () => {
   it('updates opacity for already-loaded style-backed basemap layers', async () => {
     ({ applyLayerOpacity, setBasemap } = await import('../../app/js/layer-engine.js'));
     const map = createMapMock();
-    map.__nativeStyleBasemapLayerIds = new Map();
+    map.__nativeBasemapLayerIds = new Map();
     map.__ensureBasemapStyle = vi.fn(async (catalogId) => {
       if (catalogId !== 'swisstopo-vector') return;
       map.layers.set('swiss-background', { id: 'swiss-background', type: 'background', layout: { visibility: 'none' }, paint: {} });
       map.layers.set('swiss-land', { id: 'swiss-land', type: 'fill', layout: { visibility: 'none' }, paint: { 'fill-opacity': 0.75 } });
       map.layers.set('swiss-labels', { id: 'swiss-labels', type: 'symbol', layout: { visibility: 'none' }, paint: { 'text-opacity': 0.4, 'icon-opacity': 0.8 } });
-      map.__nativeStyleBasemapLayerIds.set('swisstopo-vector', ['swiss-background', 'swiss-land', 'swiss-labels']);
+      map.__nativeBasemapLayerIds.set('swisstopo-vector', ['swiss-background', 'swiss-land', 'swiss-labels']);
     });
     const state = {
       basemap: 'swisstopo-vector',

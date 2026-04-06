@@ -474,7 +474,7 @@ const tracksState = getTracksState();
 initProfile(map, state, tracksState);
 const APP_STYLE_MODE = '__app_style__';
 map.__activeStyleMode = APP_STYLE_MODE;
-map.__nativeStyleBasemapLayerIds = new Map();
+map.__nativeBasemapLayerIds = new Map();
 
 map.__ensureBasemapStyle = async (catalogId) => {
   const entry = getCatalogEntry(catalogId);
@@ -489,7 +489,7 @@ map.__ensureBasemapStyle = async (catalogId) => {
 map.on('style.load', () => {
   const entry = getCatalogEntry(state.basemap);
   if (entry?.styleUrl) {
-    map.__nativeStyleBasemapLayerIds.set(entry.id, (map.getStyle()?.layers || []).map(layer => layer.id));
+    map.__nativeBasemapLayerIds.set(entry.id, (map.getStyle()?.layers || []).map(layer => layer.id));
   }
   ensureAppRuntimeLayers(map);
   tracksState.rehydrateTrackLayers();
@@ -815,26 +815,27 @@ document.getElementById('mode').addEventListener('change', (e) => {
   scheduleSettingsSave();
 });
 
-document.getElementById('basemap').addEventListener('change', (e) => {
-  void (async () => {
-    await setBasemap(map, state, e.target.value, true);
+document.getElementById('basemap').addEventListener('change', async (e) => {
+  await setBasemap(map, state, e.target.value, true);
   // Auto-toggle contours for OSM
-    const shouldShowContours = (state.basemap === 'osm');
-    if (state.basemap !== 'none') state.showContours = shouldShowContours;
-    const contourCb = document.getElementById('showContours');
-    if (contourCb) contourCb.checked = state.showContours;
-    applyContourVisibility(map, state);
-    syncViewToUrl(map, state);
-    map.triggerRepaint();
-    scheduleSettingsSave();
-  })();
+  const shouldShowContours = (state.basemap === 'osm');
+  if (state.basemap !== 'none') state.showContours = shouldShowContours;
+  const contourCb = document.getElementById('showContours');
+  if (contourCb) contourCb.checked = state.showContours;
+  applyContourVisibility(map, state);
+  syncViewToUrl(map, state);
+  map.triggerRepaint();
+  scheduleSettingsSave();
 });
 
 document.getElementById('basemapOpacity').addEventListener('input', (e) => {
   state.basemapOpacity = Number(e.target.value);
   document.getElementById('basemapOpacityValue').textContent = state.basemapOpacity.toFixed(2);
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
-  applyLayerOpacity(map, state.basemap, state.basemapOpacity);
+  // Native-style basemaps need explicit opacity scaling; catalog layers use global-state
+  if (map.__nativeBasemapLayerIds?.has(state.basemap)) {
+    applyLayerOpacity(map, state.basemap, state.basemapOpacity);
+  }
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -1100,16 +1101,14 @@ function renderBookmarkList() {
     nameBtn.className = 'bookmark-name';
     nameBtn.textContent = bm.name;
     nameBtn.title = 'Apply this bookmark';
-    nameBtn.addEventListener('click', () => {
-      void (async () => {
-        await applyBookmark(map, state, bm);
+    nameBtn.addEventListener('click', async () => {
+      await applyBookmark(map, state, bm);
       document.getElementById('basemap').value = state.basemap;
       syncOverlayCheckboxes(state);
       renderLayerOrderPanel();
       renderBookmarkList();
       map.triggerRepaint();
       scheduleSettingsSave();
-      })();
     });
 
     const editBtn = document.createElement('button');

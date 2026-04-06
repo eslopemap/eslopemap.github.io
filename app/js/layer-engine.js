@@ -13,20 +13,24 @@ function setLayerVisibilitySafe(map, layerId, visible) {
   map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
 }
 
-function getStyleRuntimeBasemapLayerIds(map) {
-  if (!map.__nativeStyleBasemapLayerIds) {
-    map.__nativeStyleBasemapLayerIds = new Map();
+function getNativeBasemapLayerIds(map) {
+  if (!map.__nativeBasemapLayerIds) {
+    map.__nativeBasemapLayerIds = new Map();
   }
-  return map.__nativeStyleBasemapLayerIds;
+  return map.__nativeBasemapLayerIds;
+}
+
+function isNativeStyleBasemap(map, catalogId) {
+  return getNativeBasemapLayerIds(map).has(catalogId);
 }
 
 function getCatalogLayerIdsForMap(map, catalogId) {
-  const runtimeIds = getStyleRuntimeBasemapLayerIds(map).get(catalogId);
+  const runtimeIds = getNativeBasemapLayerIds(map).get(catalogId);
   return runtimeIds ? [...runtimeIds] : getLayerIds(catalogId);
 }
 
 function getAllBasemapLayerIdsForMap(map) {
-  const runtimeIds = [...getStyleRuntimeBasemapLayerIds(map).values()].flat();
+  const runtimeIds = [...getNativeBasemapLayerIds(map).values()].flat();
   return [...getAllBasemapLayerIds(), ...runtimeIds];
 }
 
@@ -46,11 +50,11 @@ function setOpacityForLayerType(map, layerId, layerType, opacity) {
   }
 }
 
-function getNativeBasemapOpacityDefaults(map) {
-  if (!map.__nativeStyleBasemapOpacityDefaults) {
-    map.__nativeStyleBasemapOpacityDefaults = new Map();
+function getNativeOpacityDefaults(map) {
+  if (!map.__nativeOpacityDefaults) {
+    map.__nativeOpacityDefaults = new Map();
   }
-  return map.__nativeStyleBasemapOpacityDefaults;
+  return map.__nativeOpacityDefaults;
 }
 
 function scaleOpacityValue(baseValue, opacity) {
@@ -60,7 +64,7 @@ function scaleOpacityValue(baseValue, opacity) {
 }
 
 function setScaledNativeOpacityForLayer(map, layerId, layer, opacity) {
-  const defaultsByLayer = getNativeBasemapOpacityDefaults(map);
+  const defaultsByLayer = getNativeOpacityDefaults(map);
   let layerDefaults = defaultsByLayer.get(layerId);
   if (!layerDefaults) {
     layerDefaults = {};
@@ -103,7 +107,11 @@ export async function setBasemap(map, state, id, flyIfOutside = false) {
     }
   }
 
-  applyLayerOpacity(map, id, state.basemapOpacity ?? 1);
+  // Native-style basemaps scale authored opacity; catalog basemaps use
+  // global-state expressions — no per-layer setPaintProperty needed.
+  if (isNativeStyleBasemap(map, id)) {
+    applyLayerOpacity(map, id, state.basemapOpacity ?? 1);
+  }
 
   // Move overlay layers below dem-loader too (preserve z-order)
   applyLayerOrder(map, state);
@@ -209,11 +217,13 @@ export function reorderLayer(map, state, fromIndex, toIndex) {
 
 /**
  * Apply per-layer opacity for a catalog entry's MapLibre layers.
+ * For native-style basemaps, scales only authored opacity properties.
+ * For catalog layers, directly sets opacity (used by overlay per-layer settings).
  */
 export function applyLayerOpacity(map, catalogId, opacity) {
   const entry = getCatalogEntry(catalogId);
   if (!entry) return;
-  const runtimeIds = getStyleRuntimeBasemapLayerIds(map).get(catalogId);
+  const runtimeIds = getNativeBasemapLayerIds(map).get(catalogId);
   if (runtimeIds?.length) {
     for (const layerId of runtimeIds) {
       const layer = map.getLayer(layerId);
