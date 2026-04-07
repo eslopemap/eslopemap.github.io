@@ -16,3 +16,11 @@
 - drag and drop does not seem to work on desktop ?
 
 - as usual frequent commits and ./report
+
+---
+
+look at @20260406-DESKTOP-MODE-REPORT.md 
+keep working on those items especially tauri e2e tests (the app is not functioning well so fix issues as discovered by the tests) ; and ensuring good coverage overall. report on current coverage. refine, update  and implementcoverage archi from @README.md 
+setup the github-action lightweight CI checks (web/desktop/e2e tests) + CD delivery (tauri packaging. investigate how to package the app as single executables/installers using github releases). keep GHA adherence at a minimum (ie try to keep logic outside of it)
+remain critical of what has been planned and done, fix issues you find on the way to provide a strong balance of maintainable and KISS. 
+as usual frequent commits and ./report

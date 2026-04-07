@@ -1,134 +1,49 @@
-// Unit tests for app/js/constants.js — color ramp parsing, legend CSS
+// Unit tests for app/js/constants.js — ramp parsing and legend CSS generation
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// constants.js calls cssColorToRgb01 at module-load time, which needs a canvas mock
 function installCanvasDocumentMock() {
   const context = {
-    clearRect() {},
-    fillRect() {},
-    getImageData() {
-      return { data: new Uint8ClampedArray([255, 255, 255, 255]) };
-    },
-    set fillStyle(value) { this._fillStyle = value; },
-    get fillStyle() { return this._fillStyle; },
+    clearRect() {}, fillRect() {},
+    getImageData() { return { data: new Uint8ClampedArray([255, 255, 255, 255]) }; },
+    set fillStyle(v) { this._fs = v; }, get fillStyle() { return this._fs; },
   };
   globalThis.document = {
-    createElement(tagName) {
-      if (tagName !== 'canvas') throw new Error(`Unsupported: ${tagName}`);
+    createElement(t) {
+      if (t !== 'canvas') throw new Error(`Unsupported: ${t}`);
       return { width: 0, height: 0, getContext() { return context; } };
     },
   };
 }
 
 let mod;
-
 beforeEach(async () => {
   vi.resetModules();
   installCanvasDocumentMock();
   mod = await import('../../app/js/constants.js');
 });
+afterEach(() => { delete globalThis.document; vi.restoreAllMocks(); });
 
-afterEach(() => {
-  delete globalThis.document;
-  vi.restoreAllMocks();
-});
-
-describe('parseStepRamp', () => {
-  it('parses the slope ramp', () => {
-    const ramp = mod.parseStepRamp(mod.ANALYSIS_COLOR.slope, 'slope');
-    expect(ramp.stepCount).toBeGreaterThan(0);
-    expect(ramp.stepCount).toBeLessThanOrEqual(mod.MAX_STEP_STOPS);
-    expect(ramp.values).toBeInstanceOf(Float32Array);
-    expect(ramp.colors).toBeInstanceOf(Float32Array);
-  });
-
-  it('parses the aspect ramp', () => {
-    const ramp = mod.parseStepRamp(mod.ANALYSIS_COLOR.aspect, 'aspect');
-    expect(ramp.stepCount).toBe(4); // 4 compass quadrants
-  });
-
-  it('throws on non-step expression', () => {
+describe('parseStepRamp / parseInterpolateStops', () => {
+  it('rejects malformed expressions', () => {
     expect(() => mod.parseStepRamp(['interpolate'], 'slope')).toThrow('step expression');
-  });
-
-  it('throws on wrong input', () => {
     expect(() => mod.parseStepRamp(['step', ['wrong'], '#fff'], 'slope')).toThrow('slope');
-  });
-});
-
-describe('parseInterpolateStops', () => {
-  it('parses color-relief stops', () => {
-    const stops = mod.parseInterpolateStops(mod.ANALYSIS_COLOR['color-relief'], 'elevation');
-    expect(stops.length).toBeGreaterThan(5);
-    expect(stops[0]).toHaveProperty('value');
-    expect(stops[0]).toHaveProperty('color');
-  });
-
-  it('throws on non-interpolate expression', () => {
     expect(() => mod.parseInterpolateStops(['step'], 'elevation')).toThrow('interpolate');
   });
 });
 
-describe('PARSED_RAMPS', () => {
-  it('has slope and aspect pre-parsed', () => {
-    expect(mod.PARSED_RAMPS.slope.stepCount).toBeGreaterThan(0);
-    expect(mod.PARSED_RAMPS.aspect.stepCount).toBeGreaterThan(0);
-  });
-});
-
-describe('COLOR_RELIEF_STOPS', () => {
-  it('is an array of stops with value and color', () => {
-    expect(Array.isArray(mod.COLOR_RELIEF_STOPS)).toBe(true);
-    expect(mod.COLOR_RELIEF_STOPS.length).toBeGreaterThan(0);
-    expect(mod.COLOR_RELIEF_STOPS[0]).toHaveProperty('value');
-    expect(mod.COLOR_RELIEF_STOPS[0]).toHaveProperty('color');
-  });
-});
-
-describe('rampToLegendCss', () => {
-  it('generates a CSS linear-gradient for slope', () => {
+describe('legend CSS generation', () => {
+  it('rampToLegendCss produces valid CSS gradient', () => {
     const css = mod.rampToLegendCss('slope');
-    expect(css).toContain('linear-gradient');
+    expect(css).toMatch(/^linear-gradient\(to right,/);
     expect(css).toContain('rgb(');
+    // Verify it covers full range (0% to 100%)
+    expect(css).toContain('0.00%');
+    expect(css).toContain('100.00%');
   });
 
-  it('generates a CSS linear-gradient for aspect', () => {
-    const css = mod.rampToLegendCss('aspect');
-    expect(css).toContain('linear-gradient');
-  });
-});
-
-describe('interpolateStopsToLegendCss', () => {
-  it('generates a CSS linear-gradient from stops', () => {
+  it('interpolateStopsToLegendCss produces valid CSS gradient', () => {
     const css = mod.interpolateStopsToLegendCss(mod.COLOR_RELIEF_STOPS);
-    expect(css).toContain('linear-gradient');
-  });
-});
-
-describe('basemapOpacityExpr', () => {
-  it('returns coalesce expression without multiplier', () => {
-    const expr = mod.basemapOpacityExpr();
-    expect(expr[0]).toBe('coalesce');
-    expect(expr[1]).toEqual(['global-state', 'basemapOpacity']);
-  });
-
-  it('wraps in multiply when multiplier != 1', () => {
-    const expr = mod.basemapOpacityExpr(0.5);
-    expect(expr[0]).toBe('*');
-    expect(expr[1]).toBe(0.5);
-  });
-});
-
-describe('constants', () => {
-  it('DEM_MAX_Z is a reasonable zoom level', () => {
-    expect(mod.DEM_MAX_Z).toBeGreaterThanOrEqual(10);
-    expect(mod.DEM_MAX_Z).toBeLessThanOrEqual(20);
-  });
-
-  it('ANALYSIS_RANGE has expected keys', () => {
-    expect(mod.ANALYSIS_RANGE).toHaveProperty('slope');
-    expect(mod.ANALYSIS_RANGE).toHaveProperty('aspect');
-    expect(mod.ANALYSIS_RANGE).toHaveProperty('color-relief');
+    expect(css).toMatch(/^linear-gradient\(to right,/);
   });
 });

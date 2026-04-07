@@ -34,8 +34,11 @@ Sources are not fundamentally basemaps or overlays — any raster or vector tile
 | Default opacity | 1.0 (opaque) | Variable (e.g. 0.5) |
 | Default blend mode | Normal | Multiply (for raster overlays) |
 | Typical use | Background map context | Additional data layer |
+| On-click behaviour | Radio button (only one active) | Checkbox (allow multiple) |
 
-A source should carry a `preferredRole: 'basemap' | 'overlay'` hint that determines initial behavior, but users must be able to override this freely.
+A source should carry a `preferredRole: 'basemap' | 'overlay'` hint that determines initial behavior, but users must be able to override this freely. By moving a source to overlay they allow multiple selection.
+
+If there are no basemaps, a white layer is shown so 'multiply' blend works.
 
 ### UX Proposals for Source Role
 
