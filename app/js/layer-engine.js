@@ -83,40 +83,58 @@ function setScaledNativeOpacityForLayer(map, layerId, layer, opacity) {
 // ── Basemap ─────────────────────────────────────────────────────────
 
 /**
- * Show layers for the selected basemap, hide all others.
- * Moves active basemap layers below `dem-loader`.
- * Optionally flies to the basemap's default view if camera is outside its region.
+ * Get the opacity for a basemap in the stack. Falls back to global basemapOpacity.
  */
-export async function setBasemap(map, state, id, flyIfOutside = false) {
-  state.basemap = id;
+function getBasemapOpacity(state, id) {
+  return state.basemapOpacities?.[id] ?? state.basemapOpacity ?? 1;
+}
 
-  const entry = getCatalogEntry(id);
-  if (typeof map.__ensureBasemapStyle === 'function') {
-    await map.__ensureBasemapStyle(id);
+/**
+ * Show layers for all basemaps in the stack, hide all others.
+ * Stack order: first = bottom, last = top. All below `dem-loader`.
+ */
+export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
+  state.basemapStack = [...ids];
+  state.basemap = ids[0] || 'none';
+
+  // Ensure styles are loaded for all stack entries
+  for (const id of ids) {
+    if (typeof map.__ensureBasemapStyle === 'function') {
+      await map.__ensureBasemapStyle(id);
+    }
   }
 
-  const activeIds = new Set(getCatalogLayerIdsForMap(map, id));
+  // Collect all layer IDs that should be visible
+  const activeIds = new Set();
+  for (const id of ids) {
+    for (const layerId of getCatalogLayerIdsForMap(map, id)) {
+      activeIds.add(layerId);
+    }
+  }
+
+  // Toggle visibility for all basemap layers
   for (const layerId of getAllBasemapLayerIdsForMap(map)) {
     setLayerVisibilitySafe(map, layerId, activeIds.has(layerId));
   }
 
-  // Move active basemap layers below dem-loader
-  for (const layerId of getCatalogLayerIdsForMap(map, id)) {
-    if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
-      map.moveLayer(layerId, 'dem-loader');
+  // Move stack layers below dem-loader in stack order (bottom first)
+  for (const id of ids) {
+    for (const layerId of getCatalogLayerIdsForMap(map, id)) {
+      if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
+        map.moveLayer(layerId, 'dem-loader');
+      }
+    }
+    // Apply per-basemap opacity
+    if (isNativeStyleBasemap(map, id)) {
+      applyLayerOpacity(map, id, getBasemapOpacity(state, id));
     }
   }
 
-  // Native-style basemaps scale authored opacity; catalog basemaps use
-  // global-state expressions — no per-layer setPaintProperty needed.
-  if (isNativeStyleBasemap(map, id)) {
-    applyLayerOpacity(map, id, state.basemapOpacity ?? 1);
-  }
-
-  // Move overlay layers below dem-loader too (preserve z-order)
   applyLayerOrder(map, state);
 
-  if (flyIfOutside) {
+  // Fly to region of the primary (bottom) basemap if camera is outside
+  if (flyIfOutside && ids.length) {
+    const entry = getCatalogEntry(ids[0]);
     if (entry?.defaultView && entry.region) {
       const c = map.getCenter();
       const [w, s, e, n] = entry.region;
@@ -125,6 +143,14 @@ export async function setBasemap(map, state, id, flyIfOutside = false) {
       }
     }
   }
+}
+
+/**
+ * Show layers for the selected basemap, hide all others.
+ * Backward-compat wrapper around setBasemapStack for single-basemap use.
+ */
+export async function setBasemap(map, state, id, flyIfOutside = false) {
+  await setBasemapStack(map, state, id === 'none' ? [] : [id], flyIfOutside);
 }
 
 // ── Overlays ────────────────────────────────────────────────────────
@@ -267,6 +293,8 @@ export function createBookmark(state) {
     id,
     name,
     basemap: state.basemap,
+    basemapStack: [...(state.basemapStack || [state.basemap])],
+    basemapOpacities: { ...(state.basemapOpacities || {}) },
     overlays: [...state.activeOverlays],
     layerOrder: [...(state.layerOrder || [])],
     layerSettings: JSON.parse(JSON.stringify(state.layerSettings || {})),
@@ -281,12 +309,13 @@ export function createBookmark(state) {
  * Apply a bookmark to state + map.
  */
 export async function applyBookmark(map, state, bookmark) {
-  state.basemap = bookmark.basemap;
   state.activeOverlays = [...bookmark.overlays];
   state.layerOrder = [...(bookmark.layerOrder || bookmark.overlays)];
   state.layerSettings = JSON.parse(JSON.stringify(bookmark.layerSettings || {}));
+  state.basemapOpacities = { ...(bookmark.basemapOpacities || {}) };
 
-  await setBasemap(map, state, bookmark.basemap);
+  const stack = bookmark.basemapStack || (bookmark.basemap ? [bookmark.basemap] : []);
+  await setBasemapStack(map, state, stack);
   applyAllOverlays(map, state);
   applyAllLayerSettings(map, state);
 }
@@ -325,18 +354,28 @@ const LEGACY_OVERLAY_MAP = {
  */
 export function migrateSettings(settings) {
   if (!settings) return false;
-  // Already migrated?
-  if (settings.activeOverlays) return false;
+  let migrated = false;
 
-  const overlays = [];
-  for (const [key, catalogId] of Object.entries(LEGACY_OVERLAY_MAP)) {
-    if (settings[key]) overlays.push(catalogId);
-    delete settings[key];
+  // Legacy overlay booleans → activeOverlays array
+  if (!settings.activeOverlays) {
+    const overlays = [];
+    for (const [key, catalogId] of Object.entries(LEGACY_OVERLAY_MAP)) {
+      if (settings[key]) overlays.push(catalogId);
+      delete settings[key];
+    }
+    settings.activeOverlays = overlays;
+    settings.layerOrder = [...overlays];
+    settings.layerSettings = {};
+    settings.bookmarks = settings.bookmarks || [];
+    migrated = true;
   }
-  // Contours handled separately (not in overlay catalog — it's a special layer)
-  settings.activeOverlays = overlays;
-  settings.layerOrder = [...overlays];
-  settings.layerSettings = {};
-  settings.bookmarks = settings.bookmarks || [];
-  return true;
+
+  // Legacy single basemap → basemapStack
+  if (!settings.basemapStack && settings.basemap) {
+    settings.basemapStack = [settings.basemap];
+    settings.basemapOpacities = {};
+    migrated = true;
+  }
+
+  return migrated;
 }

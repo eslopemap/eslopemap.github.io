@@ -22,7 +22,7 @@ import {
   buildCatalogEntryFromTileSource,
 } from './layer-registry.js';
 import {
-  setBasemap, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
+  setBasemap, setBasemapStack, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
   syncLayerOrder, reorderLayer, applyLayerOpacity,
   createBookmark, applyBookmark, deleteBookmark, renameBookmark,
   migrateSettings,
@@ -114,6 +114,7 @@ function ensureDebugGridLayer(map) {
 
 function applyTestModeState(state) {
   state.basemap = 'none';
+  state.basemapStack = [];
   state.mode = '';
   state.showContours = false;
   state.activeOverlays = [];
@@ -163,6 +164,7 @@ const isTestMode = Boolean(initialView.testMode);
 const shouldAttemptInitialGeolocate = !isTestMode && !hasUrlState;
 if (initialView.basemap) {
   state.basemap = initialView.basemap;
+  state.basemapStack = [initialView.basemap];
 }
 state.mode = initialView.mode;
 state.slopeOpacity = initialView.slopeOpacity;
@@ -1333,7 +1335,9 @@ window.addEventListener('hashchange', async () => {
   const p = parseHashParams();
   hashNavInProgress = true;
   map.jumpTo({center: p.center, zoom: p.zoom});
-  state.basemap = p.basemap || 'osm';
+  const basemapId = p.basemap || 'osm';
+  state.basemap = basemapId;
+  state.basemapStack = [basemapId];
   state.mode = p.mode;
   state.slopeOpacity = p.slopeOpacity;
   state.terrain3d = p.terrain3d;
