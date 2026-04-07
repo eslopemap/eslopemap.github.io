@@ -1,0 +1,67 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # 1st of every other month at 08:00 UTC
+    - cron: '0 8 1 */2 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-deps:
+    name: Update All Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system deps (for cargo)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      # JS vendor deps (deps.json → vendor/)
+      - name: Update vendored JS dependencies
+        run: node scripts/vendor-deps.mjs update
+
+      # Rust deps
+      - name: Update Cargo dependencies
+        run: cargo update
+        working-directory: src-tauri
+
+      # npm devDependencies
+      - name: Update npm devDependencies
+        run: npm update
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git diff --quiet && git diff --cached --quiet && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(deps): update all dependencies'
+          title: 'chore(deps): update all dependencies'
+          body: |
+            Automated dependency update covering:
+            - JS vendor deps (`deps.json` → `vendor-deps.mjs`)
+            - Rust Cargo dependencies (`cargo update`)
+            - npm devDependencies (`npm update`)
+
+            Triggered by: ${{ github.event_name == 'schedule' && 'bi-monthly cron' || 'manual dispatch' }}
+          branch: deps/update-all
+          labels: dependencies
+          delete-branch: true
