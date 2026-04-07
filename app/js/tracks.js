@@ -515,8 +515,10 @@ function refreshTrackSource(t) {
   if (t.id === promotedTrackId) {
     const src = map.getSource(trackSourceId(t));
     if (src) src.setData(trackGeoJSON(t));
+    // Skip merged refresh — promoted track is excluded from merged source
+  } else {
+    refreshMergedSource();
   }
-  refreshMergedSource();
 }
 
 function refreshAllTrackSources() {
