@@ -104,49 +104,44 @@ Outputs:
 
 Coverage targets `app/js/**/*.js`, excluding `app/vendor/**`.
 
-**Verified coverage** (109 unit tests across 12 files):
+80 unit tests across 11 files.
 
-| Module | Stmts | Notes |
-|---|---|---|
-| `state.js` | 100% | Reactive store fully tested |
-| `constants.js` | 97% | Ramp parsing, legend CSS |
-| `persist.js` | 90% | localStorage save/load |
-| `shortcuts.js` | 90% | Registry, focus guards |
-| `tauri-bridge.js` | 86% | Web + desktop mode paths |
-| `gpx-model.js` | 85% | GPX/GeoJSON parsing |
-| `layer-registry.js` | 72% | User source registry |
-| `layer-engine.js` | 39% | Core loading covered, edge cases need e2e |
-| `utils.js` | 38% | Tile math covered, DOM utils need e2e |
-| `dem.js` | 25% | sampleElevation covered, queryLoaded needs map |
-| DOM-heavy modules | 0% | Covered by Playwright e2e (not measured here) |
+### Frontend E2E — Playwright V8 coverage
+
+```bash
+npm run test:e2e:coverage
+```
+
+Collects V8 JS coverage via Chromium's `page.coverage` API during e2e tests. Gated behind `E2E_COVERAGE=1` (zero-cost when disabled). Output:
+
+- Raw V8 JSONs in `coverage/e2e-v8/`
+- Human-readable summary in `coverage/e2e-summary.txt`
+
+E2E covers all 21 app/js/ files (28.6% line coverage overall), filling gaps that unit tests can't reach (DOM-heavy modules like `main.js`, `tracks.js`, `gpx-tree.js`, etc.).
 
 ### Backend (Rust) — cargo-llvm-cov
 
 ```bash
 cargo install cargo-llvm-cov
-cd src-tauri && cargo llvm-cov --html
+cd src-tauri && cargo llvm-cov --text
 ```
 
-Report is written to `target/llvm-cov/html/`.
-
-### E2E coverage
-
-Playwright tests cover the DOM-heavy modules indirectly. JS coverage during e2e is possible via `page.coverage` API (Chromium only) but is not currently collected since it would add complexity for limited value — the unit-testable logic is already covered by Vitest.
+Runs in CI via `taiki-e/install-action@cargo-llvm-cov`. Covers `gpx_sync`, `tile_server`, and command handlers.
 
 ## CI/CD
 
 ### GitHub Actions CI (`.github/workflows/ci.yml`)
 
-Runs on every push to `main` and on PRs. Four parallel jobs:
+Runs on every push to `main` and on PRs. Three parallel jobs:
 
 | Job | What it does |
 |---|---|
-| `js-unit` | `npm run test:unit` — Vitest unit tests |
-| `js-coverage` | `npm run test:coverage` — coverage report |
-| `rust-unit` | `cargo test` in `src-tauri/` (with Ubuntu system deps) |
-| `e2e` | `npm test` — Playwright e2e with Chromium |
+| `js-tests` | `npm run test:coverage` — Vitest unit tests + V8 coverage |
+| `rust-tests` | `cargo llvm-cov --text` in `src-tauri/` — Rust tests + LLVM coverage |
+| `e2e` | `npm run test:e2e:coverage` — Playwright e2e + V8 JS coverage |
 
 On e2e failure, `test-results/` and `playwright-report/` are uploaded as artifacts.
+E2E coverage summary is always uploaded as an artifact.
 
 ### GitHub Actions CD (`.github/workflows/release.yml`)
 
@@ -161,8 +156,7 @@ Produces: `.dmg` (macOS), `.deb`/`.AppImage` (Linux), `.msi`/`.exe` (Windows).
 
 ```bash
 # Equivalent to the CI pipeline
-npm run test:unit
-npm run test:coverage
-npm test
-(cd src-tauri && cargo test)
+npm run test:coverage          # JS unit tests + coverage
+npm run test:e2e:coverage      # Playwright e2e + V8 JS coverage
+(cd src-tauri && cargo test)   # Rust backend tests
 ```
