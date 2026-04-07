@@ -88,16 +88,39 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - [x] `buildCatalogEntryFromTileSource` generates `pmtiles://` URLs for PMTiles sources
 - [x] 6 new Rust tests: path parsing, range requests, 206/416/500 edge cases
 
+### Phase 12: PMTiles Vendor Fix + Tile Serving E2E Tests ✅
+
+- [x] Vendored `fflate` 0.8.2 (required dependency of pmtiles ESM build — bare specifier `from "fflate"` was unresolved)
+- [x] `tile-server-helper.js` — Node.js HTTP tile server for e2e tests (MBTiles via better-sqlite3, PMTiles with Range)
+- [x] `screenshot-utils.js` — center-crop screenshot utility for UI-stable baselines
+- [x] `tile-serving.spec.js` — 4 tests: MBTiles rendering (100% non-white), PMTiles rendering via Range, catalog registration, unregistration
+- [x] `tests/README.md` — test inventory, fixture list, coverage setup guide; linked from README and AGENTS
+- [x] `dummy-z1-z3.pmtiles` fixture converted from MBTiles via official `pmtiles` CLI
+
+### Phase 13: Desktop Drag-and-Drop Fix ✅
+
+- [x] Root cause: Tauri’s native drag-drop handler (`dragDropEnabled: true` default) intercepts file drops at the OS level before HTML5 events reach the webview
+- [x] Fix: `"dragDropEnabled": false` in `tauri.conf.json` — lets standard DOM `drop` events through to existing `io.js` handler
+
+### Phase 14: Basemap Plan UX Update ✅
+
+- [x] Updated `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md` with:
+  - Basemap vs overlay fluid distinction (`preferredRole` hint)
+  - 3 UX proposals: Unified Stack (recommended), Two Sections, Role Badge
+  - `setStyle` mutual exclusion constraint for vector styles
+  - Confirmation dialog design for vector style conflicts
+
 ### Test Summary
 
 | Suite | Count | Status |
 |---|---|---|
 | Rust unit tests (cargo test) | 33 | ✅ all pass |
 | JS unit tests (vitest) | 68 | ✅ all pass |
-| Playwright e2e (total) | 47 | ✅ all pass |
+| Playwright e2e (total) | 51 | ✅ all pass |
 | — persist | 5 | ✅ |
 | — track-import | 12 | ✅ |
 | — dem-loading | 3 | ✅ (with screenshots) |
+| — tile-serving | 4 | ✅ (MBTiles + PMTiles + catalog) |
 | — track-desktop | 4 | ✅ |
 | — profile | 6 | ✅ |
 | — track-mobile | 5 | ✅ |
@@ -117,7 +140,7 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 ### New files
 - `src-tauri/Cargo.toml` — workspace config with tauri v2, plugins, sync deps, tile deps
 - `src-tauri/build.rs` — standard tauri-build
-- `src-tauri/tauri.conf.json` — app config, frontendDist=../app
+- `src-tauri/tauri.conf.json` — app config, frontendDist=../app, dragDropEnabled=false
 - `src-tauri/capabilities/default.json` — core + dialog + shell permissions
 - `src-tauri/src/main.rs` — entry point, state mgmt, 12 Tauri commands, setup hook, JS error forwarding
 - `src-tauri/src/gpx_sync.rs` — file-centric sync manager (15 tests)
@@ -126,15 +149,22 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 - `app/js/pmtiles-protocol.js` — PMTiles protocol registration for MapLibre
 - `tests/unit/tauri-bridge.test.mjs` — 18 bridge unit tests
 - `tests/e2e/dem-loading.spec.js` — 3 DEM rendering tests with screenshot baselines
+- `tests/e2e/tile-serving.spec.js` — 4 tile serving tests (MBTiles + PMTiles + user catalog)
+- `tests/e2e/tile-server-helper.js` — Node.js HTTP tile server for e2e tests
+- `tests/e2e/screenshot-utils.js` — center-crop screenshot utility
 - `tests/fixtures/tiles/build_dem_fixtures.py` — synthetic DEM tile generator
 - `tests/fixtures/tiles/dem/` — 19 synthetic Terrarium-encoded DEM tiles
-- `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md` — unified basemap UI plan
+- `tests/fixtures/tiles/dummy-z1-z3.pmtiles` — PMTiles fixture (converted from MBTiles)
+- `tests/README.md` — test inventory and coverage guide
+- `plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md` — unified basemap UI plan (with UX proposals)
 
 ### Modified files
-- `app/js/main.js` — DEM tile URLs via bridge, GPX sync listener, conflict UI, PMTiles protocol init
+- `app/js/main.js` — DEM tile URLs via bridge, GPX sync listener, conflict UI, PMTiles protocol init, layerRegistry exposure
 - `app/js/io.js` — import bridge, add Tauri-aware openFolder/saveToFolder
 - `app/js/layer-registry.js` — dynamic user source registry, merged catalog lookups
-- `deps.json` — added pmtiles dependency
+- `deps.json` — added pmtiles + fflate dependencies
+- `README.md` — link to tests/README.md
+- `AGENTS.md` — link to tests/README.md
 
 ## Commits
 
@@ -151,6 +181,11 @@ Refactoring the Slope web app into a dual web+desktop codebase using Tauri v2, b
 11. `bc47a0c` feat: forward JS errors/rejections to Tauri dev console
 12. `7a28162` feat: Phase 1 — dynamic user source registry in layer-registry
 13. `19318ed` feat: Phase 5 — PMTiles serving with HTTP Range support + JS protocol
+14. `e4d076b` fix: vendor fflate dependency required by pmtiles ESM build
+15. `702adc0` feat: e2e tests for MBTiles + PMTiles tile serving and user catalog
+16. `3a33d24` chore: add tests/README.md with test inventory and coverage guide
+17. `b248959` chore: update basemap plan with UX proposals and setStyle constraint
+18. `2ecb183` fix: disable native drag-drop so HTML5 file drop works on desktop
 
 ## Next Steps
 
