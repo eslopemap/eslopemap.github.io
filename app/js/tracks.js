@@ -687,17 +687,30 @@ function createTrack(name, coords, opts) {
     groupName: opts?.groupName || null,
     segmentLabel: opts?.segmentLabel || null,
   };
-  enrichElevation(t.coords);
+  if (!opts?.batchImport) enrichElevation(t.coords);
   tracks.push(t);
-  if (mapReady) {
+  if (mapReady && !opts?.batchImport) {
     addMergedSource();  // no-op if already exists
     refreshMergedSource();
   }
-  setTrackPanelVisible(true);
-  if (!opts?.skipSelect) setActiveTrack(t.id);
+  if (!opts?.batchImport) setTrackPanelVisible(true);
+  if (!opts?.skipSelect && !opts?.batchImport) setActiveTrack(t.id);
   if (!opts?.skipTreeHook) onTrackCreated(t);
-  scheduleSave();
+  if (!opts?.batchImport) scheduleSave();
   return t;
+}
+
+function finishBatchImport() {
+  if (mapReady) {
+    addMergedSource();
+    refreshMergedSource();
+  }
+  setTrackPanelVisible(true);
+  // Select last track
+  if (tracks.length && !activeTrackId) {
+    setActiveTrack(tracks[tracks.length - 1].id);
+  }
+  scheduleSave();
 }
 
 function ensureTrackGrouping(trackIds, groupName) {
@@ -1242,6 +1255,8 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     findWaypointById,
     addWaypoints,
     fitToTrack,
+    fitToTrackIds,
+    finishBatchImport,
     onFileBatchImported: (fileName, createdTracks, waypoints) => onFileBatchImported(fileName, createdTracks, waypoints),
   });
 

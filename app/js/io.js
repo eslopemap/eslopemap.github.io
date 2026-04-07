@@ -175,29 +175,35 @@ export function importFileContent(filename, text) {
         groupName: trk.groupName,
         segmentLabel: trk.segmentLabel,
         skipTreeHook: true,
+        batchImport: true,
       });
       createdTracks.push(t);
-      tracksFns.fitToTrack(t);
     }
     if (result.waypoints.length && tracksFns.addWaypoints) {
       tracksFns.addWaypoints(result.waypoints);
     }
+    tracksFns.finishBatchImport();
     if (tracksFns.onFileBatchImported) {
       tracksFns.onFileBatchImported(baseName, createdTracks, result.waypoints);
     }
+    // Single fitBounds over all created tracks
+    const ids = createdTracks.map(t => t.id);
+    if (ids.length && tracksFns.fitToTrackIds) tracksFns.fitToTrackIds(ids);
   } else {
     const coordsList = parseGeoJSON(text);
     if (!coordsList.length) { console.warn('No tracks found in', filename); return; }
     const createdTracks = [];
     for (let i = 0; i < coordsList.length; i++) {
       const name = coordsList.length > 1 ? `${baseName} (${i + 1})` : baseName;
-      const t = tracksFns.createTrack(name, coordsList[i], { skipTreeHook: true });
+      const t = tracksFns.createTrack(name, coordsList[i], { skipTreeHook: true, batchImport: true });
       createdTracks.push(t);
-      tracksFns.fitToTrack(t);
     }
+    tracksFns.finishBatchImport();
     if (tracksFns.onFileBatchImported) {
       tracksFns.onFileBatchImported(baseName, createdTracks, []);
     }
+    const ids = createdTracks.map(t => t.id);
+    if (ids.length && tracksFns.fitToTrackIds) tracksFns.fitToTrackIds(ids);
   }
 }
 
