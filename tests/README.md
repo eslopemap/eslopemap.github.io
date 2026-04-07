@@ -21,7 +21,7 @@ npm run test:unit && npm test && (cd src-tauri && cargo test)
 
 ## JS Unit Tests (Vitest)
 
-Config: `vitest.config.mjs` — 11 test files.
+Config: `vitest.config.mjs` — 12 test files.
 
 | File | What it covers |
 |---|---|
@@ -34,6 +34,7 @@ Config: `vitest.config.mjs` — 11 test files.
 | `shortcuts.test.mjs` | Keyboard shortcut registry, focus guards, modifier keys |
 | `state.test.mjs` | Reactive Proxy store, onChange callback, STATE_DEFAULTS |
 | `tauri-bridge.test.mjs` | Runtime detection, desktop bridge API stubs |
+| `track-ops-simplify-display.test.mjs` | Display simplification (Douglas-Peucker for merged source) |
 | `undo-stack.test.mjs` | Undo/redo stack operations |
 | `utils.test.mjs` | Tile math, coordinate utilities |
 | `web-import.test.mjs` | GPX import from URL |
@@ -138,7 +139,7 @@ Outputs:
 
 Coverage targets `app/js/**/*.js`, excluding `app/vendor/**`.
 
-80 unit tests across 11 files.
+94 unit tests across 12 files.
 
 ### Frontend E2E — Playwright V8 coverage
 
