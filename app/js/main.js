@@ -509,19 +509,27 @@ function setControlsCollapsed(collapsed) {
 }
 
 controlsToggleBtn.addEventListener('click', () => {
-  setControlsCollapsed(!controlsPanel.classList.contains('collapsed'));
+  const wasCollapsed = controlsPanel.classList.contains('collapsed');
+  setControlsCollapsed(!wasCollapsed);
+  // Close layers panel when opening settings (they overlap)
+  if (wasCollapsed) {
+    document.getElementById('layer-order-panel')?.classList.remove('visible');
+    document.getElementById('layer-order-toggle')?.classList.remove('active');
+  }
 });
 syncControlsToggleLabel();
 
-const advancedToggle = document.getElementById('advanced-toggle');
-const advancedSection = document.getElementById('advanced-section');
-advancedToggle.addEventListener('click', () => {
-  const open = advancedSection.classList.toggle('open');
-  advancedToggle.querySelector('.arrow').classList.toggle('open', open);
+const layerAdvancedToggle = document.getElementById('layer-advanced-toggle');
+const layerAdvancedSection = document.getElementById('layer-advanced-section');
+layerAdvancedToggle.addEventListener('click', () => {
+  const open = layerAdvancedSection.classList.toggle('open');
+  layerAdvancedToggle.querySelector('.arrow').classList.toggle('open', open);
 });
 
 map.on('dragstart', () => {
   setControlsCollapsed(true);
+  document.getElementById('layer-order-panel')?.classList.remove('visible');
+  document.getElementById('layer-order-toggle')?.classList.remove('active');
 });
 
 // ---- Init search ----
@@ -1300,7 +1308,11 @@ const layerOrderPanel = document.getElementById('layer-order-panel');
 layerOrderToggleBtn?.addEventListener('click', () => {
   const isVisible = layerOrderPanel.classList.toggle('visible');
   layerOrderToggleBtn.classList.toggle('active', isVisible);
-  if (isVisible) renderLayerOrderPanel();
+  if (isVisible) {
+    renderLayerOrderPanel();
+    // Close settings panel when opening layers (they overlap)
+    setControlsCollapsed(true);
+  }
 });
 
 // Initial render of dynamic UI

@@ -35,8 +35,8 @@
   <div id="controls-wrapper">
   <div id="bar-left">
     <div id="panel-toggles">
-      <button id="settings-controls-toggle" class="panel-toggle-btn" title="Settings">🌍 <span class="btn-label">Settings</span></button>
-      <button id="layer-order-toggle" class="panel-toggle-btn" title="Layer order">🗂 <span class="btn-label">Layers</span></button>
+      <button id="layer-order-toggle" class="panel-toggle-btn" title="Layers">🗂 <span class="btn-label">Layers</span></button>
+      <button id="settings-controls-toggle" class="panel-toggle-btn" title="Settings">⚙ <span class="btn-label">Settings</span></button>
       <button id="profile-toggle-btn" class="panel-toggle-btn" title="Elevation profile" disabled>📈 <span class="btn-label">Profile</span></button>
       <button id="tracks-btn" class="panel-toggle-btn" title="Track list" disabled>📍 <span class="btn-label">Tracks</span></button>
     </div>
@@ -70,7 +70,49 @@
   </div>
   </div>
 
+  <!-- Hidden elements for backward compat / test mode -->
+  <select id="basemap" style="display:none"><option value="none">None</option></select>
+  <input id="terrain3d" type="checkbox" style="display:none" />
+
   <div id="controls" class="panel-surface panel-padded">
+    <div class="row">
+      <label for="cursorInfoMode"><strong>Elevation &amp; slope</strong></label><br />
+      <select id="cursorInfoMode">
+        <option value="cursor" selected>At cursor</option>
+        <option value="corner">Corner</option>
+        <option value="no">No</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="pauseThreshold"><strong>Pause threshold</strong>: <span id="pauseThresholdValue">5</span> min</label><br />
+      <input id="pauseThreshold" type="range" min="1" max="30" step="1" value="5" />
+    </div>
+
+    <div class="row">
+      <label for="profileSmoothing"><strong>Profile smoothing</strong>: <span id="profileSmoothingValue">3</span></label><br />
+      <input id="profileSmoothing" type="range" min="0" max="15" step="1" value="3" />
+    </div>
+
+    <div class="row">
+      <label><input id="showTileGrid" type="checkbox" /> Show DEM tile grid</label>
+    </div>
+
+    <div class="row">
+      <button id="clear-data-btn" type="button" class="tb-btn" title="Clear saved tracks and settings from localStorage">Clear saved data</button>
+    </div>
+
+    <div class="row" id="mobile-mode-row" style="display:none">
+      <label><input id="mobileModeDesktop" type="checkbox" /> Mobile editing mode (desktop)</label>
+    </div>
+  </div>
+
+  <div id="layer-order-panel" class="panel-surface panel-padded">
+    <div class="row basemap-row">
+      <label for="basemap-primary"><strong>Basemap</strong></label><br />
+      <select id="basemap-primary"></select>
+    </div>
+
     <div class="row">
       <label for="mode"><strong>Mode</strong></label><br />
       <select id="mode">
@@ -79,15 +121,6 @@
         <option value="slope">Slope</option>
         <option value="aspect">Aspect</option>
         <option value="color-relief">Color relief</option>
-      </select>
-    </div>
-
-    <div class="row basemap-row">
-      <label for="basemap-primary"><strong>Basemap</strong></label><br />
-      <select id="basemap-primary"></select>
-      <!-- Hidden select for backward compat / test mode -->
-      <select id="basemap" style="display:none">
-        <option value="none">None</option>
       </select>
     </div>
 
@@ -101,19 +134,11 @@
       </select>
     </div>
 
-    <div class="row bookmark-row">
-      <div class="bookmark-header">
-        <strong>Bookmarks</strong>
-        <button id="bookmark-save-btn" type="button" class="bookmark-save-btn" title="Save current layers as bookmark">⭐ Save</button>
-      </div>
-      <div id="bookmark-list"></div>
-    </div>
+    <h4 style="margin:8px 0 4px; font-size:13px;">Layer order</h4>
+    <div id="layer-order-list"></div>
 
-    <!-- 3D terrain moved to standalone map button -->
-    <input id="terrain3d" type="checkbox" style="display:none" />
-
-    <button id="advanced-toggle" type="button"><span class="arrow">&#9654;</span> Advanced</button>
-    <div id="advanced-section">
+    <button id="layer-advanced-toggle" type="button"><span class="arrow">&#9654;</span> Layer settings</button>
+    <div id="layer-advanced-section">
       <div class="row">
         <label for="basemapOpacity"><strong>Basemap opacity</strong>: <span id="basemapOpacityValue">1.00</span></label><br />
         <input id="basemapOpacity" type="range" min="0" max="1" step="0.01" value="1" />
@@ -141,50 +166,22 @@
       </div>
 
       <div class="row">
-        <label for="cursorInfoMode"><strong>Elevation &amp; slope</strong></label><br />
-        <select id="cursorInfoMode">
-          <option value="cursor" selected>At cursor</option>
-          <option value="corner">Corner</option>
-          <option value="no">No</option>
-        </select>
-      </div>
-
-      <div class="row">
         <label><input id="multiplyBlend" type="checkbox" checked /> Multiply blend</label>
-      </div>
-
-      <div class="row">
-        <label><input id="showTileGrid" type="checkbox" /> Show DEM tile grid</label>
       </div>
 
       <div class="row">
         <label for="terrainExaggeration"><strong>Terrain exaggeration</strong>: <span id="terrainExaggerationValue">1.40</span></label><br />
         <input id="terrainExaggeration" type="range" min="1" max="3" step="0.1" value="1.4" disabled />
       </div>
-
-      <div class="row">
-        <label for="pauseThreshold"><strong>Pause threshold</strong>: <span id="pauseThresholdValue">5</span> min</label><br />
-        <input id="pauseThreshold" type="range" min="1" max="30" step="1" value="5" />
-      </div>
-
-      <div class="row">
-        <label for="profileSmoothing"><strong>Profile smoothing</strong>: <span id="profileSmoothingValue">3</span></label><br />
-        <input id="profileSmoothing" type="range" min="0" max="15" step="1" value="3" />
-      </div>
-
-      <div class="row">
-        <button id="clear-data-btn" type="button" class="tb-btn" title="Clear saved tracks and settings from localStorage">Clear saved data</button>
-      </div>
-
-      <div class="row" id="mobile-mode-row" style="display:none">
-        <label><input id="mobileModeDesktop" type="checkbox" /> Mobile editing mode (desktop)</label>
-      </div>
     </div>
-  </div>
 
-  <div id="layer-order-panel" class="panel-surface panel-padded">
-    <h4 style="margin:0 0 6px; font-size:13px;">Layers</h4>
-    <div id="layer-order-list"></div>
+    <div class="row bookmark-row">
+      <div class="bookmark-header">
+        <strong>Bookmarks</strong>
+        <button id="bookmark-save-btn" type="button" class="bookmark-save-btn" title="Save current layers as bookmark">⭐ Save</button>
+      </div>
+      <div id="bookmark-list"></div>
+    </div>
   </div>
 
   <div id="track-panel-shell">

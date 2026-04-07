@@ -169,7 +169,7 @@
     }
     #controls.collapsed { display: none; }
 
-    #advanced-toggle {
+    #advanced-toggle, #layer-advanced-toggle {
       display: flex;
       align-items: center;
       gap: 4px;
@@ -183,11 +183,11 @@
       width: 100%;
       color: inherit;
     }
-    #advanced-toggle:hover { opacity: 1; }
-    #advanced-toggle .arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
-    #advanced-toggle .arrow.open { transform: rotate(90deg); }
-    #advanced-section { display: none; }
-    #advanced-section.open { display: block; }
+    #advanced-toggle:hover, #layer-advanced-toggle:hover { opacity: 1; }
+    #advanced-toggle .arrow, #layer-advanced-toggle .arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
+    #advanced-toggle .arrow.open, #layer-advanced-toggle .arrow.open { transform: rotate(90deg); }
+    #advanced-section, #layer-advanced-section { display: none; }
+    #advanced-section.open, #layer-advanced-section.open { display: block; }
 
     #legend {
       position: absolute;
@@ -996,9 +996,9 @@
       display: none;
       position: absolute;
       top: 46px;
-      left: 200px;
+      left: 10px;
       z-index: 10;
-      min-width: 220px;
+      min-width: 200px;
       max-width: 300px;
       font-size: 13px;
       max-height: calc(100vh - 60px - var(--bottom-overlay-bottom));
