@@ -272,9 +272,14 @@ fn main() {
 
     tile_server::spawn_tile_server(tile_port, tile_sources.clone());
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_shell::init());
+    #[cfg(feature = "webdriver")]
+    {
+        builder = builder.plugin(tauri_plugin_webdriver::init());
+    }
+    builder
         .manage(Mutex::new(AppState {
             manager,
             watcher: None,

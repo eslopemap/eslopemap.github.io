@@ -79,11 +79,18 @@ test.describe('Persistence', () => {
 
   test('Settings persist across reload', async ({ mapPage: page }) => {
     // Test a setting that test_mode does NOT override.
-    // Open advanced section and change pause threshold.
-    await page.locator('#advanced-toggle').click();
-    await page.waitForTimeout(100);
-    await page.locator('#pauseThreshold').fill('12');
-    await page.locator('#pauseThreshold').dispatchEvent('input');
+    // Ensure Settings panel is visible, then change pause threshold.
+    const controlsPanel = page.locator('#controls');
+    if (await controlsPanel.evaluate(el => el.classList.contains('collapsed'))) {
+      await page.locator('#settings-controls-toggle').click();
+      await page.waitForTimeout(100);
+    }
+    // Use evaluate to set range input value (fill() unreliable for range inputs)
+    await page.evaluate(() => {
+      const el = document.getElementById('pauseThreshold');
+      el.value = '12';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await page.waitForTimeout(400);
 
     await page.reload({ waitUntil: 'load' });
@@ -92,9 +99,6 @@ test.describe('Persistence', () => {
     );
     await page.waitForTimeout(300);
 
-    // Open advanced section again to see the persisted value
-    await page.locator('#advanced-toggle').click();
-    await page.waitForTimeout(100);
     const val = await page.locator('#pauseThreshold').inputValue();
     expect(val).toBe('12');
   });

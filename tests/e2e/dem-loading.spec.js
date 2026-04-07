@@ -117,7 +117,39 @@ async function getDemDiagnostic(page) {
   });
 }
 
+/**
+ * Wait for DEM tiles to be decoded and rendered.
+ * Polls the map idle state + triggers repaints.
+ */
+async function waitForDemRender(page, { maxMs = 8000 } = {}) {
+  const start = Date.now();
+  // Give initial time for tile requests + decode
+  await page.waitForTimeout(1500);
+  // Poll until either non-white pixels appear or time runs out
+  while (Date.now() - start < maxMs) {
+    await page.evaluate(() => (0, eval)('map').triggerRepaint());
+    await page.waitForTimeout(400);
+    const check = await page.evaluate(() => {
+      const map = (0, eval)('map');
+      const canvas = map.getCanvas();
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (!gl) return { ready: false };
+      const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+      const pixels = new Uint8Array(w * 40 * 4);
+      gl.readPixels(0, Math.floor(h / 2) - 20, w, 40, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let nonWhite = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i + 3] > 0 && (pixels[i] < 240 || pixels[i + 1] < 240 || pixels[i + 2] < 240)) nonWhite++;
+      }
+      return { ready: nonWhite > 10, nonWhite };
+    });
+    if (check.ready) return;
+  }
+}
+
 test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
+  // DEM rendering with SwiftShader is slow — use generous timeout
+  test.describe.configure({ timeout: 30_000 });
 
   test('color-relief mode shows elevation colors', async ({ page }) => {
     const served = await interceptDemTiles(page);
@@ -127,10 +159,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
     await page.goto(NORMAL_URL, { waitUntil: 'load' });
 
     await waitForMapReady(page);
-    // Extra time for DEM tile decode + terrain-analysis render
-    await page.waitForTimeout(3000);
-    await page.evaluate(() => (0, eval)('map').triggerRepaint());
-    await page.waitForTimeout(500);
+    await waitForDemRender(page);
 
     const zoom = await page.evaluate(() => (0, eval)('map').getZoom());
     const diag = await getDemDiagnostic(page);
@@ -161,9 +190,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
     await page.goto(url, { waitUntil: 'load' });
 
     await waitForMapReady(page);
-    await page.waitForTimeout(2000);
-    await page.evaluate(() => (0, eval)('map').triggerRepaint());
-    await page.waitForTimeout(500);
+    await waitForDemRender(page);
 
     const pixels = await readMapPixels(page);
     console.log('slope+relief pixels:', JSON.stringify(pixels));
@@ -183,9 +210,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
     await page.goto(url, { waitUntil: 'load' });
 
     await waitForMapReady(page);
-    await page.waitForTimeout(2000);
-    await page.evaluate(() => (0, eval)('map').triggerRepaint());
-    await page.waitForTimeout(500);
+    await waitForDemRender(page);
 
     const pixels = await readMapPixels(page);
     console.log('slope pixels:', JSON.stringify(pixels));

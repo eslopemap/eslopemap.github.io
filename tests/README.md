@@ -63,6 +63,35 @@ Test modes:
 - **test_mode** (`#test_mode=true`): skips DEM loading, used by most UI tests for speed
 - **normal mode**: full DEM pipeline, used by `dem-loading.spec.js` and `tile-serving.spec.js`
 
+## Tauri WebDriver E2E Tests (wdio)
+
+Config: `tests/tauri-e2e/wdio.conf.mjs` — runs against the real Tauri desktop app via `tauri-plugin-webdriver`.
+
+```bash
+# Prerequisites: build the debug binary first
+cd src-tauri && cargo build
+
+# Install wdio deps (first time only)
+cd tests/tauri-e2e && npm install
+
+# Run tests
+npm run test:tauri-e2e
+```
+
+Uses `tauri-plugin-webdriver` (debug builds only) which embeds a W3C WebDriver server on port 4445 inside the app. Tests launch the binary, connect via WebdriverIO, and interact with the real desktop UI.
+
+| File | Tests | What it covers |
+|---|---|---|
+| `dem-tile-serving.spec.mjs` | 4 | DEM tile requests to localhost tile server, 404 detection |
+
+Helpers:
+- `tests/tauri-e2e/tests/helpers.mjs` — Tauri IPC bridge, error capture hooks, screenshot utility
+
+Key differences from Playwright E2E:
+- **Real Tauri runtime** — tests run inside WKWebView with actual Tauri IPC, tile server, etc.
+- **WKWebView content world** — WebDriver JS runs in an isolated world; use `window.__TAURI_INTERNALS__` for IPC
+- **No test_mode** — tests exercise the full app including DEM loading
+
 ## Rust Unit Tests (cargo test)
 
 In `src-tauri/` — 33 tests across 2 modules.

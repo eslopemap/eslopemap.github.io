@@ -1,0 +1,17 @@
+{
+  "name": "slope-tauri-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "wdio run wdio.conf.mjs",
+    "test:build": "cd ../../src-tauri && cargo build --features webdriver"
+  },
+  "devDependencies": {
+    "@wdio/cli": "^9",
+    "@wdio/local-runner": "^9",
+    "@wdio/mocha-framework": "^9",
+    "@wdio/spec-reporter": "^9",
+    "webdriverio": "^9"
+  }
+}
