@@ -3,7 +3,7 @@
 
 import { parseGPX as gpxjsParse, stringifyGPX } from '@we-gold/gpxjs';
 import { downloadFile } from './utils.js';
-import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile, onGpxSyncEvents } from './tauri-bridge.js';
+import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile, onGpxSyncEvents, addTileSource, fetchAvailableSources, buildCatalogEntryFromTileJson } from './tauri-bridge.js';
 
 let tracksFns = {};  // wired at init
 
@@ -630,6 +630,7 @@ export function initIO(deps) {
 // ---- Directory support (progressive) ----
 
 const FILE_PATTERN = /\.(gpx|geojson|json)$/i;
+const TILE_PATTERN = /\.(mbtiles|pmtiles)$/i;
 
 /** Tier 1: File System Access API (Chrome/Edge — read+write) */
 async function openDirectoryPicker() {
@@ -788,8 +789,12 @@ async function readDirectoryEntries(dirEntry) {
     reader.readEntries(resolve);
   });
   for (const entry of entries) {
-    if (entry.isFile && FILE_PATTERN.test(entry.name)) {
-      await readFileEntry(entry);
+    if (entry.isFile) {
+      if (FILE_PATTERN.test(entry.name)) {
+        await readFileEntry(entry);
+      } else if (TILE_PATTERN.test(entry.name)) {
+        await handleTileFileEntry(entry);
+      }
     } else if (entry.isDirectory) {
       await readDirectoryEntries(entry);
     }
@@ -805,4 +810,56 @@ function readFileEntry(entry) {
       });
     });
   });
+}
+
+/** Handle dropped tile file (.mbtiles/.pmtiles) — Tauri only */
+async function handleTileFileEntry(entry) {
+  if (!isTauri()) {
+    console.warn('[tile-drop] Tile file drag-and-drop requires desktop mode');
+    return;
+  }
+  return new Promise((resolve) => {
+    entry.file(async (file) => {
+      try {
+        await handleTileFile(file.name, file.path);
+      } catch (e) {
+        console.error('[tile-drop] failed to register tile file:', e);
+      }
+      resolve();
+    });
+  });
+}
+
+/** Register a tile file via Tauri IPC and add to layer catalog */
+async function handleTileFile(name, path) {
+  if (!isTauri()) return;
+  
+  // Extract a clean name (remove extension)
+  const cleanName = name.replace(/\.(mbtiles|pmtiles)$/i, '');
+  
+  console.info(`[tile-drop] registering ${name} from ${path}`);
+  
+  // Register with tile server
+  await addTileSource(cleanName, path);
+  
+  // Fetch all available sources to get the TileJSON for this one
+  const sources = await fetchAvailableSources();
+  const tj = sources.find(s => s.name === cleanName);
+  
+  if (tj) {
+    const entry = buildCatalogEntryFromTileJson(tj);
+    
+    // Register via window.layerRegistry to avoid circular import
+    if (window.layerRegistry?.registerUserSource) {
+      window.layerRegistry.registerUserSource(entry);
+      console.info(`[tile-drop] registered '${cleanName}' as layer`);
+      
+      // Refresh the Add layer dropdown
+      if (typeof window.renderAddLayerSelect === 'function') {
+        window.renderAddLayerSelect();
+      }
+    }
+  } else {
+    console.warn(`[tile-drop] TileJSON not found for '${cleanName}'`);
+  }
 }

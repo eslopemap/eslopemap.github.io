@@ -1656,6 +1656,7 @@ Object.defineProperties(window, {
   profileClosed:       { get() { return tracksState.profileClosed; } },
   resetForTest:        { get() { return resetForTest; } },
   layerRegistry:       { get() { return _layerRegistryProxy; } },
+  renderAddLayerSelect: { get() { return renderAddLayerSelect; } },
 });
 
 
