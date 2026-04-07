@@ -9,7 +9,7 @@ import { createStore, STATE_DEFAULTS } from './state.js';
 
 import {
   parseHashParams, syncViewToUrl, updateLegend,
-  applyContourVisibility,
+  applyHillshadeVisibility, applyContourVisibility,
   applyTerrainState, applyModeState,
   basemapOpacityExpr, setGlobalStatePropertySafe, updateCursorInfoVisibility,
   setCursorInfo, showCursorTooltipAt, hideCursorTooltip,
@@ -117,6 +117,7 @@ function applyTestModeState(state) {
   state.basemap = 'none';
   state.basemapStack = [];
   state.mode = '';
+  state.showHillshade = false;
   state.showContours = false;
   state.activeOverlays = [];
   state.layerOrder = [];
@@ -130,6 +131,7 @@ function syncTestModeUi(state) {
   document.getElementById('mode').value = state.mode;
   document.getElementById('terrain3d').checked = state.terrain3d;
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
+  document.getElementById('showHillshade').checked = state.showHillshade;
   document.getElementById('showContours').checked = state.showContours;
   // Overlay checkboxes are dynamic — sync them
   syncOverlayCheckboxes(state);
@@ -138,9 +140,7 @@ function syncTestModeUi(state) {
 }
 
 function applyTestModeMapState(map, state) {
-  if (map.getLayer('dem-loader')) {
-    map.setLayoutProperty('dem-loader', 'visibility', 'none');
-  }
+  applyHillshadeVisibility(map, state);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
   void setBasemap(map, state, state.basemap);
   applyAllOverlays(map, state);
@@ -197,6 +197,7 @@ if (persisted) {
   if (persisted.hillshadeMethod != null) {
     document.getElementById('hillshadeMethod').value = state.hillshadeMethod;
   }
+  if (persisted.showHillshade != null) document.getElementById('showHillshade').checked = state.showHillshade;
   if (persisted.showContours != null) document.getElementById('showContours').checked = state.showContours;
   if (persisted.multiplyBlend != null) document.getElementById('multiplyBlend').checked = state.multiplyBlend;
   if (persisted.cursorInfoMode != null) document.getElementById('cursorInfoMode').value = state.cursorInfoMode;
@@ -566,6 +567,7 @@ map.on('style.load', () => {
   tracksState.rehydrateTrackLayers();
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
+  applyHillshadeVisibility(map, state);
   if (state.showTileGrid) updateDebugGridSource(map);
 });
 
@@ -937,6 +939,12 @@ document.getElementById('slopeOpacity').addEventListener('input', (e) => {
   scheduleSettingsSave();
 });
 
+document.getElementById('showHillshade').addEventListener('change', (e) => {
+  state.showHillshade = Boolean(e.target.checked);
+  applyHillshadeVisibility(map, state);
+  scheduleSettingsSave();
+});
+
 document.getElementById('showContours').addEventListener('change', (e) => {
   state.showContours = Boolean(e.target.checked);
   applyContourVisibility(map, state);
@@ -1120,11 +1128,97 @@ function syncOverlayCheckboxes(_st) {
   // No-op: overlays are shown in the Layers panel, not a separate checkbox list
 }
 
+/** Build a non-draggable system-layer row for the Layers panel */
+function buildSystemLayerRow({ label, visible, opacity, onToggle, onOpacity }) {
+  const row = document.createElement('div');
+  row.className = 'layer-order-row layer-system' + (visible ? '' : ' layer-hidden');
+
+  const handle = document.createElement('span');
+  handle.className = 'layer-order-handle';
+  handle.textContent = '';  // no drag handle
+
+  const visBtn = document.createElement('button');
+  visBtn.className = 'layer-order-vis' + (visible ? '' : ' vis-off');
+  visBtn.textContent = '👁';
+  visBtn.title = visible ? 'Hide layer' : 'Show layer';
+  visBtn.addEventListener('click', () => {
+    onToggle(!visible);
+    renderLayerOrderPanel();
+  });
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'layer-order-name';
+  nameSpan.textContent = label;
+
+  const opacityInput = document.createElement('input');
+  opacityInput.type = 'range';
+  opacityInput.min = '0';
+  opacityInput.max = '1';
+  opacityInput.step = '0.05';
+  opacityInput.value = String(opacity);
+  opacityInput.className = 'layer-order-opacity';
+  opacityInput.title = 'Layer opacity';
+  opacityInput.addEventListener('input', () => onOpacity(Number(opacityInput.value)));
+
+  row.append(handle, visBtn, nameSpan, opacityInput);
+  return row;
+}
+
 /** Render the Layers panel: basemaps + overlays with visibility, opacity, remove, drag */
 function renderLayerOrderPanel() {
   const container = document.getElementById('layer-order-list');
   if (!container) return;
   container.innerHTML = '';
+
+  // ---- System layers (top of stack = rendered on top) ----
+
+  // Terrain analysis (slope / relief)
+  const analysisVisible = !!state.mode;
+  container.appendChild(buildSystemLayerRow({
+    label: 'Terrain analysis',
+    visible: analysisVisible,
+    opacity: state.slopeOpacity,
+    onToggle: (show) => {
+      state.mode = show ? 'slope+relief' : '';
+      document.getElementById('mode').value = state.mode;
+      updateLegend(state, map);
+      applyModeState(map, state);
+      syncViewToUrl(map, state);
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    },
+    onOpacity: (val) => {
+      state.slopeOpacity = val;
+      document.getElementById('slopeOpacity').value = String(val);
+      document.getElementById('slopeOpacityValue').textContent = val.toFixed(2);
+      applyModeState(map, state);
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    },
+  }));
+
+  // Hillshade
+  container.appendChild(buildSystemLayerRow({
+    label: 'Hillshade',
+    visible: state.showHillshade,
+    opacity: state.hillshadeOpacity,
+    onToggle: (show) => {
+      state.showHillshade = show;
+      document.getElementById('showHillshade').checked = show;
+      applyHillshadeVisibility(map, state);
+      scheduleSettingsSave();
+    },
+    onOpacity: (val) => {
+      state.hillshadeOpacity = val;
+      document.getElementById('hillshadeOpacity').value = String(val);
+      document.getElementById('hillshadeOpacityValue').textContent = val.toFixed(2);
+      setGlobalStatePropertySafe(map, 'hillshadeOpacity', val);
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    },
+  }));
+
+  // ---- User layers (basemaps + overlays) ----
   const order = state.layerOrder || [];
   const settings = state.layerSettings || {};
   const basemapSet = new Set(state.basemapStack || []);
@@ -1395,6 +1489,7 @@ map.on('load', async () => {
   applyAllLayerSettings(map, state);
   applyModeState(map, state);
   applyTerrainState(map, state);
+  applyHillshadeVisibility(map, state);
   applyContourVisibility(map, state);
   if (state.showTileGrid) updateDebugGridSource(map);
   renderLayerOrderPanel();

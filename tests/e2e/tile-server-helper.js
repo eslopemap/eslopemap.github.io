@@ -48,6 +48,7 @@ function startTileServer(sources) {
         const [, source, zStr, xStr, yStr] = tileMatch;
         const db = dbs[source];
         if (!db) {
+          console.log(`[tile-server] 404: source '${source}' not found`);
           res.writeHead(404);
           res.end('source not found');
           return;
@@ -58,11 +59,13 @@ function startTileServer(sources) {
           'SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?'
         ).get(z, x, tmsRow);
         if (!row) {
+          console.log(`[tile-server] 204: tile not found z=${z} x=${x} y=${y} tmsRow=${tmsRow}`);
           res.writeHead(204);
           res.end();
           return;
         }
-        res.writeHead(200, { 'Content-Type': 'image/png' });
+        console.log(`[tile-server] 200: tile found z=${z} x=${x} y=${y} size=${row.tile_data.length}`);
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': row.tile_data.length });
         res.end(row.tile_data);
         return;
       }

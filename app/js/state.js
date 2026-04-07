@@ -20,6 +20,7 @@ export const STATE_DEFAULTS = {
   basemapStack: ['osm'],     // ordered list of active basemaps (bottom→top)
   basemapOpacity: 1,         // global basemap opacity (legacy single-basemap)
   basemapOpacities: {},      // per-basemap opacity overrides: { [id]: number }
+  showHillshade: true,
   hillshadeOpacity: 0.10,
   hillshadeMethod: 'igor',
   slopeOpacity: 0.45,

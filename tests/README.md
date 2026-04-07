@@ -21,7 +21,7 @@ npm run test:unit && npm test && (cd src-tauri && cargo test)
 
 ## JS Unit Tests (Vitest)
 
-Config: `vitest.config.mjs` — 13 test files.
+Config: `vitest.config.mjs` — 14 test files.
 
 | File | What it covers |
 |---|---|
@@ -39,6 +39,7 @@ Config: `vitest.config.mjs` — 13 test files.
 | `undo-stack.test.mjs` | Undo/redo stack operations |
 | `utils.test.mjs` | Tile math, coordinate utilities |
 | `web-import.test.mjs` | GPX import from URL |
+| `tile-server.test.mjs` | Node.js tile server: MBTiles/PMTiles serving, PNG pixel verification |
 
 Helper: `test-helpers.mjs` — shared mocks (canvas, document).
 
@@ -141,7 +142,7 @@ Outputs:
 
 Coverage targets `app/js/**/*.js`, excluding `app/vendor/**`.
 
-107 unit tests across 13 files.
+115+ unit tests across 14 files.
 
 ### Frontend E2E — Playwright V8 coverage
 

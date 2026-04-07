@@ -27,6 +27,10 @@ export { basemapOpacityExpr } from './constants.js';
 
 // ---- Contour / terrain ----
 
+export function applyHillshadeVisibility(map, state) {
+  setLayerVisibilitySafe(map, 'dem-loader', state.showHillshade);
+}
+
 export function applyContourVisibility(map, state) {
   setLayerVisibilitySafe(map, 'contours', state.showContours);
   setLayerVisibilitySafe(map, 'contour-text', state.showContours);

@@ -10,8 +10,10 @@ const { expectCenterScreenshot } = require('./screenshot-utils');
 const MBTILES_PATH = path.join(FIXTURES, 'dummy-z1-z3.mbtiles');
 const PMTILES_PATH = path.join(FIXTURES, 'dummy-z1-z3.pmtiles');
 
-// Use zoom 2 and center 0,0 to match the dummy tiles (z1-z3, global coverage)
-const BASE_HASH = 'lat=0&lng=0&zoom=2&basemap=none&mode=';
+// Use zoom 1 and center 0,0 to match the dummy tiles (z1-z3, global coverage)
+// At zoom=1, MapLibre requests z=2 tiles (with overzoom for retina), which exist
+// test_mode=true disables hillshade which would otherwise obscure tile colors
+const BASE_HASH = 'lat=0&lng=0&zoom=1&basemap=none&mode=&test_mode=true';
 
 const test = base.extend({
   tileServer: [async ({}, use) => {
@@ -79,7 +81,12 @@ async function loadWithUserSource(page, tileServerUrl, opts) {
       if (!map.getSource(srcId)) map.addSource(srcId, srcDef);
     }
     for (const layer of entry.layers) {
-      if (!map.getLayer(layer.id)) map.addLayer(layer);
+      if (!map.getLayer(layer.id)) {
+        // Override paint to use fixed opacity instead of global state expression
+        // Add without beforeId to place at end of layer list (top of rendering stack)
+        const modifiedLayer = { ...layer, paint: { 'raster-opacity': 1.0 } };
+        map.addLayer(modifiedLayer);
+      }
     }
   }, { tileBaseUrl: tileServerUrl, name: sourceName, kind: sourceKind });
 

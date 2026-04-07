@@ -1032,6 +1032,8 @@
     .layer-order-row.dragging { opacity: 0.4; }
     .layer-order-row.drag-over { background: rgba(74,144,217,0.12); border-radius: 4px; }
     .layer-order-row.layer-basemap .layer-order-name { font-weight: 600; }
+    .layer-order-row.layer-system { cursor: default; }
+    .layer-order-row.layer-system .layer-order-name { font-style: italic; opacity: 0.85; }
     .layer-order-row.layer-hidden { opacity: 0.45; }
     .layer-order-handle {
       flex-shrink: 0;
