@@ -21,13 +21,14 @@ npm run test:unit && npm test && (cd src-tauri && cargo test)
 
 ## JS Unit Tests (Vitest)
 
-Config: `vitest.config.mjs` — 12 test files.
+Config: `vitest.config.mjs` — 13 test files.
 
 | File | What it covers |
 |---|---|
 | `constants.test.mjs` | Color ramp parsing, legend CSS generation, opacity expressions |
 | `dem.test.mjs` | DEM elevation sampling, bilinear interpolation |
 | `gpx-model.test.mjs` | GPX/GeoJSON data model parsing |
+| `io-import-guard.test.mjs` | Extension guard in importFileContent, parseGeoJSON edge cases |
 | `io-roundtrip.test.mjs` | Import/export round-trips for GPX and GeoJSON |
 | `layer-engine.test.mjs` | Basemap/overlay loading, opacity, user source registry |
 | `persist.test.mjs` | localStorage save/load for tracks and settings, granular clear and size stats |
@@ -43,13 +44,14 @@ Helper: `test-helpers.mjs` — shared mocks (canvas, document).
 
 ## Playwright E2E Tests
 
-Config: `playwright.config.js` — 59 tests, headless Chromium with SwiftShader WebGL.
+Config: `playwright.config.js` — 73 tests, headless Chromium with SwiftShader WebGL.
 
 | File | Tests | What it covers |
 |---|---|---|
 | `persist.spec.js` | 5 | Track/settings persistence across page reload |
 | `track-desktop.spec.js` | 15 | Desktop track editor: draw, edit, delete, undo, stats |
 | `track-import.spec.js` | 12 | GPX/GeoJSON import, multi-segment, extensions |
+| `track-merge.spec.js` | 15 | Merged source, promote/demote, import guard, batch import |
 | `track-mobile.spec.js` | 5 | Mobile editing mode, crosshair, multi-tap |
 | `profile.spec.js` | 6 | Elevation profile panel, auto-open, display |
 | `dem-loading.spec.js` | 3 | DEM rendering: color-relief, slope+relief, slope (screenshot baselines) |
@@ -139,7 +141,7 @@ Outputs:
 
 Coverage targets `app/js/**/*.js`, excluding `app/vendor/**`.
 
-94 unit tests across 12 files.
+107 unit tests across 13 files.
 
 ### Frontend E2E — Playwright V8 coverage
 
