@@ -34,6 +34,20 @@ npm install
 cargo tauri dev          # starts static server + Tauri window
 ```
 
+**Config file**: `slopemapper.toml` is loaded from the OS config directory:
+- macOS: `~/Library/Application Support/slopemapper/slopemapper.toml`
+- Linux: `~/.config/slopemapper/slopemapper.toml`
+- Windows: `%APPDATA%\slopemapper\slopemapper.toml`
+
+Example config:
+```toml
+[cache]
+max_size_mb = 100
+
+[sources]
+folders = ["/path/to/tiles"]
+```
+
 For a release build:
 
 ```bash
