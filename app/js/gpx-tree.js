@@ -1197,18 +1197,38 @@ function renderNodeList(nodes, container, depth) {
     icon.textContent = NODE_ICONS[node.type] || '';
     row.appendChild(icon);
 
-    // Name + stats
+    // Name + stats — use middle-ellipsis: split name into start/end spans
     const nameEl = document.createElement('span');
     nameEl.className = 'tree-name';
 
+    function setNameWithMiddleEllipsis(el, text) {
+      el.title = text;
+      const TAIL_CHARS = 12; // show this many chars from the end
+      if (text.length > 30) {
+        const startSpan = document.createElement('span');
+        startSpan.className = 'tree-name-start';
+        startSpan.textContent = text.slice(0, text.length - TAIL_CHARS);
+        const endSpan = document.createElement('span');
+        endSpan.className = 'tree-name-end';
+        endSpan.textContent = text.slice(-TAIL_CHARS);
+        el.appendChild(startSpan);
+        el.appendChild(endSpan);
+      } else {
+        const startSpan = document.createElement('span');
+        startSpan.className = 'tree-name-start';
+        startSpan.textContent = text;
+        el.appendChild(startSpan);
+      }
+    }
+
     if (node.type === 'segment') {
       const segTrack = node._trackId ? _deps.findTrack(node._trackId) : null;
-      nameEl.textContent = segTrack?.segmentLabel || 'Segment';
+      setNameWithMiddleEllipsis(nameEl, segTrack?.segmentLabel || 'Segment');
       appendStatsSpan(nameEl, segTrack);
     } else if (node.type === 'waypoint') {
-      nameEl.textContent = node.name || 'Waypoint';
+      setNameWithMiddleEllipsis(nameEl, node.name || 'Waypoint');
     } else if (node.type === 'track') {
-      nameEl.textContent = node.name || 'Track';
+      setNameWithMiddleEllipsis(nameEl, node.name || 'Track');
       // Aggregate stats for multi-segment tracks
       if (node._trackIds?.length > 1) {
         appendAggregateStats(nameEl, node._trackIds);
@@ -1217,7 +1237,7 @@ function renderNodeList(nodes, container, depth) {
         appendStatsSpan(nameEl, t);
       }
     } else {
-      nameEl.textContent = node.name || node.type;
+      setNameWithMiddleEllipsis(nameEl, node.name || node.type);
       if (node.type === 'file') {
          const trks = node.children?.filter(c => c.type === 'track') || [];
          if (trks.length > 0) {

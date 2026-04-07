@@ -280,6 +280,7 @@
       flex-direction: column;
       align-items: flex-end;
       gap: 6px;
+      max-width: min(360px, calc(100vw - 20px));
     }
     #track-panel-shell.visible {
       padding: 8px 10px 10px;
@@ -757,7 +758,19 @@
     .tree-name {
       flex: 1;
       overflow: hidden;
+      white-space: nowrap;
+      display: flex;
+      min-width: 0;
+    }
+    .tree-name-start {
+      overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+      flex-shrink: 1;
+      min-width: 20px;
+    }
+    .tree-name-end {
+      flex-shrink: 0;
       white-space: nowrap;
     }
     .tree-stats {
