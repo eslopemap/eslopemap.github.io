@@ -1204,7 +1204,7 @@ function renderNodeList(nodes, container, depth) {
     function setNameWithMiddleEllipsis(el, text) {
       el.title = text;
       const TAIL_CHARS = 12; // show this many chars from the end
-      if (text.length > 30) {
+      if (text.length > 40) {
         const startSpan = document.createElement('span');
         startSpan.className = 'tree-name-start';
         startSpan.textContent = text.slice(0, text.length - TAIL_CHARS);
