@@ -3,7 +3,9 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod config;
 mod gpx_sync;
+mod tile_cache;
 mod tile_server;
 
 use std::path::PathBuf;
@@ -12,6 +14,7 @@ use std::sync::Mutex;
 use gpx_sync::{
     new_shared_manager, start_watcher, FileState, FolderSnapshot, SharedSyncManager,
 };
+use tile_cache::{CachedUpstreamSource, SharedCachedSources, TileCache};
 use tile_server::{SharedTileSources, TileSourceEntry, TileSourceKind, ScannedTileSource, detect_source_kind, scan_tile_folder as do_scan_tile_folder};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -26,6 +29,8 @@ struct AppState {
     watcher: Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>>,
     tile_port: u16,
     tile_sources: SharedTileSources,
+    cached_sources: SharedCachedSources,
+    tile_cache: TileCache,
 }
 
 type ManagedState = Mutex<AppState>;
@@ -249,14 +254,57 @@ fn get_desktop_config(state: State<'_, ManagedState>) -> Result<DesktopConfig, S
 }
 
 // ---------------------------------------------------------------------------
+// Tauri commands — tile cache
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn get_cache_stats(state: State<'_, ManagedState>) -> Result<tile_cache::CacheStats, String> {
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    Ok(app_state.tile_cache.stats())
+}
+
+/// Inject a tile directly into the disk cache (for testing).
+/// `data` is a base64-encoded string of the tile contents.
+#[tauri::command]
+fn inject_cached_tile(
+    state: State<'_, ManagedState>,
+    source: String,
+    z: u32,
+    x: u32,
+    y: u32,
+    ext: String,
+    data: String,
+) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&data)
+        .map_err(|e| format!("base64 decode: {e}"))?;
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let path = app_state
+        .tile_cache
+        .inject_tile(&source, z, x, y, &ext, &bytes)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+// ---------------------------------------------------------------------------
+// DEM upstream URL
+// ---------------------------------------------------------------------------
+
+const DEM_UPSTREAM_URL: &str = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
 fn main() {
+    let app_config = config::load_config();
+    let cache_dir = config::resolve_cache_dir(&app_config);
+    let max_cache_bytes = app_config.cache.max_size_mb * 1024 * 1024;
+
     let manager = new_shared_manager();
     let tile_port = tile_server::DEFAULT_TILE_PORT;
 
-    // Shared tile source registry
+    // Shared tile source registry (MBTiles / PMTiles)
     let tile_sources: SharedTileSources = std::sync::Arc::new(Mutex::new(Vec::new()));
 
     // Seed with test fixture if it exists
@@ -270,7 +318,23 @@ fn main() {
         });
     }
 
-    tile_server::spawn_tile_server(tile_port, tile_sources.clone());
+    // Cached upstream sources (fetched from internet, cached on disk)
+    let cached_sources: SharedCachedSources = std::sync::Arc::new(Mutex::new(vec![
+        CachedUpstreamSource {
+            name: "dem".to_string(),
+            upstream_url: DEM_UPSTREAM_URL.to_string(),
+        },
+    ]));
+
+    // Disk tile cache
+    let tile_cache = TileCache::new(cache_dir, max_cache_bytes);
+
+    tile_server::spawn_tile_server(
+        tile_port,
+        tile_sources.clone(),
+        cached_sources.clone(),
+        tile_cache.clone(),
+    );
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -285,6 +349,8 @@ fn main() {
             watcher: None,
             tile_port,
             tile_sources,
+            cached_sources,
+            tile_cache,
         }))
         .invoke_handler(tauri::generate_handler![
             pick_and_watch_folder,
@@ -300,6 +366,8 @@ fn main() {
             list_tile_sources,
             remove_tile_source,
             scan_tile_folder,
+            get_cache_stats,
+            inject_cached_tile,
         ])
         .setup(move |app| {
             // Inject the desktop bootstrap globals into the webview

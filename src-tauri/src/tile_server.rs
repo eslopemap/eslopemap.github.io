@@ -13,6 +13,8 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Response, Server};
 
+use crate::tile_cache::{SharedCachedSources, TileCache};
+
 pub const DEFAULT_TILE_PORT: u16 = 14321;
 
 // ---------------------------------------------------------------------------
@@ -372,11 +374,24 @@ fn serve_pmtiles_range(
 // Tile server lifecycle
 // ---------------------------------------------------------------------------
 
+/// Helper: add CORS headers to a tiny_http Response.
+fn with_cors<R: std::io::Read>(mut resp: Response<R>) -> Response<R> {
+    if let Ok(h) = Header::from_bytes("Access-Control-Allow-Origin", "*") {
+        resp = resp.with_header(h);
+    }
+    resp
+}
+
 /// Spawn a localhost-only tile server on the given port.
 /// Routes:
-/// - `/tiles/{source}/{z}/{x}/{y}.{ext}` — MBTiles tile lookup
+/// - `/tiles/{source}/{z}/{x}/{y}.{ext}` — cached upstream or MBTiles tile lookup
 /// - `/pmtiles/{source}` — PMTiles file with Range support
-pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
+pub fn spawn_tile_server(
+    port: u16,
+    sources: SharedTileSources,
+    cached_sources: SharedCachedSources,
+    tile_cache: TileCache,
+) {
     thread::spawn(move || {
         let addr = format!("127.0.0.1:{port}");
         let server = match Server::http(&addr) {
@@ -390,6 +405,11 @@ pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
         if let Ok(srcs) = sources.lock() {
             for entry in srcs.iter() {
                 println!("[tile-server] source '{}' ({:?}) -> {}", entry.name, entry.kind, entry.path.display());
+            }
+        }
+        if let Ok(csrcs) = cached_sources.lock() {
+            for cs in csrcs.iter() {
+                println!("[tile-server] cached upstream '{}' -> {}", cs.name, cs.upstream_url);
             }
         }
 
@@ -428,7 +448,7 @@ pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
 
                     let mut response = Response::from_data(body).with_status_code(status);
                     if let Ok(h) = Header::from_bytes("Content-Type", ct) { response = response.with_header(h); }
-                    if let Ok(h) = Header::from_bytes("Access-Control-Allow-Origin", "*") { response = response.with_header(h); }
+                    response = with_cors(response);
                     if let Ok(h) = Header::from_bytes("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length") {
                         response = response.with_header(h);
                     }
@@ -443,12 +463,34 @@ pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
                 continue;
             }
 
-            // --- MBTiles tile serving ---
+            // --- Tile requests: /tiles/{source}/{z}/{x}/{y}.{ext} ---
             let Some(parsed) = parse_tile_path(&raw_url) else {
                 let _ = request.respond(Response::empty(StatusCode::NOT_FOUND.as_u16()));
                 continue;
             };
 
+            // Check cached upstream sources first (e.g. "dem")
+            let cached_match = {
+                let csrcs = cached_sources.lock().unwrap_or_else(|e| e.into_inner());
+                csrcs.iter().find(|cs| cs.name == parsed.source).cloned()
+            };
+
+            if let Some(cs) = cached_match {
+                let (status, ct, body) = tile_cache.get_or_fetch(
+                    &parsed.source,
+                    parsed.z, parsed.x, parsed.y,
+                    &parsed.ext,
+                    &cs.upstream_url,
+                );
+                let mut response = Response::from_data(body).with_status_code(status);
+                if let Ok(h) = Header::from_bytes("Content-Type", ct) {
+                    response = response.with_header(h);
+                }
+                let _ = request.respond(with_cors(response));
+                continue;
+            }
+
+            // Fall back to MBTiles sources
             let tile_response = {
                 let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
                 resolve_tile_request(&srcs, &parsed)
@@ -458,10 +500,7 @@ pub fn spawn_tile_server(port: u16, sources: SharedTileSources) {
             if let Ok(header) = Header::from_bytes("Content-Type", tile_response.content_type) {
                 response = response.with_header(header);
             }
-            if let Ok(header) = Header::from_bytes("Access-Control-Allow-Origin", "*") {
-                response = response.with_header(header);
-            }
-            let _ = request.respond(response);
+            let _ = request.respond(with_cors(response));
         }
     });
 }

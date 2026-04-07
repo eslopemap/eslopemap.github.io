@@ -68,8 +68,8 @@ Test modes:
 Config: `tests/tauri-e2e/wdio.conf.mjs` — runs against the real Tauri desktop app via `tauri-plugin-webdriver`.
 
 ```bash
-# Prerequisites: build the debug binary first
-cd src-tauri && cargo build
+# Prerequisites: build the debug binary with webdriver feature
+cd src-tauri && cargo build --features webdriver
 
 # Install wdio deps (first time only)
 cd tests/tauri-e2e && npm install
@@ -78,11 +78,13 @@ cd tests/tauri-e2e && npm install
 npm run test:tauri-e2e
 ```
 
-Uses `tauri-plugin-webdriver` (debug builds only) which embeds a W3C WebDriver server on port 4445 inside the app. Tests launch the binary, connect via WebdriverIO, and interact with the real desktop UI.
+Uses `tauri-plugin-webdriver` (behind `--features webdriver`) which embeds a W3C WebDriver server on port 4445 inside the app. Tests launch the binary, connect via WebdriverIO, and interact with the real desktop UI.
+
+The DEM tile test injects fixture tiles into the disk cache via the `inject_cached_tile` Tauri command, then verifies the tile server serves them with HTTP 200.
 
 | File | Tests | What it covers |
 |---|---|---|
-| `dem-tile-serving.spec.mjs` | 4 | DEM tile requests to localhost tile server, 404 detection |
+| `dem-tile-serving.spec.mjs` | 8 | DEM tile cache injection, cache stats, cached tile serving (200), upstream fallback |
 
 Helpers:
 - `tests/tauri-e2e/tests/helpers.mjs` — Tauri IPC bridge, error capture hooks, screenshot utility
@@ -94,12 +96,14 @@ Key differences from Playwright E2E:
 
 ## Rust Unit Tests (cargo test)
 
-In `src-tauri/` — 33 tests across 2 modules.
+In `src-tauri/` — 48 tests across 4 modules.
 
 | Module | Tests | What it covers |
 |---|---|---|
-| `gpx_sync` | 18 | File watching, conflict detection, atomic writes, hash stability |
-| `tile_server` | 15 | Tile path parsing, MBTiles loading, PMTiles Range serving, MIME detection |
+| `config` | 7 | Config parsing (slopemapper.toml), OS cache/config dir resolution |
+| `gpx_sync` | 17 | File watching, conflict detection, atomic writes, hash stability |
+| `tile_cache` | 5 | Disk cache inject/read, LRU eviction, stats, cache hit serving |
+| `tile_server` | 19 | Tile path parsing, MBTiles loading, PMTiles Range serving, MIME detection |
 
 ## Test Fixtures
 

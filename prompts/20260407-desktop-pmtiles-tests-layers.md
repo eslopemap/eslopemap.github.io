@@ -55,3 +55,22 @@ address those follow-ups:
 - most of what is in Settings should go in Layers, below the layer list, because those are layer-related. go through the list and do it. also swap 'Settings' and 'Layers' buttons and positions 
 - the track panel can get very wide with long  names of file/track/segment, figure out the proper  way (css...) to get something like an ellipsis in the middle of the name and a popup with full name
 - fix tests including pre-existing failures. check carefully whether issue is with the test or the app !
+
+
+---
+
+the js console has messages like
+[Error] Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:14321/tiles/dem/10/530/366.webp
+
+this is when running cargo tauri dev in normal mode (not test-mode)
+first I want you to work hard to get those logs inside a failing test. because otherwise I need to keep holding your hand.
+look at  @README.md and figure out the missing pieces, eg there is no test spawning the full tauri UI and using webdriver ? we had this working previously in a small side-project, see eg @wdio.conf.mjs  as a starting point. setup the necessary infra
+
+---
+
+great, fix this and wire in a DEM (and other) tile disk cache on tauri-server-side
+the cache should use the proper OS location (XDG spec or .cache on linux, etc), have a decent default size eg 100 MB, and its size should be configurable in a standard slopemapper.toml config file (eg XDG spec or .config on linux, etc.)
+the e2e test should hook into the cache mechanism to inject predefined tiles for the test purpose.
+
+---
+

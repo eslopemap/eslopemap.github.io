@@ -1,4 +1,7 @@
 import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
     waitForTauri,
     tauriInvoke,
@@ -6,8 +9,16 @@ import {
     installErrorCapture,
     getCapturedErrors,
     filterErrors,
-    waitForError,
 } from './helpers.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURES_DIR = path.resolve(__dirname, '../../fixtures/tiles/dem');
+
+/** Read a fixture tile and return its base64 encoding. */
+function readFixtureB64(z, x, y, ext = 'png') {
+    const filePath = path.join(FIXTURES_DIR, `${z}/${x}/${y}.${ext}`);
+    return fs.readFileSync(filePath).toString('base64');
+}
 
 describe('DEM Tile Serving (Tauri desktop)', () => {
 
@@ -44,76 +55,130 @@ describe('DEM Tile Serving (Tauri desktop)', () => {
         }, config.tile_base_url);
 
         assert.ok(!result.error, `Tile server should be reachable, got error: ${result.error}`);
-        // 404 is expected for nonexistent source — but the server responded
         assert.strictEqual(result.status, 404, 'Should get 404 for unknown tile source');
     });
 
-    it('DEM tile requests to localhost return 404 (no DEM source registered)', async () => {
-        // This is the bug: the app requests /tiles/dem/{z}/{x}/{y}.webp
-        // from the tile server, but no "dem" tile source is registered.
-        //
-        // We install error capture hooks, then wait for the map to make
-        // DEM tile requests which will fail with 404.
-
+    it('cache stats are available', async () => {
         await waitForTauri(browser);
-        await installErrorCapture(browser);
+        const stats = await tauriInvoke(browser, 'get_cache_stats');
+        console.log(`[test] cache stats: ${JSON.stringify(stats)}`);
 
-        // Wait for the map to initialize and start requesting DEM tiles.
-        // The app loads in normal mode (not test_mode), so it will request DEM tiles.
-        // Give it time to make at least a few tile requests.
-        await browser.pause(5000);
+        assert.ok(stats.root, 'cache root should be set');
+        assert.ok(stats.max_size_bytes > 0, 'max cache size should be positive');
+        console.log(`[test] cache at: ${stats.root} (max ${stats.max_size_bytes / 1024 / 1024} MB)`);
+    });
 
-        // Also probe directly: request a DEM tile that the map would request
+    it('inject DEM fixture tiles into the cache', async () => {
+        await waitForTauri(browser);
+
+        // Inject a few z10 tiles from the fixture set
+        const tiles = [
+            { z: 10, x: 530, y: 363 },
+            { z: 10, x: 530, y: 364 },
+            { z: 10, x: 530, y: 365 },
+            { z: 10, x: 531, y: 363 },
+        ];
+
+        for (const t of tiles) {
+            const data = readFixtureB64(t.z, t.x, t.y, 'png');
+            // Inject as .webp extension since that's what the frontend requests
+            const cachedPath = await tauriInvoke(browser, 'inject_cached_tile', {
+                source: 'dem',
+                z: t.z, x: t.x, y: t.y,
+                ext: 'webp',
+                data,
+            });
+            console.log(`[test] injected dem/${t.z}/${t.x}/${t.y}.webp -> ${cachedPath}`);
+        }
+
+        // Verify cache stats updated
+        const stats = await tauriInvoke(browser, 'get_cache_stats');
+        assert.ok(stats.file_count >= tiles.length,
+            `Expected at least ${tiles.length} cached files, got ${stats.file_count}`);
+        console.log(`[test] cache now has ${stats.file_count} files (${stats.total_size_bytes} bytes)`);
+    });
+
+    it('cached DEM tiles are served with HTTP 200', async () => {
+        await waitForTauri(browser);
         const config = await tauriInvoke(browser, 'get_desktop_config');
-        const probeResult = await browser.executeAsync(async (baseUrl, done) => {
+
+        // Request a tile we just injected — should be served from cache
+        const result = await browser.executeAsync(async (baseUrl, done) => {
             try {
-                const res = await fetch(`${baseUrl}/tiles/dem/10/530/366.webp`);
+                const res = await fetch(`${baseUrl}/tiles/dem/10/530/365.webp`);
+                const blob = await res.blob();
+                done({ status: res.status, size: blob.size, type: res.headers.get('content-type') });
+            } catch (e) {
+                done({ error: e.message });
+            }
+        }, config.tile_base_url);
+
+        console.log(`[test] cached tile: status=${result.status} size=${result.size} type=${result.type}`);
+        assert.ok(!result.error, `Fetch should succeed: ${result.error}`);
+        assert.strictEqual(result.status, 200, `Cached DEM tile should return 200, got ${result.status}`);
+        assert.ok(result.size > 0, 'Tile body should not be empty');
+    });
+
+    it('non-cached DEM tiles attempt upstream fetch (may 502 in test env)', async () => {
+        // A tile that is NOT in our injected set will trigger an upstream fetch
+        // to tiles.mapterhorn.com. In the test environment this may succeed (if
+        // internet is available) or fail with 502. Either way, it should NOT 404
+        // because "dem" is now a recognized cached upstream source.
+        await waitForTauri(browser);
+        const config = await tauriInvoke(browser, 'get_desktop_config');
+
+        const result = await browser.executeAsync(async (baseUrl, done) => {
+            try {
+                const res = await fetch(`${baseUrl}/tiles/dem/0/0/0.webp`);
                 done({ status: res.status });
             } catch (e) {
                 done({ error: e.message });
             }
         }, config.tile_base_url);
 
-        console.log(`[test] Direct DEM tile probe: status=${probeResult.status}`);
-        assert.strictEqual(
-            probeResult.status, 404,
-            `DEM tile should 404 because no "dem" source is registered. Got: ${probeResult.status}`
-        );
-
-        // Check for captured fetch errors related to DEM tiles
-        const allErrors = await getCapturedErrors(browser);
-        const demErrors = filterErrors(allErrors, /tiles\/dem\/.*\.webp/);
-
-        console.log(`[test] Total captured errors: ${allErrors.length}`);
-        console.log(`[test] DEM-related errors: ${demErrors.length}`);
-        for (const e of demErrors.slice(0, 5)) {
-            console.log(`[test]   ${e.type}: ${e.message}`);
-        }
-
-        // The DEM tile requests should fail. This test documents the bug:
-        // the tile server has no "dem" source registered, so all DEM tile
-        // fetches return 404.
-        //
-        // When this test passes (404s detected), the bug is confirmed.
-        // When the bug is fixed (DEM source registered or tiles served),
-        // update this test to assert 200 instead.
+        console.log(`[test] non-cached tile: status=${result.status}`);
+        assert.ok(!result.error, `Fetch should not throw: ${result.error}`);
+        // Should be 200 (upstream success) or 502 (upstream unreachable) — not 404
         assert.ok(
-            demErrors.length > 0 || probeResult.status === 404,
-            'DEM tile requests should be failing with 404 (bug: no DEM source registered)'
+            [200, 502].includes(result.status),
+            `Expected 200 or 502, got ${result.status}`
         );
-
-        await takeScreenshot(browser, '01-dem-tile-404');
     });
 
-    it('lists tile sources — dem should NOT be present', async () => {
+    it('no fetch errors for injected DEM tiles', async () => {
         await waitForTauri(browser);
-        const sources = await tauriInvoke(browser, 'list_tile_sources');
-        console.log(`[test] registered tile sources: ${JSON.stringify(sources.map(s => s.name))}`);
+        await installErrorCapture(browser);
 
-        const demSource = sources.find(s => s.name === 'dem');
-        assert.strictEqual(
-            demSource, undefined,
-            `No "dem" tile source should be registered. Found sources: ${sources.map(s => s.name).join(', ')}`
-        );
+        const config = await tauriInvoke(browser, 'get_desktop_config');
+
+        // Fetch each injected tile and verify no errors
+        const tiles = [
+            { z: 10, x: 530, y: 363 },
+            { z: 10, x: 530, y: 364 },
+            { z: 10, x: 530, y: 365 },
+            { z: 10, x: 531, y: 363 },
+        ];
+
+        for (const t of tiles) {
+            const result = await browser.executeAsync(async (baseUrl, z, x, y, done) => {
+                try {
+                    const res = await fetch(`${baseUrl}/tiles/dem/${z}/${x}/${y}.webp`);
+                    done({ status: res.status });
+                } catch (e) {
+                    done({ error: e.message });
+                }
+            }, config.tile_base_url, t.z, t.x, t.y);
+
+            assert.strictEqual(result.status, 200,
+                `dem/${t.z}/${t.x}/${t.y}.webp should be 200, got ${result.status}`);
+        }
+
+        // Verify no fetch errors were captured
+        const allErrors = await getCapturedErrors(browser);
+        const demErrors = filterErrors(allErrors, /tiles\/dem\/.*(363|364|365).*\.webp/);
+        assert.strictEqual(demErrors.length, 0,
+            `Expected no fetch errors for injected tiles, got: ${demErrors.map(e => e.message).join(', ')}`);
+
+        await takeScreenshot(browser, '01-dem-tile-cache-working');
     });
 });

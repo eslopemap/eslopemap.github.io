@@ -22,10 +22,17 @@ notify = "7"
 notify-debouncer-mini = "0.5"
 sha2 = "0.10"
 
-# Tile server
+# Tile server + cache
 tiny_http = "0.12"
 http = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
+ureq = "2"
+filetime = "0.2"
+
+# Config + OS paths
+dirs = "6"
+toml = "0.8"
+base64 = "0.22"
 
 [features]
 default = ["custom-protocol"]
