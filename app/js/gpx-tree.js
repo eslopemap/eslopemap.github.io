@@ -294,7 +294,10 @@ function handleTreeKeydown(e) {
   }
 }
 
-export function renderGpxTree() {
+let _renderRafId = 0;
+
+function renderGpxTreeImmediate() {
+  _renderRafId = 0;
   if (!_trackListEl) return;
   _trackListEl.innerHTML = '';
   renderNodeList(workspace.children, _trackListEl, 0);
@@ -302,6 +305,11 @@ export function renderGpxTree() {
     const activeRow = _trackListEl.querySelector('.tree-row.active');
     if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
   });
+}
+
+export function renderGpxTree() {
+  if (_renderRafId) return;  // already scheduled
+  _renderRafId = requestAnimationFrame(renderGpxTreeImmediate);
 }
 
 export function syncTreeSelection() {
