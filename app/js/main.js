@@ -35,12 +35,13 @@ import {
 import { initTracks, getTracksState, resetForTest } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
-import { loadSettings, saveSettings, clearAll as clearPersistedData } from './persist.js';
+import { loadSettings, saveSettings } from './persist.js';
 import { initShortcuts, registerShortcut } from './shortcuts.js';
 import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
 import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection, getCurrentSelection } from './selection-tools.js';
 import { describeOperationConsequence } from './track-ops.js';
 import { initWebImport } from './web-import.js';
+import { initSavedDataPanel } from './saved-data.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
 import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx, fetchAvailableSources, buildCatalogEntryFromTileJson } from './tauri-bridge.js';
@@ -1005,12 +1006,7 @@ document.getElementById('profileSmoothing').addEventListener('input', (e) => {
   scheduleSettingsSave();
 });
 
-document.getElementById('clear-data-btn').addEventListener('click', () => {
-  if (confirm('Clear all saved tracks and settings?')) {
-    clearPersistedData();
-    location.reload();
-  }
-});
+initSavedDataPanel();
 
 // Allow Cmd+drag (Mac) to act like Ctrl+drag for rotate/pitch
 map.getCanvas().addEventListener('mousedown', (e) => {

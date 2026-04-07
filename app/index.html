@@ -98,8 +98,9 @@
       <label><input id="showTileGrid" type="checkbox" /> Show DEM tile grid</label>
     </div>
 
-    <div class="row">
-      <button id="clear-data-btn" type="button" class="tb-btn" title="Clear saved tracks and settings from localStorage">Clear saved data</button>
+    <button id="saved-data-toggle" type="button" class="saved-data-toggle-btn" title="View and manage saved data">💾 Saved data <span class="arrow">&#9654;</span></button>
+    <div id="saved-data-panel" class="collapsed">
+      <div id="saved-data-rows"></div>
     </div>
 
     <div class="row" id="mobile-mode-row" style="display:none">

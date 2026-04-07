@@ -120,6 +120,67 @@ export function clearAll() {
   } catch { /* ignore */ }
 }
 
+export function clearTracks() {
+  try {
+    localStorage.removeItem(TRACKS_KEY);
+    localStorage.removeItem(WAYPOINTS_KEY);
+    localStorage.removeItem(WORKSPACE_KEY);
+  } catch { /* ignore */ }
+}
+
+export function clearSettings() {
+  try {
+    localStorage.removeItem(SETTINGS_KEY);
+    localStorage.removeItem(PROFILE_SETTINGS_KEY);
+  } catch { /* ignore */ }
+}
+
+// ---- Storage stats ----
+
+/** Byte length of a localStorage value (UTF-16 → bytes). Returns 0 if missing. */
+function keyBytes(key) {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? v.length * 2 : 0;
+  } catch { return 0; }
+}
+
+/** Number of top-level items in a JSON-array localStorage value. */
+function keyCount(key) {
+  try {
+    const v = localStorage.getItem(key);
+    if (!v) return 0;
+    const arr = JSON.parse(v);
+    return Array.isArray(arr) ? arr.length : 0;
+  } catch { return 0; }
+}
+
+export function getTrackStats() {
+  const bytes = keyBytes(TRACKS_KEY) + keyBytes(WAYPOINTS_KEY) + keyBytes(WORKSPACE_KEY);
+  const trackCount = keyCount(TRACKS_KEY);
+  const waypointCount = keyCount(WAYPOINTS_KEY);
+  return { bytes, trackCount, waypointCount };
+}
+
+export function getSettingsStats() {
+  return { bytes: keyBytes(SETTINGS_KEY) + keyBytes(PROFILE_SETTINGS_KEY) };
+}
+
+export function getAllStats() {
+  let bytes = 0;
+  let keyCount = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('slope:')) {
+        bytes += keyBytes(k);
+        keyCount++;
+      }
+    }
+  } catch { /* ignore */ }
+  return { bytes, keyCount };
+}
+
 // ---- Workspace tree ----
 
 function serializeNode(node) {

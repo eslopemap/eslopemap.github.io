@@ -209,6 +209,28 @@ export function buildCatalogEntryFromTileJson(tj, category = 'basemap') {
 }
 
 // ---------------------------------------------------------------------------
+// Tile cache management (desktop only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Get tile cache stats (root path, total size, file count, max size).
+ * @returns {Promise<{root: string, total_size_bytes: number, file_count: number, max_size_bytes: number}|null>}
+ */
+export async function getCacheStats() {
+  if (!isTauri()) return null;
+  return invoke('get_cache_stats');
+}
+
+/**
+ * Clear the server-side tile cache by removing all cached files.
+ * @returns {Promise<boolean>}
+ */
+export async function clearTileCache() {
+  if (!isTauri()) return false;
+  return invoke('clear_tile_cache');
+}
+
+// ---------------------------------------------------------------------------
 // Event listeners (desktop only)
 // ---------------------------------------------------------------------------
 

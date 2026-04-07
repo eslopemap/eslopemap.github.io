@@ -73,7 +73,8 @@
 - **GPX waypoints** — `<wpt>` elements parsed from GPX via gpxjs; rendered as amber circles with text labels on the map; included in 'Export All GPX'
 - **GPX timestamps** — `<time>` elements parsed from GPX and stored as epoch-ms in `coords[3]`; preserved in export; enables speed/pace computation and time-based profile x-axis
 - **Two-level nesting** — multi-segment GPX tracks import as grouped tracks; panel shows collapsible group header with aggregate stats and nested segments (group names also editable on double-click)
-- **localStorage persistence** — tracks and settings auto-save to localStorage with 300ms debounce; restored on page reload; 'Clear saved data' button in advanced settings
+- **localStorage persistence** — tracks and settings auto-save to localStorage with 300ms debounce; restored on page reload
+- **Saved data panel** — collapsible panel in Settings showing storage usage per category (local tile cache, server tile cache, GPX tracks, settings, all browser data) with size info, storage paths, and per-category clear buttons; works in both web and desktop modes
 
 ## Profile
 - **Elevation profile** — bottom panel showing configurable data curves vs distance or time, with dynamic Y-axes
@@ -127,7 +128,8 @@
 - **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer, tree integration
 - **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, undo stack, draw/undo buttons
 - **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation; calls `onFileBatchImported` for tree sync
-- **js/persist.js** — localStorage persistence for tracks, settings, profile display settings, and workspace tree (thin wrapper, no deps)
+- **js/persist.js** — localStorage persistence for tracks, settings, profile display settings, and workspace tree; granular clear and size stats per category
+- **js/saved-data.js** — Saved Data panel: shows storage usage per category with clear buttons, CacheStorage stats (web), Tauri tile cache stats (desktop)
 - **js/profile.js** — Chart.js elevation profile with speed, pause detection, display settings menu, multiple x-axis modes
 - **js/track-ops.js** — pure FEAT2 operation layer for normalized selection spans, route conversion, simplify, split, merge, densify, and consequence descriptions
 - **js/selection-tools.js** — rectangle selection controller with touch/desktop drag handling, enclosing-span resolution, and anchored hint popup
@@ -145,6 +147,7 @@
 - `dem.js` ← `constants.js` (no DOM)
 - `ui.js` ← `constants.js`, `utils.js` (DOM access for settings UI)
 - `persist.js` — standalone (localStorage only)
+- `saved-data.js` ← `persist.js`, `tauri-bridge.js`
 - `io.js` ← `utils.js`, `@we-gold/gpxjs` (GPX parsing/serialization)
 - `track-edit.js` ← `ui.js` (cursor tooltip)
 - `gpx-model.js` — standalone (pure data)

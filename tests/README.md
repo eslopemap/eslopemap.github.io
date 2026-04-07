@@ -30,7 +30,7 @@ Config: `vitest.config.mjs` — 11 test files.
 | `gpx-model.test.mjs` | GPX/GeoJSON data model parsing |
 | `io-roundtrip.test.mjs` | Import/export round-trips for GPX and GeoJSON |
 | `layer-engine.test.mjs` | Basemap/overlay loading, opacity, user source registry |
-| `persist.test.mjs` | localStorage save/load for tracks and settings |
+| `persist.test.mjs` | localStorage save/load for tracks and settings, granular clear and size stats |
 | `shortcuts.test.mjs` | Keyboard shortcut registry, focus guards, modifier keys |
 | `state.test.mjs` | Reactive Proxy store, onChange callback, STATE_DEFAULTS |
 | `tauri-bridge.test.mjs` | Runtime detection, desktop bridge API stubs |
@@ -42,7 +42,7 @@ Helper: `test-helpers.mjs` — shared mocks (canvas, document).
 
 ## Playwright E2E Tests
 
-Config: `playwright.config.js` — 51 tests, headless Chromium with SwiftShader WebGL.
+Config: `playwright.config.js` — 59 tests, headless Chromium with SwiftShader WebGL.
 
 | File | Tests | What it covers |
 |---|---|---|
@@ -53,6 +53,7 @@ Config: `playwright.config.js` — 51 tests, headless Chromium with SwiftShader 
 | `profile.spec.js` | 6 | Elevation profile panel, auto-open, display |
 | `dem-loading.spec.js` | 3 | DEM rendering: color-relief, slope+relief, slope (screenshot baselines) |
 | `tile-serving.spec.js` | 4 | MBTiles + PMTiles tile serving, user catalog registration |
+| `saved-data.spec.js` | 8 | Saved Data panel: open/close, category display, sizes, per-category clear |
 
 Helpers:
 - `helpers.js` — shared fixtures (`mapPage`), map interaction utilities

@@ -1,5 +1,6 @@
 import {
-  clearAll,
+  clearAll, clearTracks, clearSettings,
+  getTrackStats, getSettingsStats, getAllStats,
   loadProfileSettings,
   loadSettings,
   loadTracks,
@@ -210,5 +211,63 @@ describe('persist', () => {
     expect(loadSettings()).toBeNull();
     expect(loadProfileSettings()).toBeNull();
     expect(loadWorkspace()).toBeNull();
+  });
+
+  it('clearTracks removes only tracks/waypoints/workspace', () => {
+    saveTracks([{ id: 'trk-1', name: 'T', color: '#000', coords: [] }]);
+    saveWaypoints([{ id: 'wpt-1', name: 'W', coords: [0, 0] }]);
+    saveSettings({ basemap: 'osm' });
+    saveWorkspace({ children: [] });
+
+    clearTracks();
+
+    expect(loadTracks()).toEqual([]);
+    expect(loadWaypoints()).toEqual([]);
+    expect(loadWorkspace()).toBeNull();
+    // Settings should remain
+    expect(loadSettings()).toEqual({ basemap: 'osm' });
+  });
+
+  it('clearSettings removes only settings/profile-settings', () => {
+    saveTracks([{ id: 'trk-1', name: 'T', color: '#000', coords: [] }]);
+    saveSettings({ basemap: 'osm' });
+    saveProfileSettings({ xAxis: 'time' });
+
+    clearSettings();
+
+    expect(loadSettings()).toBeNull();
+    expect(loadProfileSettings()).toBeNull();
+    // Tracks should remain
+    expect(loadTracks()).toHaveLength(1);
+  });
+
+  it('getTrackStats returns byte size and counts', () => {
+    saveTracks([
+      { id: 'trk-1', name: 'T1', color: '#000', coords: [[0, 0, 0]] },
+      { id: 'trk-2', name: 'T2', color: '#111', coords: [[1, 1, 1]] },
+    ]);
+    saveWaypoints([{ id: 'wpt-1', name: 'W', coords: [0, 0] }]);
+
+    const stats = getTrackStats();
+    expect(stats.trackCount).toBe(2);
+    expect(stats.waypointCount).toBe(1);
+    expect(stats.bytes).toBeGreaterThan(0);
+  });
+
+  it('getSettingsStats returns byte size', () => {
+    saveSettings({ basemap: 'osm', mode: 'slope' });
+    const stats = getSettingsStats();
+    expect(stats.bytes).toBeGreaterThan(0);
+  });
+
+  it('getAllStats counts only slope:* keys', () => {
+    saveTracks([{ id: 'trk-1', name: 'T', color: '#000', coords: [] }]);
+    saveSettings({ basemap: 'osm' });
+    // Add a non-slope key
+    localStorage.setItem('other:key', 'value');
+
+    const stats = getAllStats();
+    expect(stats.keyCount).toBe(2); // slope:tracks + slope:settings
+    expect(stats.bytes).toBeGreaterThan(0);
   });
 });

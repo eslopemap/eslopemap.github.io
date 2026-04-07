@@ -299,6 +299,21 @@ fn collect_files_recursive(dir: &Path, out: &mut Vec<(PathBuf, u64, SystemTime)>
     }
 }
 
+/// Remove all files inside a cache directory (but keep the directory itself).
+pub fn clear_cache_dir(root: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(root) else { return false };
+    let mut removed_any = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if fs::remove_dir_all(&path).is_ok() { removed_any = true; }
+        } else if fs::remove_file(&path).is_ok() {
+            removed_any = true;
+        }
+    }
+    removed_any
+}
+
 fn extract_status_from_ureq_error(e: &ureq::Error) -> Option<u16> {
     match e {
         ureq::Error::Status(code, _) => Some(*code),

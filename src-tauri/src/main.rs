@@ -263,6 +263,14 @@ fn get_cache_stats(state: State<'_, ManagedState>) -> Result<tile_cache::CacheSt
     Ok(app_state.tile_cache.stats())
 }
 
+#[tauri::command]
+fn clear_tile_cache(state: State<'_, ManagedState>) -> Result<bool, String> {
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let root = app_state.tile_cache.root();
+    let removed = crate::tile_cache::clear_cache_dir(&root);
+    Ok(removed)
+}
+
 /// Inject a tile directly into the disk cache (for testing).
 /// `data` is a base64-encoded string of the tile contents.
 #[tauri::command]
@@ -392,6 +400,7 @@ fn main() {
             remove_tile_source,
             scan_tile_folder,
             get_cache_stats,
+            clear_tile_cache,
             inject_cached_tile,
         ])
         .setup(move |app| {

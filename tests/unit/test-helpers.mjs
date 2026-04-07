@@ -14,6 +14,12 @@ export function installLocalStorageMock() {
     clear() {
       store.clear();
     },
+    get length() {
+      return store.size;
+    },
+    key(index) {
+      return [...store.keys()][index] ?? null;
+    },
   };
 
   Object.defineProperty(globalThis, 'localStorage', {
