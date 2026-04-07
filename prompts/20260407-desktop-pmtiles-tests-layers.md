@@ -33,3 +33,14 @@ I don't want high unit-test coverage with useless micro-tests, (actrually, remov
 -  Push and verify CI pipeline runs on GitHub
 -  Test release workflow with a v0.1.0 tag
 - Continue with unified basemap UI (phases 2-4)
+
+---
+
+- cargo tauri dev is stuck on this, am I doing it wrong :   
+       Warn Waiting for your frontend dev server to start on http://localhost:8089/app/ 
+- update main README and CONTRIBUTING with all the tauri stuff, make clear in the structure and content what is for web / desktop / both. how should I dev/start etc.
+- reagarding plans/20260406-PLAN-UNIFIED-BASEMAP-UI.md , keep working on phase 3. regarding phase 4, move the part of 'Basemap' which shows added basemaps into the 'Layers' panel (' (which currently is missing baselayers):
+Also unify the Add basemaps and the Overlays dropdown within a single structured dropdown
+the overall idea is that a first map choice should remain separate from the exact layer order (in Layers). in Layers add a visibility toggle
+I think Layers panel should be shown beside Settings panel when layers are being added. figure out a proper UX for this.
+- update FEATURES with what has been done (stay concise)
