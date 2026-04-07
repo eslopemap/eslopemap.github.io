@@ -16,7 +16,11 @@ import {
   getVisibleTriplesForMap, initSearch,
 } from './ui.js';
 
-import { buildCatalogSources, buildCatalogLayers, getBasemaps, getOverlays, getCatalogEntry } from './layer-registry.js';
+import {
+  buildCatalogSources, buildCatalogLayers, getBasemaps, getOverlays, getCatalogEntry,
+  getAllEntries, registerUserSource, unregisterUserSource, clearUserSources, getUserSources,
+  buildCatalogEntryFromTileSource,
+} from './layer-registry.js';
 import {
   setBasemap, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
   syncLayerOrder, reorderLayer, applyLayerOpacity,
@@ -1409,6 +1413,11 @@ if (isTauri()) {
 
 // ---- Expose key variables for E2E tests ----
 
+const _layerRegistryProxy = {
+  buildCatalogEntryFromTileSource, registerUserSource, unregisterUserSource,
+  clearUserSources, getUserSources, getAllEntries, getBasemaps, getOverlays,
+};
+
 Object.defineProperties(window, {
   mapReady:            { get() { return tracksState.mapReady; } },
   map:                 { get() { return map; } },
@@ -1423,6 +1432,7 @@ Object.defineProperties(window, {
   profileChart:        { get() { return getProfileChart(); } },
   profileClosed:       { get() { return tracksState.profileClosed; } },
   resetForTest:        { get() { return resetForTest; } },
+  layerRegistry:       { get() { return _layerRegistryProxy; } },
 });
 
 

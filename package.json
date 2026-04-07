@@ -26,6 +26,7 @@
   "homepage": "https://gist.github.com/ff8c4f3d74e1be6747baf3c91b41a50c",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "better-sqlite3": "^12.8.0",
     "jsdom": "^29.0.1",
     "serve": "^14.2.6"
   },
