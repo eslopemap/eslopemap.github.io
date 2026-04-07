@@ -1070,4 +1070,30 @@
     .basemap-row select { width: 100%; }
     .add-layer-row select { width: 100%; font-size: 12px; }
 
+    /* ---- 3D terrain toggle button ---- */
+    .terrain3d-ctrl {
+      border-radius: 999px !important;
+      overflow: hidden;
+    }
+    .terrain3d-ctrl button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: rgba(0,0,0,0.6);
+      transition: color 0.15s;
+    }
+    .terrain3d-ctrl button:hover { color: rgba(0,0,0,0.85); }
+    .terrain3d-ctrl button.active {
+      color: #4a90d9;
+      background: rgba(74,144,217,0.12);
+    }
+    .terrain3d-ctrl button svg {
+      pointer-events: none;
+    }
+
     /* end track editor */

@@ -439,10 +439,59 @@ const geolocateControl = new maplibregl.GeolocateControl({
   showUserLocation: true,
   showAccuracyCircle: false
 });
+// Custom 3D terrain toggle control
+class Terrain3DControl {
+  constructor(state, onToggle) {
+    this._state = state;
+    this._onToggle = onToggle;
+  }
+  onAdd(map) {
+    this._map = map;
+    const container = document.createElement('div');
+    container.className = 'maplibregl-ctrl maplibregl-ctrl-group terrain3d-ctrl';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = '3D terrain';
+    btn.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
+      <path d="M12 12l8-4.5"/>
+      <path d="M12 12v9"/>
+      <path d="M12 12L4 7.5"/>
+    </svg>`;
+    btn.addEventListener('click', () => {
+      this._state.terrain3d = !this._state.terrain3d;
+      this._onToggle();
+      this.sync();
+    });
+    container.appendChild(btn);
+    this._container = container;
+    this._btn = btn;
+    this.sync();
+    return container;
+  }
+  onRemove() { this._container.remove(); }
+  sync() {
+    this._btn.classList.toggle('active', this._state.terrain3d);
+    document.getElementById('terrainExaggeration').disabled = !this._state.terrain3d;
+    document.getElementById('terrain3d').checked = this._state.terrain3d;
+  }
+}
+
+const terrain3dControl = new Terrain3DControl(state, () => {
+  applyTerrainState(map, state);
+  if (!state.terrain3d && map.getPitch() > 0) {
+    map.easeTo({ pitch: 0, duration: 500 });
+  }
+  syncViewToUrl(map, state);
+  map.triggerRepaint();
+  scheduleSettingsSave();
+});
+
 const scaleControl = new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 });
 map.addControl(scaleControl, 'bottom-right');
 map.addControl(new maplibregl.AttributionControl(), 'bottom-right');
 map.addControl(navigationControl, 'bottom-right');
+map.addControl(terrain3dControl, 'bottom-right');
 map.addControl(geolocateControl, 'bottom-right');
 
 // ---- Settings panel ----
@@ -913,7 +962,11 @@ document.getElementById('cursorInfoMode').addEventListener('change', (e) => {
 document.getElementById('terrain3d').addEventListener('change', (e) => {
   state.terrain3d = Boolean(e.target.checked);
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
+  terrain3dControl.sync();
   applyTerrainState(map, state);
+  if (!state.terrain3d && map.getPitch() > 0) {
+    map.easeTo({ pitch: 0, duration: 500 });
+  }
   syncViewToUrl(map, state);
   map.triggerRepaint();
   scheduleSettingsSave();
