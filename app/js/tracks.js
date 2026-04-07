@@ -1124,6 +1124,7 @@ export function getTracksState() {
     tracks,
     waypoints,
     get activeTrackId() { return activeTrackId; },
+    get promotedTrackId() { return promotedTrackId; },
     get editingTrackId() { return es.editingTrackId; },
     get selectedVertexIndex() { return es.selectedVertexIndex; },
     get insertAfterIdx() { return es.insertAfterIdx; },

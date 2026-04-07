@@ -1651,6 +1651,8 @@ Object.defineProperties(window, {
   insertAfterIdx:      { get() { return tracksState.insertAfterIdx; } },
   mobileFriendlyMode:  { get() { return tracksState.mobileFriendlyMode; } },
   importFileContent:   { get() { return importFileContent; } },
+  setActiveTrack:      { get() { return tracksState.setActiveTrack; } },
+  promotedTrackId:     { get() { return tracksState.promotedTrackId; } },
   profileChart:        { get() { return getProfileChart(); } },
   profileClosed:       { get() { return tracksState.profileClosed; } },
   resetForTest:        { get() { return resetForTest; } },
