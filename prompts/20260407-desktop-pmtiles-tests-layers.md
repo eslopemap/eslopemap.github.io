@@ -24,3 +24,12 @@ keep working on those items especially tauri e2e tests (the app is not functioni
 setup the github-action lightweight CI checks (web/desktop/e2e tests) + CD delivery (tauri packaging. investigate how to package the app as single executables/installers using github releases). keep GHA adherence at a minimum (ie try to keep logic outside of it)
 remain critical of what has been planned and done, fix issues you find on the way to provide a strong balance of maintainable and KISS. 
 as usual frequent commits and ./report
+
+---
+
+-  Add Tauri integration tests
+- I don't think you added coverage for the e2e and backend tests ?
+I don't want high unit-test coverage with useless micro-tests, (actrually, remove thos that don't add value) but I want *overall* the code to be covered so it's important to get those.
+-  Push and verify CI pipeline runs on GitHub
+-  Test release workflow with a v0.1.0 tag
+- Continue with unified basemap UI (phases 2-4)

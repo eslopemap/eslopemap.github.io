@@ -7,20 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  js-unit:
-    name: JS Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-      - run: npm ci
-      - run: npm run test:unit
-
-  js-coverage:
-    name: JS Coverage Report
+  js-tests:
+    name: JS Unit Tests + Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,12 +19,14 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage
 
-  rust-unit:
-    name: Rust Unit Tests
+  rust-tests:
+    name: Rust Tests + Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri -> target
@@ -44,11 +34,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - run: cargo test
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Run tests with coverage
+        run: cargo llvm-cov --text
         working-directory: src-tauri
 
   e2e:
-    name: Playwright E2E
+    name: Playwright E2E + JS Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +51,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - run: npm run test:e2e:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-coverage
+          path: coverage/e2e-summary.txt
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

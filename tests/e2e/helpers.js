@@ -5,12 +5,18 @@
 // Track info queries use JS evaluation for reliability.
 
 const { test: base, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
 
 const APP_URL = '/app/index.html#test_mode=true';
 const MAP_READY_TIMEOUT_MS = 5_000;
+const E2E_COVERAGE = process.env.E2E_COVERAGE === '1';
+const COVERAGE_DIR = path.join(__dirname, '..', '..', 'coverage', 'e2e-v8');
+let _covCounter = 0;
 
 const test = base.extend({
   mapPage: async ({ page }, use) => {
+    if (E2E_COVERAGE) await page.coverage.startJSCoverage({ resetOnNavigation: false });
     await page.goto(APP_URL, { waitUntil: 'load' });
     await page.evaluate(() => localStorage.clear());
     await page.goto(APP_URL, { waitUntil: 'load' });
@@ -19,6 +25,14 @@ const test = base.extend({
       { timeout: MAP_READY_TIMEOUT_MS }
     );
     await use(page);
+    if (E2E_COVERAGE) {
+      const entries = await page.coverage.stopJSCoverage();
+      const appEntries = entries.filter(e => e.url.includes('/app/js/') && !e.url.includes('/vendor/'));
+      if (appEntries.length) {
+        fs.mkdirSync(COVERAGE_DIR, { recursive: true });
+        fs.writeFileSync(path.join(COVERAGE_DIR, `cov-${++_covCounter}.json`), JSON.stringify(appEntries));
+      }
+    }
   },
 });
 
@@ -28,6 +42,7 @@ async function resetState(page) {
 }
 
 async function loadMapPage(page) {
+  if (E2E_COVERAGE) await page.coverage.startJSCoverage({ resetOnNavigation: false });
   await page.goto(APP_URL, { waitUntil: 'load' });
   await page.evaluate(() => localStorage.clear());
   await page.goto(APP_URL, { waitUntil: 'load' });
