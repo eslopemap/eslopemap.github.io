@@ -9,7 +9,7 @@ import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMod
 import { initIO, importFileContent } from './io.js';
 import { saveTracks, loadTracks, saveWaypoints, loadWaypoints } from './persist.js';
 import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onFileBatchImported, openInfoEditor, findNodeForTrackId } from './gpx-tree.js';
-import { buildSelectionSpan, densifyTrackSpan, simplifyTrackSpan, splitTrackSpan, mergeTrackSpans, convertRouteToTrack } from './track-ops.js';
+import { buildSelectionSpan, densifyTrackSpan, simplifyTrackSpan, splitTrackSpan, mergeTrackSpans, convertRouteToTrack, simplifyForDisplay } from './track-ops.js';
 
 let map, state;
 let updateProfileFn = () => {};  // wired by initTracks
@@ -22,6 +22,7 @@ let trackColorIdx = 0;
 let mapReady = false;
 let profileClosed = false;
 let activeSelectionSpan = null;
+let promotedTrackId = null;  // track currently promoted to its own source for editing
 
 // Debounced save to localStorage
 let _saveTimer = 0;
@@ -146,7 +147,56 @@ function enrichAllTracks() {
   }
 }
 
-// ---- Map sources & layers ----
+// ---- Merged display source (all tracks in one GeoJSON) ----
+
+const MERGED_SOURCE = 'tracks-merged';
+const MERGED_LINE_LAYER = 'tracks-merged-line';
+
+function mergedTrackGeoJSON() {
+  const features = [];
+  for (const t of tracks) {
+    if (t.id === promotedTrackId) continue;  // active track has its own source
+    if (t.coords.length < 2) continue;
+    const displayCoords = simplifyForDisplay(t.coords, 5, 500);
+    features.push({
+      type: 'Feature',
+      id: stableFeatureId(t.id),
+      geometry: { type: 'LineString', coordinates: displayCoords },
+      properties: { trackId: t.id, color: t.color }
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+// MapLibre GeoJSON source needs numeric feature ids for updateData()
+const _featureIdMap = new Map();
+let _nextFeatureId = 1;
+function stableFeatureId(trackId) {
+  if (!_featureIdMap.has(trackId)) _featureIdMap.set(trackId, _nextFeatureId++);
+  return _featureIdMap.get(trackId);
+}
+
+function addMergedSource() {
+  if (map.getSource(MERGED_SOURCE)) return;
+  map.addSource(MERGED_SOURCE, { type: 'geojson', data: mergedTrackGeoJSON() });
+  map.addLayer({
+    id: MERGED_LINE_LAYER, type: 'line', source: MERGED_SOURCE,
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#888'],
+      'line-width': ['case',
+        ['==', ['get', 'trackId'], ['global-state', 'activeTrackId']], 5,
+        2],
+      'line-opacity': 0.9
+    }
+  });
+}
+
+function refreshMergedSource() {
+  const src = map.getSource(MERGED_SOURCE);
+  if (src) src.setData(mergedTrackGeoJSON());
+}
+
+// ---- Per-track source (only for the promoted/active track) ----
 
 function trackSourceId(t) { return 'track-' + t.id; }
 function trackLineLayerId(t) { return 'track-line-' + t.id; }
@@ -439,15 +489,45 @@ function removeTrackFromMap(t) {
   if (map.getLayer(trackPtsLayerId(t))) map.removeLayer(trackPtsLayerId(t));
   if (map.getLayer(trackLineLayerId(t))) map.removeLayer(trackLineLayerId(t));
   if (map.getSource(trackSourceId(t))) map.removeSource(trackSourceId(t));
+  if (promotedTrackId === t.id) promotedTrackId = null;
+}
+
+function promoteTrack(t) {
+  if (!t || promotedTrackId === t.id) return;
+  if (promotedTrackId) {
+    const prev = tracks.find(tr => tr.id === promotedTrackId);
+    if (prev) demoteTrack(prev);
+  }
+  promotedTrackId = t.id;
+  if (!map.getSource(trackSourceId(t))) addTrackToMap(t);
+  else refreshTrackSource(t);
+  refreshMergedSource();
+}
+
+function demoteTrack(t) {
+  if (!t || promotedTrackId !== t.id) return;
+  removeTrackFromMap(t);
+  promotedTrackId = null;
+  refreshMergedSource();
 }
 
 function refreshTrackSource(t) {
-  const src = map.getSource(trackSourceId(t));
-  if (src) src.setData(trackGeoJSON(t));
+  if (t.id === promotedTrackId) {
+    const src = map.getSource(trackSourceId(t));
+    if (src) src.setData(trackGeoJSON(t));
+  }
+  refreshMergedSource();
 }
 
 function refreshAllTrackSources() {
-  for (const t of tracks) refreshTrackSource(t);
+  if (promotedTrackId) {
+    const pt = tracks.find(tr => tr.id === promotedTrackId);
+    if (pt) {
+      const src = map.getSource(trackSourceId(pt));
+      if (src) src.setData(trackGeoJSON(pt));
+    }
+  }
+  refreshMergedSource();
 }
 
 function updateVertexHighlight(editingId, selIdx) {
@@ -553,6 +633,15 @@ function setActiveTrack(id) {
   if (es.editingTrackId && es.editingTrackId !== id) exitEditMode();
   activeTrackId = id;
   if (changed) clearSelectionSpan();
+  // Promote/demote per-track sources
+  if (mapReady && changed) {
+    const t = id ? tracks.find(tr => tr.id === id) : null;
+    if (t) promoteTrack(t);
+    else if (promotedTrackId) {
+      const prev = tracks.find(tr => tr.id === promotedTrackId);
+      if (prev) demoteTrack(prev);
+    }
+  }
   renderTrackList();
   updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);
   updateProfileFn();
@@ -564,10 +653,12 @@ function removeTrackById(id) {
   const idx = tracks.indexOf(t);
   const es = getEditState();
   if (es.editingTrackId === id) exitEditMode();
-  removeTrackFromMap(t);
+  if (promotedTrackId === id) removeTrackFromMap(t);
+  _featureIdMap.delete(id);
   tracks.splice(idx, 1);
   if (activeTrackId === id) activeTrackId = tracks.length ? tracks[tracks.length - 1].id : null;
   if (activeSelectionSpan?.trackId === id) clearSelectionSpan(false);
+  refreshMergedSource();
   return t;
 }
 
@@ -598,7 +689,10 @@ function createTrack(name, coords, opts) {
   };
   enrichElevation(t.coords);
   tracks.push(t);
-  if (mapReady) addTrackToMap(t);
+  if (mapReady) {
+    addMergedSource();  // no-op if already exists
+    refreshMergedSource();
+  }
   setTrackPanelVisible(true);
   if (!opts?.skipSelect) setActiveTrack(t.id);
   if (!opts?.skipTreeHook) onTrackCreated(t);
@@ -975,16 +1069,21 @@ function createNewTrack(name) {
 export function resetForTest() {
   const es = getEditState();
   if (es.editingTrackId) exitEditMode();
-  while (tracks.length) {
-    removeTrackFromMap(tracks[0]);
-    tracks.splice(0, 1);
+  // Remove promoted track's per-track source
+  if (promotedTrackId) {
+    const pt = tracks.find(tr => tr.id === promotedTrackId);
+    if (pt) removeTrackFromMap(pt);
   }
+  promotedTrackId = null;
+  tracks.length = 0;
+  _featureIdMap.clear();
   waypoints.length = 0;
   activeTrackId = null;
   trackColorIdx = 0;
   profileClosed = false;
   activeSelectionSpan = null;
   resetMobileFriendlyMode();
+  refreshMergedSource();
   refreshWaypointSource();
   rebuildTree();
 }
@@ -995,9 +1094,10 @@ function rehydrateTrackLayers() {
   mapReady = true;
   ensureProfileHoverLayer();
   ensureWaypointLayer();
-  for (const t of tracks) {
-    if (!map.getSource(trackSourceId(t))) addTrackToMap(t);
-  }
+  addMergedSource();
+  // Promote the active track to its own source for editing
+  const activeT = activeTrackId ? tracks.find(t => t.id === activeTrackId) : null;
+  if (activeT) promoteTrack(activeT);
   refreshSelectionHighlight();
   const es = getEditState();
   updateVertexHighlight(es.editingTrackId, es.selectedVertexIndex);

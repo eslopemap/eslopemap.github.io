@@ -454,6 +454,41 @@ export function convertRouteToTrack(track, selectionSpan, startIdx, endIdx, opti
   };
 }
 
+/**
+ * Lightweight Douglas-Peucker simplification for merged-source display.
+ * Returns a new array of [lng, lat] pairs (no elevation) suitable for a
+ * LineString in the merged GeoJSON source. Tracks with <= minPoints are
+ * returned as-is (just stripped to 2D). Does NOT modify the original coords.
+ */
+export function simplifyForDisplay(coords, thresholdMeters = 5, minPoints = 500) {
+  if (!coords || coords.length < 2) return coords ? coords.map(c => [c[0], c[1]]) : [];
+  if (coords.length <= minPoints) return coords.map(c => [c[0], c[1]]);
+  const refLat = meanLatitude(coords);
+  const keepFlags = new Array(coords.length).fill(false);
+  keepFlags[0] = true;
+  keepFlags[coords.length - 1] = true;
+  dpRecurse(coords, keepFlags, 0, coords.length - 1, thresholdMeters, refLat);
+  const result = [];
+  for (let i = 0; i < coords.length; i++) {
+    if (keepFlags[i]) result.push([coords[i][0], coords[i][1]]);
+  }
+  return result;
+}
+
+function dpRecurse(coords, keepFlags, start, end, toleranceMeters, refLat) {
+  if (end - start <= 1) return;
+  let maxDist = -1, maxIdx = -1;
+  for (let i = start + 1; i < end; i++) {
+    const dist = perpendicularDistanceMeters(coords[i], coords[start], coords[end], refLat);
+    if (dist > maxDist) { maxDist = dist; maxIdx = i; }
+  }
+  if (maxIdx >= 0 && maxDist > toleranceMeters) {
+    keepFlags[maxIdx] = true;
+    dpRecurse(coords, keepFlags, start, maxIdx, toleranceMeters, refLat);
+    dpRecurse(coords, keepFlags, maxIdx, end, toleranceMeters, refLat);
+  }
+}
+
 export function describeOperationConsequence(kind, payload = {}) {
   switch (kind) {
     case 'rectangle-selection':

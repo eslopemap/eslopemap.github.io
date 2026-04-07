@@ -218,6 +218,7 @@ Requirements: features must have unique `id` values (or use `promoteId`). Our tr
    - Color driven by `['get', 'color']` property per feature.
    - Width: `['case', ['==', ['get', 'trackId'], ['global-state', 'activeTrackId']], 5, 2]`.
    - **No circle layer** on the merged source — vertices only shown for the active track.
+   - Minimal track simplification - with ~5m threshold for source track with more than 500 points.
 
 2. **Active track promotion**: when `setActiveTrack(id)` is called:
    - Add a per-track source + line + circle layers (current `addTrackToMap` logic, mostly unchanged).
