@@ -104,18 +104,20 @@ Outputs:
 
 Coverage targets `app/js/**/*.js`, excluding `app/vendor/**`.
 
-**Current coverage baseline** (unit tests only):
+**Verified coverage** (109 unit tests across 12 files):
 
 | Module | Stmts | Notes |
 |---|---|---|
-| `persist.js` | ~90% | Well-covered |
-| `gpx-model.js` | ~85% | Well-covered |
-| `layer-registry.js` | ~72% | User source registry covered |
-| `tauri-bridge.js` | ~68% | Web + desktop mode paths |
-| `constants.js` | ~63% | Ramp parsing, legend CSS |
-| `layer-engine.js` | ~39% | Core loading covered, edge cases need e2e |
-| `utils.js` | ~38% | Tile math covered, DOM utils need e2e |
-| `state.js` | ~100% | Reactive store fully tested |
+| `state.js` | 100% | Reactive store fully tested |
+| `constants.js` | 97% | Ramp parsing, legend CSS |
+| `persist.js` | 90% | localStorage save/load |
+| `shortcuts.js` | 90% | Registry, focus guards |
+| `tauri-bridge.js` | 86% | Web + desktop mode paths |
+| `gpx-model.js` | 85% | GPX/GeoJSON parsing |
+| `layer-registry.js` | 72% | User source registry |
+| `layer-engine.js` | 39% | Core loading covered, edge cases need e2e |
+| `utils.js` | 38% | Tile math covered, DOM utils need e2e |
+| `dem.js` | 25% | sampleElevation covered, queryLoaded needs map |
 | DOM-heavy modules | 0% | Covered by Playwright e2e (not measured here) |
 
 ### Backend (Rust) — cargo-llvm-cov

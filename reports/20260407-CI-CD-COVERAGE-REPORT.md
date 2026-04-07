@@ -37,27 +37,30 @@ To release: `git tag v0.1.0 && git push --tags`
 - Outputs text summary + LCOV report to `coverage/`
 - Added `npm run test:coverage` script
 
-**Baseline coverage** (unit tests only, before new test files):
+**Verified coverage** (109 unit tests across 12 files):
 
 | Module | Stmts | Status |
 |---|---|---|
-| `persist.js` | 90% | ✅ Well-covered |
-| `gpx-model.js` | 85% | ✅ Well-covered |
+| `state.js` | 100% | ✅ Fully covered |
+| `constants.js` | 97% | ✅ Ramp parsing, legend CSS |
+| `persist.js` | 90% | ✅ localStorage save/load |
+| `shortcuts.js` | 90% | ✅ Registry, focus guards |
+| `tauri-bridge.js` | 86% | ✅ Web + desktop paths |
+| `gpx-model.js` | 85% | ✅ GPX/GeoJSON parsing |
 | `layer-registry.js` | 72% | ✅ User source registry |
-| `tauri-bridge.js` | 68% | ✅ Web + desktop paths |
-| `constants.js` | 63% | ✅ Ramp parsing |
 | `layer-engine.js` | 39% | Partial — edge cases need e2e |
 | `utils.js` | 38% | Partial — DOM utils need e2e |
+| `dem.js` | 25% | Partial — `sampleElevation` covered, `queryLoaded` needs map |
 | DOM-heavy (main, tracks, gpx-tree, etc.) | 0% | Covered by Playwright e2e |
 
 ### 4. New Unit Tests
 
 | File | Tests | What |
 |---|---|---|
-| `state.test.mjs` | ~10 | Reactive Proxy store, onChange, STATE_DEFAULTS, TREE_STATE_DEFAULTS |
-| `shortcuts.test.mjs` | ~7 | Keyboard shortcut registry, modifier keys, focus guards, contenteditable |
-| `dem.test.mjs` | ~7 | DEM elevation sampling, bilinear interpolation, edge cases |
-| `constants.test.mjs` | ~12 | Step/interpolate ramp parsing, legend CSS, basemapOpacityExpr |
+| `state.test.mjs` | 12 | Reactive Proxy store, onChange, STATE_DEFAULTS, TREE_STATE_DEFAULTS |
+| `shortcuts.test.mjs` | 7 | Keyboard shortcut registry, modifier keys, focus guards, contenteditable |
+| `dem.test.mjs` | 7 | DEM elevation sampling, bilinear interpolation, edge cases |
+| `constants.test.mjs` | 15 | Step/interpolate ramp parsing, legend CSS, basemapOpacityExpr |
 
 ### 5. Bug Fix: Remove unpkg CDN Fallback
 
@@ -118,8 +121,8 @@ This split is intentional — mocking MapLibre GL for unit tests would add compl
 
 ## Next Steps
 
-- [ ] Verify new unit tests pass (terminal was unavailable during development)
-- [ ] Commit all changes in logical batches
+- [x] Verify new unit tests pass — 109/109 passing
+- [x] Commit all changes in logical batches (4 commits)
 - [ ] Push and verify CI pipeline runs on GitHub
 - [ ] Test release workflow with a `v0.1.0-rc1` tag
 - [ ] Continue with unified basemap UI (phases 2-4)
