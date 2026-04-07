@@ -34,15 +34,11 @@ jobs:
       - name: Update vendored JS dependencies
         run: node scripts/vendor-deps.mjs update
 
-      # Rust deps (with 7-day cooldown via cargo-cooldown)
-      - name: Install cargo-cooldown
-        run: cargo install --locked cargo-cooldown
-
+      # Rust deps (with 7-day cooldown — custom script)
       - name: Update Cargo dependencies (with 7-day cooldown)
-        run: cargo cooldown check
-        working-directory: src-tauri
+        run: bash scripts/cargo-cooldown-update.sh src-tauri
         env:
-          COOLDOWN_MINUTES: '10080'
+          COOLDOWN_DAYS: '7'
 
       # npm devDependencies (with 7-day cooldown)
       - name: Update npm devDependencies (with cooldown)

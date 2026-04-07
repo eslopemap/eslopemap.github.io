@@ -74,8 +74,8 @@ vendor-check:
 
 # Update all dependencies (JS vendor + Cargo + npm devDeps) with 7-day cooldown
 deps-update: vendor-update
-    COOLDOWN_DAYS=7 bash scripts/cargo-cooldown-update.sh src-tauri
-    COOLDOWN_DAYS=7 bash scripts/npm-cooldown-update.sh
+    bash scripts/cargo-cooldown-update.sh src-tauri
+    bash scripts/npm-cooldown-update.sh
 
 # Install all Node.js dependencies
 npm-install:

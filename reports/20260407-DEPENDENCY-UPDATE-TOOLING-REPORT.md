@@ -72,3 +72,7 @@ Additionally, a `just deps-update` task is provided for local CLI usage.
 | npm devDeps | `npm update` → query registry publish dates → `npm install pkg@oldVer` to revert too-fresh versions | `scripts/npm-cooldown-update.sh` |
 
 The bi-monthly cron provides the macro scheduling (at most 6 PRs/year). The 7-day cooldown ensures each adopted version has had time for community testing regardless of when the workflow runs.
+
+### Note on cargo-cooldown crate
+
+The [`cargo-cooldown`](https://github.com/dertin/cargo-cooldown) crate exists and provides a more sophisticated approach (full dependency graph analysis, semver-aware downgrades). However, as of 2026-04-07, it exhibited infinite loop issues during testing. The custom script approach is used for now; revisit `cargo-cooldown` when it stabilizes.
