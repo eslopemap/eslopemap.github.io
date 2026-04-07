@@ -15,7 +15,10 @@
 - **Declarative layer catalog** — single `LAYER_CATALOG` array in `layer-registry.js` defines all basemaps and overlays with sources, layers, regions, and default views
 - **User tile sources** — `registerUserSource()` / `unregisterUserSource()` allow runtime addition of `.mbtiles`/`.pmtiles` tile sources; `buildCatalogEntryFromTileSource()` auto-generates catalog entries from tile server URLs
 - **Multi-basemap stack** — `basemapStack[]` state allows stacking multiple basemaps with independent per-basemap opacity via `basemapOpacities{}`; `setBasemapStack()` handles style-backed and catalog basemaps
-- **Basemap stack UI** — dynamic stack panel replaces the static `<select>`; each basemap shows label, opacity slider, and remove button; "Add basemap…" dropdown for adding layers to the stack
+- **Unified Layers panel** — all active layers (basemaps + overlays) shown in a single panel with visibility toggle, opacity slider, remove button, and drag-and-drop reorder; basemaps shown bold
+- **Add layer dropdown** — single structured `<select>` with `<optgroup>`s for Basemaps and Overlays; replaces separate basemap-stack and overlay controls
+- **Primary basemap selector** — dedicated `<select>` for choosing the main basemap, separate from additional layer stacking
+- **Auto-open Layers panel** — Layers panel auto-shows when adding a layer via the dropdown
 - **Built-in basemaps**: OSM (default), OTM, IGN plan (FR), SwissTopo vector, SwissTopo raster, IGN topo (FR), IGN ortho (FR), Kartverket topo (NO), None
 - **Auto fly-to** — selecting a regional basemap outside its supported area recenters the view
 - **URL persistence** — center, zoom, basemap, mode, opacity, terrain state, bearing, and pitch are encoded in the URL hash
@@ -106,6 +109,7 @@
 - **GPX folder sync** — `pickAndWatchFolder()` watches a folder for GPX changes, with live reload via `notify` file watcher and conflict resolution (keep-disk / keep-app)
 - **Local tile server** — built-in HTTP tile server on port 14321 serving `.mbtiles` (via rusqlite) and `.pmtiles` (via HTTP Range serving) as `{z}/{x}/{y}` tiles
 - **Tile source management** — `addTileSource()` / `removeTileSource()` / `listTileSources()` IPC commands; sources auto-registered into the JS layer catalog
+- **Tile source discovery** — `scanTileFolder()` scans a directory for `.mbtiles`/`.pmtiles` files, reads MBTiles metadata (name, format, bounds, center, zoom range, description), and auto-registers all found sources
 - **Runtime adapter** — `tauri-bridge.js` provides a unified API; browser mode falls back gracefully (no-op or error for desktop-only features)
 - **Desktop config injection** — Rust injects `__SLOPE_RUNTIME__` and `__SLOPE_DESKTOP_CONFIG__` globals into the webview at startup
 
