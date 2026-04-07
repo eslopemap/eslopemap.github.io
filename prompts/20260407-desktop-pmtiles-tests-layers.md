@@ -84,3 +84,11 @@ the e2e test should hook into the cache mechanism to inject predefined tiles for
 so the UI supports adding any TileJSON, and refactor the current mbt/pmt tile server to expose tilejson
 * setup a justfile for this project, with common dev tasks covering desktop and web
 * commit often
+
+---
+
+for #2 Dependency update tooling, I disagree with
+>- cargo update respects semver ranges in Cargo.toml
+> - The bi-monthly cron provides the macro cooldown period
+take a more principles aproach
+eg use https://crates.io/crates/cargo-cooldown

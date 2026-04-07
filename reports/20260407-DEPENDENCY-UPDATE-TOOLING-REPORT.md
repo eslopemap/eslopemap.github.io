@@ -30,7 +30,7 @@ The JS vendor deps use a custom system (`deps.json` + `vendor-deps.mjs`) that al
 **Pros:**
 - Single unified workflow handles all three ecosystems
 - Calls `vendor-deps.mjs` directly for JS vendor deps
-- Calls `cargo update` for Rust, `npm update` for devDeps
+- Enforces a **uniform 7-day cooldown** across all ecosystems via dedicated scripts
 - Creates exactly one PR with all changes
 - Runs on a cron schedule (every 2 months) AND manually via `workflow_dispatch`
 - Full control over commit message, PR title, labels
@@ -48,8 +48,8 @@ Use Dependabot for Cargo.toml/package.json and a separate workflow for `deps.jso
 
 1. Runs every 2 months on cron OR manually via `workflow_dispatch`
 2. Runs `node scripts/vendor-deps.mjs update` (JS vendor deps with built-in 7-day cooldown)
-3. Runs `cargo update` (Rust deps, respects Cargo.toml semver ranges)
-4. Runs `npm update` (devDependencies)
+3. Runs `scripts/cargo-cooldown-update.sh` (Rust deps with 7-day publish-age cooldown)
+4. Runs `scripts/npm-cooldown-update.sh` (npm devDependencies with 7-day publish-age cooldown)
 5. If any files changed, creates a single PR titled `chore(deps): update all dependencies`
 6. Labels the PR with `dependencies`
 
@@ -61,8 +61,14 @@ Additionally, a `just deps-update` task is provided for local CLI usage.
 - **Manual:** `workflow_dispatch` button in GitHub Actions UI
 - **Local CLI:** `just deps-update` runs all three update steps locally
 
-## Cooldown Behavior
+## Cooldown Principle
 
-- `vendor-deps.mjs` already has `minimumAgeDays: 7` built into `deps.json` — it only picks versions published ≥7 days ago
-- `cargo update` respects semver ranges in Cargo.toml
-- The bi-monthly cron provides the macro cooldown period
+**Never adopt a dependency version published less than 7 days ago.** This is enforced uniformly across all three ecosystems:
+
+| Ecosystem | Mechanism | Script |
+|---|---|---|
+| JS vendor deps | `minimumAgeDays: 7` in `deps.json` | `vendor-deps.mjs` |
+| Rust crates | `cargo update` → query crates.io publish dates → `cargo update --precise` to revert too-fresh versions | `scripts/cargo-cooldown-update.sh` |
+| npm devDeps | `npm update` → query registry publish dates → `npm install pkg@oldVer` to revert too-fresh versions | `scripts/npm-cooldown-update.sh` |
+
+The bi-monthly cron provides the macro scheduling (at most 6 PRs/year). The 7-day cooldown ensures each adopted version has had time for community testing regardless of when the workflow runs.

@@ -34,14 +34,17 @@ jobs:
       - name: Update vendored JS dependencies
         run: node scripts/vendor-deps.mjs update
 
-      # Rust deps
-      - name: Update Cargo dependencies
-        run: cargo update
-        working-directory: src-tauri
+      # Rust deps (with 7-day cooldown — reverts crates published < 7d ago)
+      - name: Update Cargo dependencies (with cooldown)
+        run: bash scripts/cargo-cooldown-update.sh src-tauri
+        env:
+          COOLDOWN_DAYS: '7'
 
-      # npm devDependencies
-      - name: Update npm devDependencies
-        run: npm update
+      # npm devDependencies (with 7-day cooldown)
+      - name: Update npm devDependencies (with cooldown)
+        run: bash scripts/npm-cooldown-update.sh
+        env:
+          COOLDOWN_DAYS: '7'
 
       - name: Check for changes
         id: changes

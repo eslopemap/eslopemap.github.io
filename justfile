@@ -72,10 +72,10 @@ vendor-update:
 vendor-check:
     node scripts/vendor-deps.mjs check
 
-# Update all dependencies (JS vendor + Cargo + npm devDeps)
+# Update all dependencies (JS vendor + Cargo + npm devDeps) with 7-day cooldown
 deps-update: vendor-update
-    cd src-tauri && cargo update
-    npm update
+    COOLDOWN_DAYS=7 bash scripts/cargo-cooldown-update.sh src-tauri
+    COOLDOWN_DAYS=7 bash scripts/npm-cooldown-update.sh
 
 # Install all Node.js dependencies
 npm-install:
