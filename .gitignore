@@ -5,3 +5,5 @@ target/
 .rodney/
 .rodney-chrome/
 test-results/
+coverage/
+playwright-report/
