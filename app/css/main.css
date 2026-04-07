@@ -1041,4 +1041,45 @@
       padding: 4px 0;
     }
 
+    /* ---- Basemap stack ---- */
+    .basemap-row { margin-bottom: 4px; }
+    .basemap-add-row { margin-top: 4px; }
+    .basemap-add-row select { width: 100%; font-size: 12px; }
+
+    .basemap-stack-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 2px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      font-size: 12px;
+    }
+    .basemap-stack-row:last-child { border-bottom: none; }
+    .basemap-stack-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .basemap-stack-opacity {
+      width: 55px;
+      flex-shrink: 0;
+      accent-color: #4a90d9;
+    }
+    .basemap-stack-remove {
+      flex-shrink: 0;
+      cursor: pointer;
+      opacity: 0.4;
+      font-size: 11px;
+      background: none;
+      border: none;
+      padding: 0 2px;
+    }
+    .basemap-stack-remove:hover { opacity: 1; color: #c00; }
+    .basemap-stack-empty {
+      font-size: 11px;
+      opacity: 0.5;
+      padding: 2px 0;
+    }
+
     /* end track editor */

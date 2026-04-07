@@ -969,7 +969,98 @@ updateCursorInfoVisibility(state);
 
 // ---- Dynamic layer UI ----
 
-/** Populate basemap <select> from catalog */
+/** Populate basemap stack UI from state.basemapStack */
+function renderBasemapStack() {
+  const container = document.getElementById('basemap-stack');
+  if (!container) return;
+  container.innerHTML = '';
+  const stack = state.basemapStack || [];
+
+  if (stack.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'basemap-stack-empty';
+    empty.textContent = 'No basemap';
+    container.appendChild(empty);
+  }
+
+  for (let i = 0; i < stack.length; i++) {
+    const id = stack[i];
+    const entry = getCatalogEntry(id);
+    if (!entry) continue;
+
+    const row = document.createElement('div');
+    row.className = 'basemap-stack-row';
+
+    const name = document.createElement('span');
+    name.className = 'basemap-stack-name';
+    name.textContent = entry.label;
+
+    const opacity = document.createElement('input');
+    opacity.type = 'range';
+    opacity.min = '0';
+    opacity.max = '1';
+    opacity.step = '0.05';
+    opacity.value = String(state.basemapOpacities?.[id] ?? 1);
+    opacity.className = 'basemap-stack-opacity';
+    opacity.title = 'Opacity';
+    opacity.addEventListener('input', () => {
+      const val = Number(opacity.value);
+      const opacities = { ...(state.basemapOpacities || {}) };
+      opacities[id] = val;
+      state.basemapOpacities = opacities;
+      applyLayerOpacity(map, id, val);
+      // Also update global basemapOpacity for backward compat (primary basemap)
+      if (i === 0) {
+        state.basemapOpacity = val;
+        setGlobalStatePropertySafe(map, 'basemapOpacity', val);
+      }
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'basemap-stack-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove from stack';
+    removeBtn.addEventListener('click', async () => {
+      const newStack = stack.filter((_, j) => j !== i);
+      await setBasemapStack(map, state, newStack);
+      renderBasemapStack();
+      renderBasemapAddSelect();
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+
+    row.append(name, opacity, removeBtn);
+    container.appendChild(row);
+  }
+
+  // Sync hidden select for backward compat
+  const sel = document.getElementById('basemap');
+  if (sel) sel.value = state.basemap;
+}
+
+/** Populate "add basemap" dropdown with basemaps not in the stack */
+function renderBasemapAddSelect() {
+  const sel = document.getElementById('basemap-add');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '+ Add basemap…';
+  sel.appendChild(placeholder);
+
+  const inStack = new Set(state.basemapStack || []);
+  for (const entry of getBasemaps()) {
+    if (inStack.has(entry.id)) continue;
+    const opt = document.createElement('option');
+    opt.value = entry.id;
+    opt.textContent = entry.label;
+    sel.appendChild(opt);
+  }
+}
+
+/** Legacy: populate hidden basemap <select> from catalog */
 function renderBasemapSelect() {
   const sel = document.getElementById('basemap');
   sel.innerHTML = '';
@@ -1115,6 +1206,8 @@ function renderBookmarkList() {
     nameBtn.addEventListener('click', async () => {
       await applyBookmark(map, state, bm);
       document.getElementById('basemap').value = state.basemap;
+      renderBasemapStack();
+      renderBasemapAddSelect();
       syncOverlayCheckboxes(state);
       renderLayerOrderPanel();
       renderBookmarkList();
@@ -1182,8 +1275,23 @@ document.addEventListener('click', (e) => {
 
 // Initial render of dynamic UI
 renderBasemapSelect();
+renderBasemapStack();
+renderBasemapAddSelect();
 renderOverlayList();
 renderBookmarkList();
+
+// Wire "add basemap" dropdown
+document.getElementById('basemap-add')?.addEventListener('change', async (e) => {
+  const id = e.target.value;
+  if (!id) return;
+  const newStack = [...(state.basemapStack || []), id];
+  await setBasemapStack(map, state, newStack);
+  renderBasemapStack();
+  renderBasemapAddSelect();
+  map.triggerRepaint();
+  scheduleSettingsSave();
+  e.target.value = ''; // reset to placeholder
+});
 
 // ---- Map load ----
 

@@ -82,18 +82,17 @@
       </select>
     </div>
 
-    <div class="row">
-      <label for="basemap"><strong>Basemap</strong></label><br />
-      <select id="basemap">
+    <div class="row basemap-row">
+      <strong>Basemap</strong>
+      <div id="basemap-stack"></div>
+      <div class="basemap-add-row">
+        <select id="basemap-add">
+          <option value="">+ Add basemap…</option>
+        </select>
+      </div>
+      <!-- Hidden select for backward compat / test mode -->
+      <select id="basemap" style="display:none">
         <option value="none">None</option>
-        <option value="osm" selected>OSM</option>
-        <option value="otm">OTM</option>
-        <option value="ign-plan">IGN plan (FR)</option>
-        <option value="swisstopo-vector">SwissTopo vector</option>
-        <option value="swisstopo-raster">SwissTopo raster</option>
-        <option value="ign-topo">IGN topo (FR)</option>
-        <option value="ign-ortho">IGN ortho (FR)</option>
-        <option value="kartverket">Kartverket topo (NO)</option>
       </select>
     </div>
 
