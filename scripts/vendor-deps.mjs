@@ -16,6 +16,7 @@ const importMapAppPath = path.join(vendorRoot, 'importmap.app.generated.json');
 const importMapDocsPath = path.join(vendorRoot, 'importmap.docs.generated.json');
 const importMapAppScriptPath = path.join(vendorRoot, 'importmap.app.generated.js');
 const importMapDocsScriptPath = path.join(vendorRoot, 'importmap.docs.generated.js');
+const indexHtmlPath = path.join(appRoot, 'index.html');
 
 async function readJson(filePath) {
   const text = await readFile(filePath, 'utf8');
@@ -241,6 +242,22 @@ function buildImportMapBootstrap(importMap) {
   ].join('\n');
 }
 
+async function patchInlineImportMap(importMap) {
+  const html = await readFile(indexHtmlPath, 'utf8');
+  const inlineJson = JSON.stringify(importMap, null, 4);
+  const replacement = `<script type="importmap">\n  ${inlineJson.replace(/\n/g, '\n  ')}\n  </script>`;
+  const patched = html.replace(
+    /<script type="importmap">[\s\S]*?<\/script>/,
+    replacement
+  );
+  if (patched === html) {
+    console.warn('Warning: could not find inline import map in index.html to patch');
+    return false;
+  }
+  await writeFile(indexHtmlPath, patched, 'utf8');
+  return true;
+}
+
 async function fileExists(filePath) {
   try {
     await stat(filePath);
@@ -300,6 +317,9 @@ async function runUpdate(manifest) {
   await writeFile(importMapDocsPath, `${JSON.stringify(importMaps.docs, null, 2)}\n`, 'utf8');
   await writeFile(importMapAppScriptPath, buildImportMapBootstrap(importMaps.app), 'utf8');
   await writeFile(importMapDocsScriptPath, buildImportMapBootstrap(importMaps.docs), 'utf8');
+  if (await patchInlineImportMap(importMaps.app)) {
+    console.log(`Patched inline import map in ${path.relative(repoRoot, indexHtmlPath)}.`);
+  }
 
   console.log(`Vendored ${resolvedPackages.length} packages.`);
   console.log(`Wrote ${path.relative(repoRoot, lockPath)}.`);
