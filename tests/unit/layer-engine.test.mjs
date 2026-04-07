@@ -278,6 +278,40 @@ describe('layer-engine style basemaps', () => {
     );
   });
 
+  it('syncLayerOrder includes basemapStack and activeOverlays', async () => {
+    const { syncLayerOrder } = await import('../../app/js/layer-engine.js');
+    const state = {
+      basemapStack: ['osm', 'swisstopo-raster'],
+      activeOverlays: ['openskimap', 'swisstopo-ski-ch'],
+      layerOrder: [],
+    };
+    syncLayerOrder(state);
+    expect(state.layerOrder).toEqual(['osm', 'swisstopo-raster', 'openskimap', 'swisstopo-ski-ch']);
+  });
+
+  it('syncLayerOrder preserves existing order', async () => {
+    const { syncLayerOrder } = await import('../../app/js/layer-engine.js');
+    const state = {
+      basemapStack: ['osm'],
+      activeOverlays: ['openskimap', 'swisstopo-ski-ch'],
+      layerOrder: ['swisstopo-ski-ch', 'osm', 'openskimap'],
+    };
+    syncLayerOrder(state);
+    // Existing order preserved, all items still present
+    expect(state.layerOrder).toEqual(['swisstopo-ski-ch', 'osm', 'openskimap']);
+  });
+
+  it('syncLayerOrder removes stale entries', async () => {
+    const { syncLayerOrder } = await import('../../app/js/layer-engine.js');
+    const state = {
+      basemapStack: ['osm'],
+      activeOverlays: [],
+      layerOrder: ['osm', 'openskimap', 'swisstopo-ski-ch'],
+    };
+    syncLayerOrder(state);
+    expect(state.layerOrder).toEqual(['osm']);
+  });
+
   it('updates opacity for already-loaded style-backed basemap layers', async () => {
     ({ applyLayerOpacity, setBasemap } = await import('../../app/js/layer-engine.js'));
     const map = createMapMock();

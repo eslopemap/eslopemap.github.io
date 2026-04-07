@@ -991,15 +991,15 @@
     }
     .bookmark-edit:hover, .bookmark-del:hover { opacity: 1; }
 
-    /* ---- Layer order panel ---- */
+    /* ---- Layers panel ---- */
     #layer-order-panel {
       display: none;
       position: absolute;
       top: 46px;
-      left: 10px;
+      left: 200px;
       z-index: 10;
-      min-width: 200px;
-      max-width: 280px;
+      min-width: 220px;
+      max-width: 300px;
       font-size: 13px;
       max-height: calc(100vh - 60px - var(--bottom-overlay-bottom));
       overflow-y: auto;
@@ -1009,7 +1009,7 @@
     .layer-order-row {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
       padding: 4px 2px;
       border-bottom: 1px solid rgba(0,0,0,0.06);
       cursor: grab;
@@ -1018,12 +1018,25 @@
     .layer-order-row:last-child { border-bottom: none; }
     .layer-order-row.dragging { opacity: 0.4; }
     .layer-order-row.drag-over { background: rgba(74,144,217,0.12); border-radius: 4px; }
+    .layer-order-row.layer-basemap .layer-order-name { font-weight: 600; }
+    .layer-order-row.layer-hidden { opacity: 0.45; }
     .layer-order-handle {
       flex-shrink: 0;
       font-size: 12px;
       opacity: 0.4;
       cursor: grab;
     }
+    .layer-order-vis {
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 2px;
+      opacity: 0.6;
+      line-height: 1;
+    }
+    .layer-order-vis:hover { opacity: 1; }
     .layer-order-name {
       flex: 1;
       overflow: hidden;
@@ -1031,55 +1044,30 @@
       white-space: nowrap;
     }
     .layer-order-opacity {
-      width: 60px;
+      width: 55px;
       flex-shrink: 0;
       accent-color: #4a90d9;
     }
+    .layer-order-remove {
+      flex-shrink: 0;
+      cursor: pointer;
+      opacity: 0.3;
+      font-size: 11px;
+      background: none;
+      border: none;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .layer-order-remove:hover { opacity: 1; color: #c00; }
     .layer-order-empty {
       font-size: 11px;
       opacity: 0.5;
       padding: 4px 0;
     }
 
-    /* ---- Basemap stack ---- */
+    /* ---- Basemap + Add layer row ---- */
     .basemap-row { margin-bottom: 4px; }
-    .basemap-add-row { margin-top: 4px; }
-    .basemap-add-row select { width: 100%; font-size: 12px; }
-
-    .basemap-stack-row {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 2px;
-      border-bottom: 1px solid rgba(0,0,0,0.06);
-      font-size: 12px;
-    }
-    .basemap-stack-row:last-child { border-bottom: none; }
-    .basemap-stack-name {
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .basemap-stack-opacity {
-      width: 55px;
-      flex-shrink: 0;
-      accent-color: #4a90d9;
-    }
-    .basemap-stack-remove {
-      flex-shrink: 0;
-      cursor: pointer;
-      opacity: 0.4;
-      font-size: 11px;
-      background: none;
-      border: none;
-      padding: 0 2px;
-    }
-    .basemap-stack-remove:hover { opacity: 1; color: #c00; }
-    .basemap-stack-empty {
-      font-size: 11px;
-      opacity: 0.5;
-      padding: 2px 0;
-    }
+    .basemap-row select { width: 100%; }
+    .add-layer-row select { width: 100%; font-size: 12px; }
 
     /* end track editor */

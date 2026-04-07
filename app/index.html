@@ -83,13 +83,8 @@
     </div>
 
     <div class="row basemap-row">
-      <strong>Basemap</strong>
-      <div id="basemap-stack"></div>
-      <div class="basemap-add-row">
-        <select id="basemap-add">
-          <option value="">+ Add basemap…</option>
-        </select>
-      </div>
+      <label for="basemap-primary"><strong>Basemap</strong></label><br />
+      <select id="basemap-primary"></select>
       <!-- Hidden select for backward compat / test mode -->
       <select id="basemap" style="display:none">
         <option value="none">None</option>
@@ -100,11 +95,10 @@
       <label><input id="showContours" type="checkbox" checked /> Contour lines</label>
     </div>
 
-    <div class="row overlay-row">
-      <button id="overlay-toggle" type="button" class="overlay-toggle-btn">Overlays ▾</button>
-      <div id="overlay-dropdown" class="overlay-dropdown">
-        <div id="overlay-list"></div>
-      </div>
+    <div class="row add-layer-row">
+      <select id="add-layer">
+        <option value="">+ Add layer…</option>
+      </select>
     </div>
 
     <div class="row bookmark-row">
@@ -190,7 +184,7 @@
   </div>
 
   <div id="layer-order-panel" class="panel-surface panel-padded">
-    <h4 style="margin:0 0 6px; font-size:13px;">Layer order</h4>
+    <h4 style="margin:0 0 6px; font-size:13px;">Layers</h4>
     <div id="layer-order-list"></div>
   </div>
 

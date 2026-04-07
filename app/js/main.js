@@ -23,7 +23,7 @@ import {
 } from './layer-registry.js';
 import {
   setBasemap, setBasemapStack, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
-  syncLayerOrder, reorderLayer, applyLayerOpacity,
+  syncLayerOrder, reorderLayer, applyLayerOpacity, setLayerVisible, removeLayer,
   createBookmark, applyBookmark, deleteBookmark, renameBookmark,
   migrateSettings,
 } from './layer-engine.js';
@@ -125,6 +125,7 @@ function applyTestModeState(state) {
 
 function syncTestModeUi(state) {
   document.getElementById('basemap').value = state.basemap;
+  const bp = document.getElementById('basemap-primary'); if (bp) bp.value = state.basemap;
   document.getElementById('mode').value = state.mode;
   document.getElementById('terrain3d').checked = state.terrain3d;
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
@@ -174,6 +175,7 @@ if (isTestMode) {
   applyTestModeState(state);
 }
 document.getElementById('basemap').value = state.basemap;
+{ const bp = document.getElementById('basemap-primary'); if (bp) bp.value = state.basemap; }
 document.getElementById('mode').value = state.mode;
 document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
 document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
@@ -969,95 +971,64 @@ updateCursorInfoVisibility(state);
 
 // ---- Dynamic layer UI ----
 
-/** Populate basemap stack UI from state.basemapStack */
-function renderBasemapStack() {
-  const container = document.getElementById('basemap-stack');
-  if (!container) return;
-  container.innerHTML = '';
-  const stack = state.basemapStack || [];
-
-  if (stack.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'basemap-stack-empty';
-    empty.textContent = 'No basemap';
-    container.appendChild(empty);
-  }
-
-  for (let i = 0; i < stack.length; i++) {
-    const id = stack[i];
-    const entry = getCatalogEntry(id);
-    if (!entry) continue;
-
-    const row = document.createElement('div');
-    row.className = 'basemap-stack-row';
-
-    const name = document.createElement('span');
-    name.className = 'basemap-stack-name';
-    name.textContent = entry.label;
-
-    const opacity = document.createElement('input');
-    opacity.type = 'range';
-    opacity.min = '0';
-    opacity.max = '1';
-    opacity.step = '0.05';
-    opacity.value = String(state.basemapOpacities?.[id] ?? 1);
-    opacity.className = 'basemap-stack-opacity';
-    opacity.title = 'Opacity';
-    opacity.addEventListener('input', () => {
-      const val = Number(opacity.value);
-      const opacities = { ...(state.basemapOpacities || {}) };
-      opacities[id] = val;
-      state.basemapOpacities = opacities;
-      applyLayerOpacity(map, id, val);
-      // Also update global basemapOpacity for backward compat (primary basemap)
-      if (i === 0) {
-        state.basemapOpacity = val;
-        setGlobalStatePropertySafe(map, 'basemapOpacity', val);
-      }
-      map.triggerRepaint();
-      scheduleSettingsSave();
-    });
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'basemap-stack-remove';
-    removeBtn.textContent = '✕';
-    removeBtn.title = 'Remove from stack';
-    removeBtn.addEventListener('click', async () => {
-      const newStack = stack.filter((_, j) => j !== i);
-      await setBasemapStack(map, state, newStack);
-      renderBasemapStack();
-      renderBasemapAddSelect();
-      map.triggerRepaint();
-      scheduleSettingsSave();
-    });
-
-    row.append(name, opacity, removeBtn);
-    container.appendChild(row);
-  }
-
-  // Sync hidden select for backward compat
-  const sel = document.getElementById('basemap');
-  if (sel) sel.value = state.basemap;
-}
-
-/** Populate "add basemap" dropdown with basemaps not in the stack */
-function renderBasemapAddSelect() {
-  const sel = document.getElementById('basemap-add');
+/** Populate the primary basemap <select> */
+function renderBasemapPrimary() {
+  const sel = document.getElementById('basemap-primary');
   if (!sel) return;
   sel.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = '+ Add basemap…';
-  sel.appendChild(placeholder);
-
-  const inStack = new Set(state.basemapStack || []);
   for (const entry of getBasemaps()) {
-    if (inStack.has(entry.id)) continue;
     const opt = document.createElement('option');
     opt.value = entry.id;
     opt.textContent = entry.label;
     sel.appendChild(opt);
   }
+  sel.value = state.basemap || 'osm';
+  // Sync hidden backward-compat select
+  const hidden = document.getElementById('basemap');
+  if (hidden) hidden.value = state.basemap;
+}
+
+/** Populate unified "Add layer" dropdown with optgroups for basemaps + overlays */
+function renderAddLayerSelect() {
+  const sel = document.getElementById('add-layer');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '+ Add layer…';
+  sel.appendChild(placeholder);
+
+  const inStack = new Set(state.basemapStack || []);
+  const activeOvl = new Set(state.activeOverlays || []);
+
+  // Basemaps group
+  const bmGroup = document.createElement('optgroup');
+  bmGroup.label = 'Basemaps';
+  let bmCount = 0;
+  for (const entry of getBasemaps()) {
+    if (entry.id === 'none') continue; // 'none' not useful as extra layer
+    if (inStack.has(entry.id)) continue; // already in stack
+    const opt = document.createElement('option');
+    opt.value = `basemap:${entry.id}`;
+    opt.textContent = entry.label;
+    bmGroup.appendChild(opt);
+    bmCount++;
+  }
+  if (bmCount) sel.appendChild(bmGroup);
+
+  // Overlays group
+  const ovlGroup = document.createElement('optgroup');
+  ovlGroup.label = 'Overlays';
+  let ovlCount = 0;
+  for (const entry of getOverlays()) {
+    if (activeOvl.has(entry.id)) continue; // already active
+    const opt = document.createElement('option');
+    opt.value = `overlay:${entry.id}`;
+    opt.textContent = entry.label;
+    ovlGroup.appendChild(opt);
+    ovlCount++;
+  }
+  if (ovlCount) sel.appendChild(ovlGroup);
 }
 
 /** Legacy: populate hidden basemap <select> from catalog */
@@ -1073,56 +1044,31 @@ function renderBasemapSelect() {
   sel.value = state.basemap;
 }
 
-/** Populate overlay dropdown checkboxes from catalog */
-function renderOverlayList() {
-  const container = document.getElementById('overlay-list');
-  if (!container) return;
-  container.innerHTML = '';
-  const active = new Set(state.activeOverlays);
-  for (const entry of getOverlays()) {
-    const label = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.dataset.overlayId = entry.id;
-    cb.checked = active.has(entry.id);
-    cb.addEventListener('change', () => {
-      setOverlay(map, state, entry.id, cb.checked);
-      renderLayerOrderPanel();
-      renderBookmarkList();
-      map.triggerRepaint();
-      scheduleSettingsSave();
-    });
-    label.append(cb, ` ${entry.label}`);
-    container.appendChild(label);
-  }
+/** Sync overlay state in UI (overlays now managed via Layers panel + Add layer dropdown) */
+function syncOverlayCheckboxes(_st) {
+  // No-op: overlays are shown in the Layers panel, not a separate checkbox list
 }
 
-/** Sync overlay checkbox state without re-rendering */
-function syncOverlayCheckboxes(st) {
-  const container = document.getElementById('overlay-list');
-  if (!container) return;
-  const active = new Set(st.activeOverlays);
-  for (const cb of container.querySelectorAll('input[data-overlay-id]')) {
-    cb.checked = active.has(cb.dataset.overlayId);
-  }
-}
-
-/** Render the layer-order panel rows */
+/** Render the Layers panel: basemaps + overlays with visibility, opacity, remove, drag */
 function renderLayerOrderPanel() {
   const container = document.getElementById('layer-order-list');
   if (!container) return;
   container.innerHTML = '';
   const order = state.layerOrder || [];
   const settings = state.layerSettings || {};
+  const basemapSet = new Set(state.basemapStack || []);
 
   for (let i = order.length - 1; i >= 0; i--) {
     const catalogId = order[i];
     const entry = getCatalogEntry(catalogId);
     if (!entry) continue;
     const s = settings[catalogId] || {};
+    const isBasemap = basemapSet.has(catalogId);
+    const isHidden = !!s.hidden;
 
     const row = document.createElement('div');
-    row.className = 'layer-order-row';
+    row.className = 'layer-order-row' + (isBasemap ? ' layer-basemap' : ' layer-overlay');
+    if (isHidden) row.classList.add('layer-hidden');
     row.draggable = true;
     row.dataset.index = String(i);
 
@@ -1130,28 +1076,69 @@ function renderLayerOrderPanel() {
     handle.className = 'layer-order-handle';
     handle.textContent = '☰';
 
+    const visBtn = document.createElement('button');
+    visBtn.className = 'layer-order-vis';
+    visBtn.textContent = isHidden ? '◻' : '◼';
+    visBtn.title = isHidden ? 'Show layer' : 'Hide layer';
+    visBtn.addEventListener('click', () => {
+      setLayerVisible(map, state, catalogId, isHidden);
+      renderLayerOrderPanel();
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+
     const nameSpan = document.createElement('span');
     nameSpan.className = 'layer-order-name';
     nameSpan.textContent = entry.label;
+
+    // Opacity: for basemaps, read from basemapOpacities; for overlays, from layerSettings
+    const currentOpacity = isBasemap
+      ? (state.basemapOpacities?.[catalogId] ?? 1)
+      : (s.opacity != null ? s.opacity : 1);
 
     const opacityInput = document.createElement('input');
     opacityInput.type = 'range';
     opacityInput.min = '0';
     opacityInput.max = '1';
     opacityInput.step = '0.05';
-    opacityInput.value = String(s.opacity != null ? s.opacity : 1);
+    opacityInput.value = String(currentOpacity);
     opacityInput.className = 'layer-order-opacity';
     opacityInput.title = 'Layer opacity';
     opacityInput.addEventListener('input', () => {
       const val = Number(opacityInput.value);
-      if (!settings[catalogId]) state.layerSettings = { ...state.layerSettings, [catalogId]: {} };
-      state.layerSettings[catalogId] = { ...state.layerSettings[catalogId], opacity: val };
-      applyLayerOpacity(map, catalogId, val);
+      if (isBasemap) {
+        const opacities = { ...(state.basemapOpacities || {}) };
+        opacities[catalogId] = val;
+        state.basemapOpacities = opacities;
+        applyLayerOpacity(map, catalogId, val);
+        // Backward compat: keep basemapOpacity synced to primary
+        if (catalogId === (state.basemapStack || [])[0]) {
+          state.basemapOpacity = val;
+          setGlobalStatePropertySafe(map, 'basemapOpacity', val);
+        }
+      } else {
+        state.layerSettings = { ...state.layerSettings, [catalogId]: { ...(state.layerSettings[catalogId] || {}), opacity: val } };
+        applyLayerOpacity(map, catalogId, val);
+      }
       map.triggerRepaint();
       scheduleSettingsSave();
     });
 
-    row.append(handle, nameSpan, opacityInput);
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'layer-order-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove layer';
+    removeBtn.addEventListener('click', () => {
+      removeLayer(map, state, catalogId);
+      renderLayerOrderPanel();
+      renderAddLayerSelect();
+      renderBasemapPrimary();
+      syncOverlayCheckboxes(state);
+      map.triggerRepaint();
+      scheduleSettingsSave();
+    });
+
+    row.append(handle, visBtn, nameSpan, opacityInput, removeBtn);
     container.appendChild(row);
 
     // Drag-and-drop
@@ -1169,7 +1156,6 @@ function renderLayerOrderPanel() {
       e.preventDefault();
       row.classList.remove('drag-over');
       const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-      // Visual order is reversed (top = last), convert back
       const toIdx = i;
       if (fromIdx !== toIdx) {
         reorderLayer(map, state, fromIdx, toIdx);
@@ -1183,7 +1169,7 @@ function renderLayerOrderPanel() {
   if (order.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'layer-order-empty';
-    empty.textContent = 'No active overlays';
+    empty.textContent = 'No active layers';
     container.appendChild(empty);
   }
 }
@@ -1205,9 +1191,8 @@ function renderBookmarkList() {
     nameBtn.title = 'Apply this bookmark';
     nameBtn.addEventListener('click', async () => {
       await applyBookmark(map, state, bm);
-      document.getElementById('basemap').value = state.basemap;
-      renderBasemapStack();
-      renderBasemapAddSelect();
+      renderBasemapPrimary();
+      renderAddLayerSelect();
       syncOverlayCheckboxes(state);
       renderLayerOrderPanel();
       renderBookmarkList();
@@ -1261,36 +1246,60 @@ layerOrderToggleBtn?.addEventListener('click', () => {
   if (isVisible) renderLayerOrderPanel();
 });
 
-// Wire overlay dropdown
-const overlayToggleBtn = document.getElementById('overlay-toggle');
-const overlayDropdown = document.getElementById('overlay-dropdown');
-overlayToggleBtn?.addEventListener('click', () => {
-  overlayDropdown.classList.toggle('visible');
-});
-document.addEventListener('click', (e) => {
-  if (overlayDropdown && !overlayDropdown.contains(e.target) && e.target !== overlayToggleBtn) {
-    overlayDropdown.classList.remove('visible');
-  }
-});
-
 // Initial render of dynamic UI
 renderBasemapSelect();
-renderBasemapStack();
-renderBasemapAddSelect();
-renderOverlayList();
+renderBasemapPrimary();
+renderAddLayerSelect();
 renderBookmarkList();
 
-// Wire "add basemap" dropdown
-document.getElementById('basemap-add')?.addEventListener('change', async (e) => {
+// Wire primary basemap selector
+document.getElementById('basemap-primary')?.addEventListener('change', async (e) => {
   const id = e.target.value;
-  if (!id) return;
-  const newStack = [...(state.basemapStack || []), id];
+  // Replace the first basemap in the stack (or set as the only one)
+  const currentStack = state.basemapStack || [];
+  const newStack = id === 'none' ? currentStack.slice(1) : [id, ...currentStack.slice(1)];
   await setBasemapStack(map, state, newStack);
-  renderBasemapStack();
-  renderBasemapAddSelect();
+  // Auto-toggle contours for OSM
+  const shouldShowContours = (state.basemap === 'osm');
+  if (state.basemap !== 'none') state.showContours = shouldShowContours;
+  const contourCb = document.getElementById('showContours');
+  if (contourCb) contourCb.checked = state.showContours;
+  applyContourVisibility(map, state);
+  renderLayerOrderPanel();
+  renderAddLayerSelect();
+  syncViewToUrl(map, state);
   map.triggerRepaint();
   scheduleSettingsSave();
-  e.target.value = ''; // reset to placeholder
+});
+
+// Wire unified "Add layer" dropdown
+document.getElementById('add-layer')?.addEventListener('change', async (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  e.target.value = ''; // reset
+
+  const [type, id] = val.split(':');
+  if (type === 'basemap') {
+    const newStack = [...(state.basemapStack || []), id];
+    await setBasemapStack(map, state, newStack);
+  } else if (type === 'overlay') {
+    setOverlay(map, state, id, true);
+  }
+
+  syncLayerOrder(state);
+  renderLayerOrderPanel();
+  renderAddLayerSelect();
+  renderBasemapPrimary();
+  map.triggerRepaint();
+  scheduleSettingsSave();
+
+  // Auto-open Layers panel when adding a layer
+  const layerPanel = document.getElementById('layer-order-panel');
+  const layerToggle = document.getElementById('layer-order-toggle');
+  if (layerPanel && !layerPanel.classList.contains('visible')) {
+    layerPanel.classList.add('visible');
+    layerToggle?.classList.add('active');
+  }
 });
 
 // ---- Map load ----
@@ -1455,6 +1464,7 @@ window.addEventListener('hashchange', async () => {
   }
 
   document.getElementById('basemap').value = state.basemap;
+  { const bp = document.getElementById('basemap-primary'); if (bp) bp.value = state.basemap; }
   document.getElementById('mode').value = state.mode;
   document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
   document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
@@ -1462,6 +1472,8 @@ window.addEventListener('hashchange', async () => {
   document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
   document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+  renderLayerOrderPanel();
+  renderAddLayerSelect();
   if (p.testMode) {
     syncTestModeUi(state);
   }

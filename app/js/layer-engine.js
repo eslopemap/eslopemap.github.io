@@ -194,13 +194,20 @@ export function applyAllOverlays(map, state) {
 // ── Layer order ─────────────────────────────────────────────────────
 
 /**
- * Ensure state.layerOrder contains exactly the active overlay IDs.
- * Adds new overlays at the end, removes stale ones.
+ * Ensure state.layerOrder contains exactly the active layer IDs:
+ * basemapStack entries (bottom) + activeOverlays (top).
+ * Adds new layers at the end of their section, removes stale ones.
  */
 export function syncLayerOrder(state) {
-  const active = new Set(state.activeOverlays);
-  const current = (state.layerOrder || []).filter(id => active.has(id));
-  // Add any active overlays not yet in order
+  const basemaps = new Set(state.basemapStack || []);
+  const overlays = new Set(state.activeOverlays);
+  const allActive = new Set([...basemaps, ...overlays]);
+
+  const current = (state.layerOrder || []).filter(id => allActive.has(id));
+  // Add any active layers not yet in order
+  for (const id of state.basemapStack || []) {
+    if (!current.includes(id)) current.push(id);
+  }
   for (const id of state.activeOverlays) {
     if (!current.includes(id)) current.push(id);
   }
@@ -237,6 +244,54 @@ export function reorderLayer(map, state, fromIndex, toIndex) {
   order.splice(toIndex, 0, item);
   state.layerOrder = order;
   applyLayerOrder(map, state);
+}
+
+/**
+ * Toggle visibility of a layer in the Layers panel.
+ * Works for both basemaps and overlays.
+ */
+export function setLayerVisible(map, state, catalogId, visible) {
+  const entry = getCatalogEntry(catalogId);
+  if (!entry) return;
+
+  if (entry.category === 'basemap') {
+    // Toggle basemap visibility via its MapLibre layers
+    for (const layerId of getCatalogLayerIdsForMap(map, catalogId)) {
+      setLayerVisibilitySafe(map, layerId, visible);
+    }
+    if (isNativeStyleBasemap(map, catalogId)) {
+      for (const layerId of (getNativeBasemapLayerIds(map).get(catalogId) || [])) {
+        setLayerVisibilitySafe(map, layerId, visible);
+      }
+    }
+  } else {
+    for (const layerId of getLayerIds(catalogId)) {
+      setLayerVisibilitySafe(map, layerId, visible);
+    }
+  }
+
+  // Track hidden state in layerSettings
+  const settings = { ...(state.layerSettings || {}) };
+  settings[catalogId] = { ...(settings[catalogId] || {}), hidden: !visible };
+  state.layerSettings = settings;
+}
+
+/**
+ * Remove a layer from the active state.
+ * For basemaps, removes from basemapStack. For overlays, removes from activeOverlays.
+ */
+export function removeLayer(map, state, catalogId) {
+  const entry = getCatalogEntry(catalogId);
+  if (!entry) return;
+
+  if (entry.category === 'basemap') {
+    const newStack = (state.basemapStack || []).filter(id => id !== catalogId);
+    // Don't await — caller can handle async if needed
+    setBasemapStack(map, state, newStack);
+  } else {
+    setOverlay(map, state, catalogId, false);
+  }
+  syncLayerOrder(state);
 }
 
 // ── Per-layer settings (opacity / blend) ────────────────────────────
