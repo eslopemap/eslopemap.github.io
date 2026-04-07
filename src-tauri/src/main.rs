@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use gpx_sync::{
     new_shared_manager, start_watcher, FileState, FolderSnapshot, SharedSyncManager,
 };
-use tile_server::{SharedTileSources, TileSourceEntry, TileSourceKind, detect_source_kind};
+use tile_server::{SharedTileSources, TileSourceEntry, TileSourceKind, ScannedTileSource, detect_source_kind, scan_tile_folder as do_scan_tile_folder};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -202,6 +202,33 @@ fn remove_tile_source(state: State<'_, ManagedState>, name: String) -> Result<bo
     Ok(removed)
 }
 
+/// Scan a folder for .mbtiles/.pmtiles files and auto-register them as tile sources.
+#[tauri::command]
+fn scan_tile_folder(
+    state: State<'_, ManagedState>,
+    folder_path: String,
+) -> Result<Vec<ScannedTileSource>, String> {
+    let dir = PathBuf::from(&folder_path);
+    let scanned = do_scan_tile_folder(&dir).map_err(|e| e.to_string())?;
+
+    // Auto-register all found sources
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let mut sources = app_state.tile_sources.lock().map_err(|e| e.to_string())?;
+
+    for s in &scanned {
+        let entry = TileSourceEntry {
+            name: s.name.clone(),
+            path: s.path.clone(),
+            kind: s.kind,
+        };
+        sources.retain(|e| e.name != entry.name);
+        sources.push(entry);
+        println!("[tile-server] auto-registered '{}' ({:?}) from scan", s.name, s.kind);
+    }
+
+    Ok(scanned)
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands — desktop config
 // ---------------------------------------------------------------------------
@@ -267,6 +294,7 @@ fn main() {
             add_tile_source,
             list_tile_sources,
             remove_tile_source,
+            scan_tile_folder,
         ])
         .setup(move |app| {
             // Inject the desktop bootstrap globals into the webview

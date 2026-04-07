@@ -45,6 +45,113 @@ pub fn detect_source_kind(path: &Path) -> Option<TileSourceKind> {
 }
 
 // ---------------------------------------------------------------------------
+// Folder scanning + MBTiles metadata
+// ---------------------------------------------------------------------------
+
+/// Result of scanning a folder for tile sources.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScannedTileSource {
+    pub name: String,
+    pub path: PathBuf,
+    pub kind: TileSourceKind,
+    pub metadata: Option<TileSourceMetadata>,
+}
+
+/// Metadata extracted from an MBTiles `metadata` table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TileSourceMetadata {
+    pub name: Option<String>,
+    pub format: Option<String>,
+    pub bounds: Option<[f64; 4]>,
+    pub center: Option<[f64; 3]>,
+    pub minzoom: Option<u32>,
+    pub maxzoom: Option<u32>,
+    pub description: Option<String>,
+}
+
+/// Scan a directory for `.mbtiles` and `.pmtiles` files.
+pub fn scan_tile_folder(dir: &Path) -> std::io::Result<Vec<ScannedTileSource>> {
+    let mut results = Vec::new();
+    if !dir.is_dir() {
+        return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Not a directory"));
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(kind) = detect_source_kind(&path) else { continue };
+        let stem = path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let metadata = if kind == TileSourceKind::Mbtiles {
+            read_mbtiles_metadata(&path).ok()
+        } else {
+            None
+        };
+
+        let display_name = metadata.as_ref()
+            .and_then(|m| m.name.clone())
+            .unwrap_or_else(|| stem.clone());
+
+        results.push(ScannedTileSource {
+            name: display_name,
+            path,
+            kind,
+            metadata,
+        });
+    }
+    results.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(results)
+}
+
+/// Read the `metadata` table from an MBTiles file.
+pub fn read_mbtiles_metadata(path: &Path) -> Result<TileSourceMetadata, rusqlite::Error> {
+    let conn = Connection::open(path)?;
+    let mut stmt = conn.prepare("SELECT name, value FROM metadata")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+
+    let mut meta = TileSourceMetadata {
+        name: None, format: None, bounds: None, center: None,
+        minzoom: None, maxzoom: None, description: None,
+    };
+
+    for row in rows {
+        let (key, value) = row?;
+        match key.as_str() {
+            "name" => meta.name = Some(value),
+            "format" => meta.format = Some(value),
+            "description" => meta.description = Some(value),
+            "minzoom" => meta.minzoom = value.parse().ok(),
+            "maxzoom" => meta.maxzoom = value.parse().ok(),
+            "bounds" => {
+                let parts: Vec<f64> = value.split(',')
+                    .filter_map(|s| s.trim().parse().ok())
+                    .collect();
+                if parts.len() == 4 {
+                    meta.bounds = Some([parts[0], parts[1], parts[2], parts[3]]);
+                }
+            }
+            "center" => {
+                let parts: Vec<f64> = value.split(',')
+                    .filter_map(|s| s.trim().parse().ok())
+                    .collect();
+                if parts.len() == 3 {
+                    meta.center = Some([parts[0], parts[1], parts[2]]);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(meta)
+}
+
+// ---------------------------------------------------------------------------
 // Tile request/response types
 // ---------------------------------------------------------------------------
 
@@ -564,5 +671,70 @@ mod tests {
     fn serves_pmtiles_500_for_missing_file() {
         let (status, _, _, _) = serve_pmtiles_range(Path::new("/nonexistent/file.pmtiles"), None);
         assert_eq!(status, 500);
+    }
+
+    #[test]
+    fn scans_folder_for_tile_sources() {
+        let dir = std::env::temp_dir().join("scan-test-tiles");
+        let _ = fs::create_dir_all(&dir);
+        // Create test files
+        let mb_path = dir.join("topo.mbtiles");
+        write_test_mbtiles(&mb_path);
+        // Add metadata
+        let conn = Connection::open(&mb_path).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('name', 'My Topo')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('format', 'png')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('bounds', '5.0,45.0,10.0,48.0')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('minzoom', '1')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('maxzoom', '14')", []).unwrap();
+        drop(conn);
+
+        let pm_path = dir.join("terrain.pmtiles");
+        fs::write(&pm_path, b"PMTiles-fake").unwrap();
+
+        // Also create a non-tile file that should be ignored
+        fs::write(dir.join("readme.txt"), b"ignore me").unwrap();
+
+        let results = scan_tile_folder(&dir).unwrap();
+        assert_eq!(results.len(), 2);
+
+        let mb = results.iter().find(|s| s.kind == TileSourceKind::Mbtiles).unwrap();
+        assert_eq!(mb.name, "My Topo");
+        let meta = mb.metadata.as_ref().unwrap();
+        assert_eq!(meta.format.as_deref(), Some("png"));
+        assert_eq!(meta.bounds, Some([5.0, 45.0, 10.0, 48.0]));
+        assert_eq!(meta.minzoom, Some(1));
+        assert_eq!(meta.maxzoom, Some(14));
+
+        let pm = results.iter().find(|s| s.kind == TileSourceKind::Pmtiles).unwrap();
+        assert_eq!(pm.name, "terrain"); // filename stem, no metadata
+        assert!(pm.metadata.is_none());
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_folder_returns_error_for_nonexistent_dir() {
+        let result = scan_tile_folder(Path::new("/nonexistent/dir"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reads_mbtiles_metadata() {
+        let path = temp_db_path("metadata-test");
+        write_test_mbtiles(&path);
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('name', 'Test Map')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('center', '6.8,45.9,12')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('description', 'A test map')", []).unwrap();
+        drop(conn);
+
+        let meta = read_mbtiles_metadata(&path).unwrap();
+        assert_eq!(meta.name.as_deref(), Some("Test Map"));
+        assert_eq!(meta.center, Some([6.8, 45.9, 12.0]));
+        assert_eq!(meta.description.as_deref(), Some("A test map"));
+
+        fs::remove_file(path).unwrap();
     }
 }

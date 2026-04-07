@@ -133,6 +133,16 @@ export async function removeTileSource(name) {
   return invoke('remove_tile_source', { name });
 }
 
+/**
+ * Scan a folder for .mbtiles/.pmtiles files and auto-register them as tile sources.
+ * @param {string} folderPath - absolute path to folder
+ * @returns {Promise<Array<{name: string, path: string, kind: string, metadata: object|null}>>}
+ */
+export async function scanTileFolder(folderPath) {
+  if (!isTauri()) throw new Error('scanTileFolder requires Tauri');
+  return invoke('scan_tile_folder', { folderPath });
+}
+
 // ---------------------------------------------------------------------------
 // Event listeners (desktop only)
 // ---------------------------------------------------------------------------
