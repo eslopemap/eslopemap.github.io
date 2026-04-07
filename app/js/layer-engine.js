@@ -321,12 +321,16 @@ export function applyLayerOpacity(map, catalogId, opacity) {
 
 /**
  * Apply all per-layer settings from state.layerSettings onto the map.
+ * Restores hidden state (visibility) and per-layer opacity.
  */
 export function applyAllLayerSettings(map, state) {
   const settings = state.layerSettings || {};
   for (const [catalogId, s] of Object.entries(settings)) {
     if (s.opacity != null) {
       applyLayerOpacity(map, catalogId, s.opacity);
+    }
+    if (s.hidden) {
+      setLayerVisible(map, state, catalogId, false);
     }
   }
 }
@@ -373,6 +377,11 @@ export async function applyBookmark(map, state, bookmark) {
   await setBasemapStack(map, state, stack);
   applyAllOverlays(map, state);
   applyAllLayerSettings(map, state);
+  // Re-apply basemap opacities from bookmark
+  for (const id of (bookmark.basemapStack || [])) {
+    const opacity = state.basemapOpacities?.[id];
+    if (opacity != null) applyLayerOpacity(map, id, opacity);
+  }
 }
 
 /**

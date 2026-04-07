@@ -73,7 +73,7 @@ const SETTING_KEYS = [
   'mode', 'slopeOpacity', 'basemapOpacity', 'hillshadeOpacity',
   'hillshadeMethod', 'terrain3d', 'terrainExaggeration', 'multiplyBlend',
   'showContours', 'activeOverlays', 'layerOrder', 'layerSettings', 'bookmarks',
-  'cursorInfoMode', 'pauseThreshold',
+  'cursorInfoMode', 'pauseThreshold', 'profileSmoothing',
 ];
 
 export function saveSettings(state) {

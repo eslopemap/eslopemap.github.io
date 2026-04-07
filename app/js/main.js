@@ -1104,6 +1104,10 @@ function renderLayerOrderPanel() {
     opacityInput.value = String(currentOpacity);
     opacityInput.className = 'layer-order-opacity';
     opacityInput.title = 'Layer opacity';
+    opacityInput.draggable = false;
+    opacityInput.addEventListener('dragstart', (e) => e.preventDefault());
+    opacityInput.addEventListener('mousedown', (e) => e.stopPropagation());
+    opacityInput.addEventListener('touchstart', (e) => e.stopPropagation());
     opacityInput.addEventListener('input', () => {
       const val = Number(opacityInput.value);
       if (isBasemap) {
@@ -1317,6 +1321,7 @@ map.on('load', async () => {
   applyTerrainState(map, state);
   applyContourVisibility(map, state);
   if (state.showTileGrid) updateDebugGridSource(map);
+  renderLayerOrderPanel();
   syncViewToUrl(map, state);
   map.on('moveend', () => {
     syncViewToUrl(map, state);

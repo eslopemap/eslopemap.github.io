@@ -44,3 +44,14 @@ Also unify the Add basemaps and the Overlays dropdown within a single structured
 the overall idea is that a first map choice should remain separate from the exact layer order (in Layers). in Layers add a visibility toggle
 I think Layers panel should be shown beside Settings panel when layers are being added. figure out a proper UX for this.
 - update FEATURES with what has been done (stay concise)
+
+---
+
+address those follow-ups:
+- the visibility toggle are a bit buggy and not sync'ed when changing other settings, reloading page. it's also not clear if layer visibility and opacity are stored in the persistemce layer and the bookmark layer ? make sure code & state is well shared between those features.
+- dragging the opacity sliders does not work
+- move the '3d terrain' setting into its own standalone button with a clear svg depicting a 3D cube, positioned just above maplibre's geolocation control
+- when toggling 3d terrain off, un-tilt the map.
+- most of what is in Settings should go in Layers, below the layer list, because those are layer-related. go through the list and do it. also swap 'Settings' and 'Layers' buttons and positions 
+- the track panel can get very wide with long  names of file/track/segment, figure out the proper  way (css...) to get something like an ellipsis in the middle of the name and a popup with full name
+- fix tests including pre-existing failures. check carefully whether issue is with the test or the app !
