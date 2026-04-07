@@ -68,6 +68,12 @@ async function loadWithUserSource(page, tileServerUrl, opts) {
 
     // Add the source and layer to the map
     const map = (0, eval)('map');
+    
+    // CRITICAL: Set basemapOpacity global state for opacity expressions to work
+    if (typeof map.setGlobalStateProperty === 'function') {
+      map.setGlobalStateProperty('basemapOpacity', 1.0);
+    }
+    
     const sources = entry.sources;
     for (const [srcId, srcDef] of Object.entries(sources)) {
       if (!map.getSource(srcId)) map.addSource(srcId, srcDef);
