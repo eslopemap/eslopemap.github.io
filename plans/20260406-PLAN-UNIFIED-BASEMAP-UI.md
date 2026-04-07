@@ -1,7 +1,7 @@
 # Plan: Unified Basemap Selection UI (Online + Local Tile Sources)
 
-**Date**: 2026-04-06
-**Status**: Draft
+**Date**: 2026-04-06 (updated 2026-04-07)
+**Status**: In progress — Phase 1 ✅, Phase 5 ✅
 **Prerequisite**: Dynamic tile source management (MBTiles/PMTiles) — completed in `65b84b9`
 
 ## Problem Statement
@@ -21,6 +21,91 @@ Currently, basemaps and overlays are defined statically in `layer-registry.js` (
 - **Discoverable**: local tile files are auto-detected when a folder is mapped
 - **Persistent**: user's source configuration survives app restarts
 - **Non-breaking**: existing single-basemap behavior is the default
+
+## Key Design Decisions
+
+### Basemap vs Overlay: A Fluid Distinction
+
+Sources are not fundamentally basemaps or overlays — any raster or vector tile source could be used as either. The distinction is about **rendering defaults and position in the layer stack**:
+
+| Trait | Basemap default | Overlay default |
+|---|---|---|
+| Stack position | Below analysis layers | Above analysis layers |
+| Default opacity | 1.0 (opaque) | Variable (e.g. 0.5) |
+| Default blend mode | Normal | Multiply (for raster overlays) |
+| Typical use | Background map context | Additional data layer |
+
+A source should carry a `preferredRole: 'basemap' | 'overlay'` hint that determines initial behavior, but users must be able to override this freely.
+
+### UX Proposals for Source Role
+
+**Proposal A — Unified Stack (Recommended)**
+
+A single ordered list of all active map sources. Each row has:
+- Drag handle for reorder
+- Label
+- Opacity slider
+- Blend mode toggle (normal / multiply)
+- Remove button
+
+The "basemap" is simply the bottom-most raster source. No separate basemap/overlay sections — just a stack.
+
+```
+┌─── Map Sources ─────────────────────────────────┐
+│ ≡  SwissTopo raster    [━━━━━━━━━] normal    ✕  │  ← bottom
+│ ≡  Local hillshade     [━━━━━━━━━] multiply  ✕  │
+│ ≡  IGN ortho overlay   [━━━━━━━━━] multiply  ✕  │  ← top
+│                                                  │
+│ [+ Add source ▼]                                 │
+└──────────────────────────────────────────────────┘
+```
+
+**Pros**: Simple mental model, maximum flexibility, no forced categorization.
+**Cons**: Users might not understand that order matters; need visual cue ("bottom = background").
+
+**Proposal B — Two Sections with Cross-Move**
+
+Keep separate Basemap and Overlay sections, but allow dragging sources between them (or a "Move to overlay/basemap" context action).
+
+```
+┌─── Basemaps ───────────────────────────────────┐
+│ ☐ OpenStreetMap       [opacity ━━━━━━━━━]  ✕   │
+│ ☐ Local topo          [opacity ━━━━━━━━━]  ✕   │
+├─── Overlays ───────────────────────────────────┤
+│ ☑ IGN ortho           [opacity ━━━━━] multiply │
+│ ☑ Hiking trails       [opacity ━━━━━] multiply │
+│                                                 │
+│ [+ Add source ▼]                                │
+└─────────────────────────────────────────────────┘
+```
+
+**Pros**: Familiar two-zone model; clear visual separation.
+**Cons**: Arbitrary boundary; sources at the basemap/overlay boundary behave identically.
+
+**Proposal C — Role Badge (Hybrid)**
+
+Single list, but each source has a small badge (🅱️/🅾️) showing its role. Click the badge to toggle. Role affects default opacity and blend.
+
+**Pros**: Single list simplicity, but role is still visible.
+**Cons**: Extra UI element; badge meaning needs explanation.
+
+**Current recommendation**: **Proposal A** (Unified Stack) — simplest mental model, most flexible. The `preferredRole` hint auto-sets initial opacity and blend when adding a source, but doesn't constrain where it can go.
+
+### The `setStyle` Constraint (Vector Styles)
+
+Only one source can use `map.setStyle(url)` at a time (e.g. SwissTopo Vector). This is a MapLibre limitation: `setStyle()` replaces the entire style, wiping all layers. See `reports/20260406-SWISSTOPO-VECTOR-SETSTYLE-REPORT.md`.
+
+**Impact on the unified stack:**
+- A source that requires `setStyle()` (i.e. has a `styleUrl` field) is a **"full-style source"**
+- Only one full-style source can be active at a time
+- If the user adds a second full-style source, the UI should warn: _"Activating this will replace {current}. Only one vector style can be active at a time."_
+- Raster sources added on top of a full-style source work fine (they're added after rehydration)
+- Implementation: `setBasemapStack` checks for `styleUrl` entries, shows confirmation dialog if conflict
+
+**UI indicators:**
+- Full-style sources get a small ⚡ icon and tooltip: "Vector style — replaces all other vector styles"
+- The confirmation dialog offers: "Replace" / "Cancel"
+- After replacement, the old full-style source is removed from the stack
 
 ## Architecture
 
@@ -56,21 +141,21 @@ state.js           →  basemap: 'osm'           →  basemapStack: ['osm']
 
 ## Implementation Phases
 
-### Phase 1: Extend Catalog to Support User Sources (JS only)
+### Phase 1: Extend Catalog to Support User Sources (JS only) ✅
+
+**Status**: Completed
 
 **Files**: `layer-registry.js`
 
-1. Add a mutable `_userSources` array alongside `LAYER_CATALOG`
-2. Add `registerUserSource(entry)` / `unregisterUserSource(id)` functions
-3. Modify `getCatalogEntry`, `getBasemaps`, `getOverlays` to merge both lists
-4. User source entries have the same `CatalogEntry` shape, with an extra `userDefined: true` flag and `localPath` for desktop sources
-5. Auto-generate catalog entries from `TileSourceEntry` objects returned by `listTileSources()`:
-   - **MBTiles raster**: `type: 'raster'`, tiles URL = `http://127.0.0.1:14321/tiles/{name}/{z}/{x}/{y}.{ext}`
-   - **PMTiles**: same pattern, once PMTiles serving is implemented
-   - **Extension detection**: inspect MBTiles metadata table for `format` (png/jpg/pbf) to determine raster vs vector
-   - **Default category**: `basemap` (user can change later)
+1. ✅ Mutable `_userSources` array alongside `LAYER_CATALOG`
+2. ✅ `registerUserSource(entry)` / `unregisterUserSource(id)` / `clearUserSources()` / `getUserSources()`
+3. ✅ All lookup helpers merge built-in + user sources
+4. ✅ `buildCatalogEntryFromTileSource` auto-generates catalog entries:
+   - MBTiles → `tiles: [url/{z}/{x}/{y}.png]`
+   - PMTiles → `url: pmtiles://host/pmtiles/{name}` (uses pmtiles JS protocol)
+5. ✅ 11 unit tests + 4 e2e tests covering registration, rendering, and Range serving
 
-**Tests**: Unit tests in `tests/unit/layer-engine.test.mjs` for register/unregister, merged catalog lookups
+**Note**: `preferredRole` field should be added to `CatalogEntry` in Phase 2 to support the fluid basemap/overlay distinction.
 
 ### Phase 2: Multi-Basemap State Model
 
@@ -138,17 +223,21 @@ Replace the current `<select id="basemap">` with a richer panel:
 
 **Tests**: Playwright e2e test: add basemap to stack, verify layer count changes, opacity slider works
 
-### Phase 5: PMTiles Serving Implementation
+### Phase 5: PMTiles Serving Implementation ✅
 
-**Files**: `src-tauri/Cargo.toml`, `src-tauri/src/tile_server.rs`
+**Status**: Completed (HTTP Range approach)
 
-1. Add `pmtiles` crate dependency
-2. Implement `resolve_pmtiles_request`: open PMTiles archive, read tile by z/x/y
-3. Cache open PMTiles readers (one per source, lazy-opened)
-4. Detect tile format from PMTiles header (png/jpg/webp/pbf)
-5. Replace the current 501 stub with real implementation
+**Files**: `src-tauri/src/tile_server.rs`, `app/js/pmtiles-protocol.js`, `deps.json`
 
-**Tests**: Rust unit tests with a test PMTiles fixture
+Instead of server-side tile extraction (pmtiles Rust crate), we use **client-side extraction via HTTP Range requests** — same code path as remote PMTiles:
+
+1. ✅ `/pmtiles/{source}` endpoint serves raw `.pmtiles` files with HTTP Range support
+2. ✅ `pmtiles` 4.4.0 JS library vendored + `fflate` 0.8.2 (required dependency)
+3. ✅ `pmtiles-protocol.js` registers `pmtiles://` protocol with MapLibre (lazy dynamic import)
+4. ✅ CORS preflight for Range header access
+5. ✅ 6 Rust unit tests + 2 e2e tests (PMTiles rendering + Range requests)
+
+**Rationale**: Client-side extraction means the same JS `pmtiles` library works for both local and remote PMTiles. No Rust pmtiles crate needed.
 
 ## Migration & Backward Compatibility
 
@@ -183,11 +272,17 @@ Replace the current `<select id="basemap">` with a richer panel:
 1. Should local tile sources persist across sessions automatically, or require explicit "save configuration"?
    → **Recommendation**: Auto-persist in `~/.slope-desktop/sources.json`, loaded on startup.
 
-2. Should the user be able to set a local source as overlay vs basemap?
-   → **Recommendation**: Yes, via a toggle in the UI. Default to basemap for raster, overlay for vector.
+2. ~~Should the user be able to set a local source as overlay vs basemap?~~
+   → **Resolved**: Sources have a `preferredRole` hint but can be freely repositioned in the unified stack. See UX Proposal A above.
 
-3. Should we support remote PMTiles URLs (HTTP range requests)?
-   → **Recommendation**: Defer to a later phase. Desktop mode focuses on local files; web mode can use protomaps CDN directly.
+3. ~~Should we support remote PMTiles URLs (HTTP range requests)?~~
+   → **Resolved**: The `pmtiles` JS library handles both local (via tile server Range endpoint) and remote PMTiles with the same code path.
 
 4. Should we read MBTiles `metadata.bounds` to auto-set the region/defaultView?
    → **Recommendation**: Yes, in Phase 3. Parse the bounds from metadata and use for fly-to behavior.
+
+5. How should the UI handle the `setStyle` mutual exclusion for vector styles?
+   → **Recommendation**: Show a confirmation dialog when adding a second full-style source. See "The `setStyle` Constraint" section above.
+
+6. Should the unified stack replace both the basemap `<select>` and the overlay panel?
+   → **Recommendation**: Yes, eventually. In the transition, the `<select>` can remain as a compact single-basemap shortcut that maps to stack position 0.
