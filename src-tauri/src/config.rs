@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct AppConfig {
     pub cache: CacheConfig,
+    pub sources: SourcesConfig,
 }
 
 /// Tile cache settings.
@@ -29,10 +30,27 @@ pub struct CacheConfig {
     pub path: String,
 }
 
+/// Tile source discovery settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourcesConfig {
+    /// Folders to scan for .mbtiles/.pmtiles files on startup.
+    pub folders: Vec<String>,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             cache: CacheConfig::default(),
+            sources: SourcesConfig::default(),
+        }
+    }
+}
+
+impl Default for SourcesConfig {
+    fn default() -> Self {
+        Self {
+            folders: Vec::new(),
         }
     }
 }
@@ -117,6 +135,7 @@ mod tests {
         let cfg = AppConfig::default();
         assert_eq!(cfg.cache.max_size_mb, 100);
         assert!(cfg.cache.path.is_empty());
+        assert!(cfg.sources.folders.is_empty());
     }
 
     #[test]
@@ -168,5 +187,30 @@ path = "/custom/tile-cache"
     fn config_dir_returns_some() {
         // On all supported platforms this should be Some
         assert!(config_dir().is_some());
+    }
+
+    #[test]
+    fn parses_sources_folders() {
+        let toml_str = r#"
+[sources]
+folders = ["/home/user/maps", "/data/tiles"]
+"#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.sources.folders.len(), 2);
+        assert_eq!(cfg.sources.folders[0], "/home/user/maps");
+    }
+
+    #[test]
+    fn full_config_with_sources_and_cache() {
+        let toml_str = r#"
+[cache]
+max_size_mb = 200
+
+[sources]
+folders = ["/tiles"]
+"#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.cache.max_size_mb, 200);
+        assert_eq!(cfg.sources.folders, vec!["/tiles"]);
     }
 }

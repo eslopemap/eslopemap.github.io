@@ -318,6 +318,31 @@ fn main() {
         });
     }
 
+    // Auto-scan configured source folders
+    for folder in &app_config.sources.folders {
+        let dir = PathBuf::from(folder);
+        if !dir.is_dir() {
+            eprintln!("[startup] configured source folder not found: {folder}");
+            continue;
+        }
+        match do_scan_tile_folder(&dir) {
+            Ok(scanned) => {
+                let mut sources = tile_sources.lock().unwrap();
+                for s in &scanned {
+                    let entry = TileSourceEntry {
+                        name: s.name.clone(),
+                        path: s.path.clone(),
+                        kind: s.kind,
+                    };
+                    sources.retain(|e| e.name != entry.name);
+                    sources.push(entry);
+                    println!("[startup] auto-registered '{}' ({:?}) from {folder}", s.name, s.kind);
+                }
+            }
+            Err(e) => eprintln!("[startup] error scanning {folder}: {e}"),
+        }
+    }
+
     // Cached upstream sources (fetched from internet, cached on disk)
     let cached_sources: SharedCachedSources = std::sync::Arc::new(Mutex::new(vec![
         CachedUpstreamSource {

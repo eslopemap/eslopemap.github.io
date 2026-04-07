@@ -154,6 +154,70 @@ pub fn read_mbtiles_metadata(path: &Path) -> Result<TileSourceMetadata, rusqlite
 }
 
 // ---------------------------------------------------------------------------
+// TileJSON generation
+// ---------------------------------------------------------------------------
+
+/// Generate a TileJSON document for an MBTiles source.
+pub fn build_tilejson_for_mbtiles(entry: &TileSourceEntry, base_url: &str) -> serde_json::Value {
+    let meta = read_mbtiles_metadata(&entry.path).ok();
+    let name = meta.as_ref().and_then(|m| m.name.clone()).unwrap_or_else(|| entry.name.clone());
+    let format = meta.as_ref().and_then(|m| m.format.clone()).unwrap_or_else(|| "png".to_string());
+    let tile_url = [base_url, "/tiles/", &entry.name, "/{z}/{x}/{y}.", &format].concat();
+
+    let mut tj = serde_json::json!({
+        "tilejson": "3.0.0",
+        "name": name,
+        "tiles": [tile_url],
+        "scheme": "xyz",
+        "format": format,
+    });
+
+    if let Some(ref m) = meta {
+        if let Some(bounds) = m.bounds {
+            tj["bounds"] = serde_json::json!(bounds);
+        }
+        if let Some(center) = m.center {
+            tj["center"] = serde_json::json!(center);
+        }
+        if let Some(minzoom) = m.minzoom {
+            tj["minzoom"] = serde_json::json!(minzoom);
+        }
+        if let Some(maxzoom) = m.maxzoom {
+            tj["maxzoom"] = serde_json::json!(maxzoom);
+        }
+        if let Some(ref desc) = m.description {
+            tj["description"] = serde_json::json!(desc);
+        }
+    }
+
+    tj
+}
+
+/// Generate a TileJSON document for a cached upstream source (e.g. DEM).
+pub fn build_tilejson_for_cached(name: &str, upstream_url: &str, base_url: &str) -> serde_json::Value {
+    let tile_url = [base_url, "/tiles/", name, "/{z}/{x}/{y}.webp"].concat();
+    serde_json::json!({
+        "tilejson": "3.0.0",
+        "name": name,
+        "tiles": [tile_url],
+        "scheme": "xyz",
+        "format": "webp",
+        "description": format!("Cached upstream: {upstream_url}"),
+    })
+}
+
+/// Parse `/tilejson/{source}` from a URL path.
+pub fn parse_tilejson_path(path: &str) -> Option<String> {
+    let clean = path.split('?').next()?;
+    let segments: Vec<&str> = clean.trim_start_matches('/').split('/').collect();
+    if segments.len() == 2 && segments[0] == "tilejson" && !segments[1].is_empty() {
+        Some(segments[1].to_string())
+    } else {
+        None
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tile request/response types
 // ---------------------------------------------------------------------------
 
@@ -428,6 +492,60 @@ pub fn spawn_tile_server(
                     if let Ok(h) = Header::from_bytes(k, v) { resp = resp.with_header(h); }
                 }
                 let _ = request.respond(resp);
+                continue;
+            }
+
+            // --- TileJSON endpoint ---
+            let base_url = format!("http://127.0.0.1:{port}");
+            if raw_url == "/tilejson" || raw_url == "/tilejson/" {
+                // List all available TileJSON endpoints
+                let mut all = Vec::new();
+                {
+                    let csrcs = cached_sources.lock().unwrap_or_else(|e| e.into_inner());
+                    for cs in csrcs.iter() {
+                        all.push(build_tilejson_for_cached(&cs.name, &cs.upstream_url, &base_url));
+                    }
+                }
+                {
+                    let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
+                    for entry in srcs.iter() {
+                        if entry.kind == TileSourceKind::Mbtiles {
+                            all.push(build_tilejson_for_mbtiles(entry, &base_url));
+                        }
+                    }
+                }
+                let body = serde_json::to_vec(&all).unwrap_or_default();
+                let resp = Response::from_data(body).with_status_code(200);
+                let resp = if let Ok(h) = Header::from_bytes("Content-Type", "application/json") {
+                    resp.with_header(h)
+                } else { resp };
+                let _ = request.respond(with_cors(resp));
+                continue;
+            }
+
+            if let Some(source_name) = parse_tilejson_path(&raw_url) {
+                // Check cached upstream sources first
+                let cached_match = {
+                    let csrcs = cached_sources.lock().unwrap_or_else(|e| e.into_inner());
+                    csrcs.iter().find(|cs| cs.name == source_name).cloned()
+                };
+                let tj = if let Some(cs) = cached_match {
+                    Some(build_tilejson_for_cached(&cs.name, &cs.upstream_url, &base_url))
+                } else {
+                    let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
+                    srcs.iter().find(|e| e.name == source_name && e.kind == TileSourceKind::Mbtiles)
+                        .map(|e| build_tilejson_for_mbtiles(e, &base_url))
+                };
+                if let Some(tj) = tj {
+                    let body = serde_json::to_vec(&tj).unwrap_or_default();
+                    let resp = Response::from_data(body).with_status_code(200);
+                    let resp = if let Ok(h) = Header::from_bytes("Content-Type", "application/json") {
+                        resp.with_header(h)
+                    } else { resp };
+                    let _ = request.respond(with_cors(resp));
+                } else {
+                    let _ = request.respond(with_cors(Response::empty(404)));
+                }
                 continue;
             }
 
@@ -775,5 +893,47 @@ mod tests {
         assert_eq!(meta.description.as_deref(), Some("A test map"));
 
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn parses_tilejson_paths() {
+        assert_eq!(parse_tilejson_path("/tilejson/dem"), Some("dem".to_string()));
+        assert_eq!(parse_tilejson_path("/tilejson/my-map"), Some("my-map".to_string()));
+        assert_eq!(parse_tilejson_path("/tilejson/"), None);
+        assert_eq!(parse_tilejson_path("/tiles/dem/1/0/0.png"), None);
+    }
+
+    #[test]
+    fn builds_tilejson_for_mbtiles() {
+        let path = temp_db_path("tilejson-test");
+        write_test_mbtiles(&path);
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('name', 'Alps')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('format', 'png')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('minzoom', '5')", []).unwrap();
+        conn.execute("INSERT INTO metadata (name, value) VALUES ('maxzoom', '14')", []).unwrap();
+        drop(conn);
+
+        let entry = TileSourceEntry { name: "alps".to_string(), path: path.clone(), kind: TileSourceKind::Mbtiles };
+        let tj = build_tilejson_for_mbtiles(&entry, "http://127.0.0.1:14321");
+        assert_eq!(tj["tilejson"], "3.0.0");
+        assert_eq!(tj["name"], "Alps");
+        assert_eq!(tj["format"], "png");
+        assert_eq!(tj["minzoom"], 5);
+        assert_eq!(tj["maxzoom"], 14);
+        let tiles = tj["tiles"].as_array().unwrap();
+        assert!(tiles[0].as_str().unwrap().contains("/{z}/{x}/{y}.png"));
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn builds_tilejson_for_cached() {
+        let tj = build_tilejson_for_cached("dem", "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp", "http://127.0.0.1:14321");
+        assert_eq!(tj["tilejson"], "3.0.0");
+        assert_eq!(tj["name"], "dem");
+        assert_eq!(tj["format"], "webp");
+        let tiles = tj["tiles"].as_array().unwrap();
+        assert_eq!(tiles[0].as_str().unwrap(), "http://127.0.0.1:14321/tiles/dem/{z}/{x}/{y}.webp");
     }
 }
