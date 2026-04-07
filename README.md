@@ -79,6 +79,7 @@ npm test
 - `app/vendor/` — vendored third-party browser assets and generated import maps
 - `tests/unit/` — unit tests
 - `tests/e2e/` — Playwright tests
+- [`tests/README.md`](tests/README.md) — test inventory and coverage setup guide
 - `deps.json` — vendoring manifest
 - `scripts/vendor-deps.mjs` — vendoring/update/check script
 
