@@ -74,3 +74,13 @@ the e2e test should hook into the cache mechanism to inject predefined tiles for
 
 ---
 
+* add a ./report and commit.
+* i want to setup something like renovate or dependabot (i'm on github), with a 7 day cooldown period, for both package.json and Cargo.toml,and can we hook it into the custom vendor-ing script? 'm leaning into something that I can also manually call into from CLI that will do the changes ; and that can open PR but not gazillions of them, a single PR every other month is enough. after carefully comparing options for this specific project and purpose and write a .report incl. the reasons for the decision, then set it up. i
+* set unicode eye for the layer visibility toggle
+* tauri app icon is unset or not the same as web one. make sure it is packaged as well
+* look at commit 1aee07, I believe it's not wired in ? 
+  - there should be a section in the config file for file/folders to import sources from
+  - the Add layer menu should have a 'Custom maps' section. since from the js perspective it's just a remote URL, I would love to use an open protocol to exchange available layer info with the backend, something that works not just in desktop mode, and desktop mode just sets up a default 'Local' tile server source. I'm thinking of TileJSON which is a  JSON document describing a tileset: tile URL templates ({z}/{x}/{y}) ; zoom range; bounds; attribution; scheme (xyz vs tms); format (png, pbf, etc.)
+so the UI supports adding any TileJSON, and refactor the current mbt/pmt tile server to expose tilejson
+* setup a justfile for this project, with common dev tasks covering desktop and web
+* commit often

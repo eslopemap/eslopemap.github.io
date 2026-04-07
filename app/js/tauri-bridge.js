@@ -144,6 +144,71 @@ export async function scanTileFolder(folderPath) {
 }
 
 // ---------------------------------------------------------------------------
+// TileJSON-based source discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all available TileJSON descriptors from the tile server.
+ * Each entry is a standard TileJSON object.
+ * @returns {Promise<Array<Object>>}
+ */
+export async function fetchAvailableSources() {
+  const cfg = desktopConfig();
+  if (!isTauri() || !cfg?.tileBaseUrl) return [];
+  try {
+    const res = await fetch(`${cfg.tileBaseUrl}/tilejson`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Build a CatalogEntry from a TileJSON object.
+ * This is a universal approach — works for any TileJSON source, not just local.
+ * @param {Object} tj - TileJSON object
+ * @param {'basemap'|'overlay'} [category='basemap']
+ * @returns {import('./layer-registry.js').CatalogEntry}
+ */
+export function buildCatalogEntryFromTileJson(tj, category = 'basemap') {
+  const name = tj.name || 'unknown';
+  const id = `tilejson-${name}`;
+  const sourceId = `src-tj-${name}`;
+  const format = tj.format || 'png';
+  const tiles = tj.tiles || [];
+
+  const sourceDef = {
+    type: 'raster',
+    tiles,
+    tileSize: 256,
+  };
+  if (tj.minzoom != null) sourceDef.minzoom = tj.minzoom;
+  if (tj.maxzoom != null) sourceDef.maxzoom = tj.maxzoom;
+  if (tj.attribution) sourceDef.attribution = tj.attribution;
+  if (tj.bounds) sourceDef.bounds = tj.bounds;
+
+  return {
+    id,
+    label: name,
+    category,
+    region: tj.bounds || null,
+    defaultView: tj.center ? { center: [tj.center[0], tj.center[1]], zoom: tj.center[2] || 10 } : null,
+    userDefined: true,
+    tileJson: tj,
+    sources: { [sourceId]: sourceDef },
+    layers: [
+      {
+        id: `basemap-${id}`,
+        type: 'raster',
+        source: sourceId,
+        paint: { 'raster-opacity': 1 },
+      }
+    ]
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Event listeners (desktop only)
 // ---------------------------------------------------------------------------
 

@@ -43,7 +43,7 @@ import { describeOperationConsequence } from './track-ops.js';
 import { initWebImport } from './web-import.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
-import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx } from './tauri-bridge.js';
+import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx, fetchAvailableSources, buildCatalogEntryFromTileJson } from './tauri-bridge.js';
 import { initPmtilesProtocol } from './pmtiles-protocol.js';
 
 // ---- State (reactive via Proxy) ----
@@ -1090,6 +1090,20 @@ function renderAddLayerSelect() {
     ovlCount++;
   }
   if (ovlCount) sel.appendChild(ovlGroup);
+
+  // Custom maps group (user-defined / TileJSON sources)
+  const userEntries = getUserSources().filter(e => !inStack.has(e.id) && !activeOvl.has(e.id));
+  if (userEntries.length) {
+    const customGroup = document.createElement('optgroup');
+    customGroup.label = 'Custom maps';
+    for (const entry of userEntries) {
+      const opt = document.createElement('option');
+      opt.value = `basemap:${entry.id}`;
+      opt.textContent = entry.label;
+      customGroup.appendChild(opt);
+    }
+    sel.appendChild(customGroup);
+  }
 }
 
 /** Legacy: populate hidden basemap <select> from catalog */
@@ -1567,6 +1581,24 @@ window.addEventListener('hashchange', async () => {
 map.on('error', (e) => {
   console.error('Map error:', e && e.error ? e.error.message : e);
 });
+
+// ---- Desktop: auto-discover tile sources via TileJSON ----
+
+if (isTauri()) {
+  fetchAvailableSources().then(sources => {
+    let registered = 0;
+    for (const tj of sources) {
+      if (tj.name === 'dem') continue; // DEM is handled internally
+      const entry = buildCatalogEntryFromTileJson(tj);
+      registerUserSource(entry);
+      registered++;
+    }
+    if (registered > 0) {
+      console.info(`[tile-sources] registered ${registered} custom map(s) from tile server`);
+      renderAddLayerSelect();
+    }
+  }).catch(e => console.warn('[tile-sources] discovery failed:', e));
+}
 
 // ---- Desktop: GPX sync event listener ----
 
