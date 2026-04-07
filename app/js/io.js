@@ -154,7 +154,13 @@ export function parseGeoJSON(text) {
 
 // ---- Import dispatch ----
 
+const IMPORT_EXTENSIONS = /\.(gpx|geojson|json)$/i;
+
 export function importFileContent(filename, text) {
+  if (!IMPORT_EXTENSIONS.test(filename)) {
+    console.warn('Unsupported file type, skipping:', filename);
+    return;
+  }
   const baseName = filename.replace(/\.[^.]+$/, '');
 
   if (filename.endsWith('.gpx')) {
@@ -597,11 +603,18 @@ export function initIO(deps) {
         return;
       }
     }
-    // Fall back to files
+    // Fall back to files — filter to supported types
     for (const file of e.dataTransfer.files) {
-      const reader = new FileReader();
-      reader.onload = () => importFileContent(file.name, reader.result);
-      reader.readAsText(file);
+      if (FILE_PATTERN.test(file.name)) {
+        const reader = new FileReader();
+        reader.onload = () => importFileContent(file.name, reader.result);
+        reader.readAsText(file);
+      } else if (TILE_PATTERN.test(file.name)) {
+        // Tile files require Tauri desktop; warn in browser
+        console.warn('[drop] Tile file drag-and-drop requires desktop mode:', file.name);
+      } else {
+        console.warn('[drop] Unsupported file type, skipping:', file.name);
+      }
     }
   });
 
