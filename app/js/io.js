@@ -3,7 +3,7 @@
 
 import { parseGPX as gpxjsParse, stringifyGPX } from '@we-gold/gpxjs';
 import { downloadFile } from './utils.js';
-import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile, onGpxSyncEvents, addTileSource, fetchAvailableSources, buildCatalogEntryFromTileJson } from './tauri-bridge.js';
+import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile, onGpxSyncEvents, addTileSource, fetchAvailableSources, buildCatalogEntryFromTileJson, scanTileFolder } from './tauri-bridge.js';
 
 let tracksFns = {};  // wired at init
 
@@ -720,23 +720,22 @@ async function openFolderTauri() {
   const internals = globalThis.__TAURI_INTERNALS__ ?? globalThis.__TAURI__;
   let folderPath;
   if (internals?.invoke) {
-    // Use the dialog plugin's open command
+    // Use the dialog plugin's open command - options must be nested
     folderPath = await internals.invoke('plugin:dialog|open', {
-      directory: true,
-      multiple: false,
-      title: 'Open GPX Folder',
+      options: {
+        directory: true,
+        multiple: false,
+        title: 'Open Folder (GPX + Tiles)',
+      }
     });
   }
   if (!folderPath) return; // user cancelled
 
   const result = await pickAndWatchFolder(folderPath);
-  if (!result?.snapshot?.files?.length) {
-    console.info('[io] Folder has no GPX files:', folderPath);
-    return;
-  }
+  const gpxCount = result?.snapshot?.files?.length ?? 0;
 
   // Load and import each GPX file from the snapshot
-  for (const fileState of result.snapshot.files) {
+  for (const fileState of result?.snapshot?.files ?? []) {
     try {
       const content = await loadGpx(fileState.path);
       const name = fileState.path.split('/').pop() || 'track.gpx';
@@ -744,6 +743,43 @@ async function openFolderTauri() {
     } catch (e) {
       console.warn('[io] Failed to load GPX:', fileState.path, e);
     }
+  }
+
+  // Also scan for tile files (.mbtiles, .pmtiles) in the same folder
+  let tileCount = 0;
+  try {
+    const tiles = await scanTileFolder(folderPath);
+    tileCount = tiles.length;
+    for (const tile of tiles) {
+      try {
+        // Register tile source with the tile server
+        await addTileSource(tile.name, tile.path);
+        
+        // Fetch TileJSON and register in layer catalog
+        const sources = await fetchAvailableSources();
+        const tj = sources.find(s => s.name === tile.name);
+        if (tj && window.layerRegistry?.registerUserSource) {
+          const entry = buildCatalogEntryFromTileJson(tj);
+          window.layerRegistry.registerUserSource(entry);
+          console.info(`[io] Registered tile source '${tile.name}' from folder`);
+        }
+      } catch (e) {
+        console.warn('[io] Failed to register tile:', tile.path, e);
+      }
+    }
+    
+    // Refresh the Add layer dropdown if tiles were added
+    if (tileCount > 0 && typeof window.renderAddLayerSelect === 'function') {
+      window.renderAddLayerSelect();
+    }
+  } catch (e) {
+    console.warn('[io] Tile scan failed:', e);
+  }
+
+  if (gpxCount === 0 && tileCount === 0) {
+    console.info('[io] Folder has no GPX or tile files:', folderPath);
+  } else {
+    console.info(`[io] Loaded ${gpxCount} GPX file(s) and ${tileCount} tile source(s) from folder`);
   }
 }
 
@@ -840,7 +876,15 @@ async function handleTileFileEntry(entry) {
   return new Promise((resolve) => {
     entry.file(async (file) => {
       try {
-        await handleTileFile(file.name, file.path);
+        // Use entry.fullPath (FileSystemFileEntry API) instead of file.path
+        // In Tauri, fullPath gives the absolute filesystem path
+        const path = entry.fullPath || file.path;
+        if (!path) {
+          console.error('[tile-drop] No path available for:', file.name);
+          resolve();
+          return;
+        }
+        await handleTileFile(file.name, path);
       } catch (e) {
         console.error('[tile-drop] failed to register tile file:', e);
       }

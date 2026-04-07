@@ -8,7 +8,7 @@ default:
 # ── Web ─────────────────────────────────────────────────────────────
 
 # Serve the web app locally (http://localhost:8089/app/)
-web-serve:
+serve:
     python3 -m http.server 8089
 
 # Run JS unit tests (vitest)
@@ -34,11 +34,11 @@ test-e2e-coverage:
 # ── Desktop (Tauri) ────────────────────────────────────────────────
 
 # Build the Tauri desktop app (debug)
-tauri-build:
+build:
     cd src-tauri && cargo build
 
 # Run the Tauri desktop app in dev mode
-tauri-dev:
+dev:
     cargo tauri dev
 
 # Build the Tauri desktop app with webdriver support
