@@ -1139,7 +1139,8 @@ function renderLayerOrderPanel() {
 
     const visBtn = document.createElement('button');
     visBtn.className = 'layer-order-vis';
-    visBtn.textContent = isHidden ? '◻' : '◼';
+    visBtn.textContent = '👁';
+    if (isHidden) visBtn.classList.add('vis-off');
     visBtn.title = isHidden ? 'Show layer' : 'Hide layer';
     visBtn.addEventListener('click', () => {
       setLayerVisible(map, state, catalogId, isHidden);
