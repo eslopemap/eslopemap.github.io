@@ -110,6 +110,10 @@
 - **Local tile server** — built-in HTTP tile server on port 14321 serving `.mbtiles` (via rusqlite) and `.pmtiles` (via HTTP Range serving) as `{z}/{x}/{y}` tiles
 - **Tile source management** — `addTileSource()` / `removeTileSource()` / `listTileSources()` IPC commands; sources auto-registered into the JS layer catalog
 - **Tile source discovery** — `scanTileFolder()` scans a directory for `.mbtiles`/`.pmtiles` files, reads MBTiles metadata (name, format, bounds, center, zoom range, description), and auto-registers all found sources
+- **DEM tile cache** — disk-backed LRU cache at OS cache dir (`~/Library/Caches/slopemapper/tiles/` on macOS), upstream fetch from `tiles.mapterhorn.com` with configurable max size (default 100 MB)
+- **TileJSON endpoints** — `/tilejson` lists all available sources, `/tilejson/{source}` returns a [TileJSON 3.0.0](https://github.com/mapbox/tilejson-spec) document for each registered source (MBTiles metadata → TileJSON)
+- **Config file** — `slopemapper.toml` at OS config dir; `[cache] max_size_mb`, `[sources] folders = [...]` for auto-scan at startup
+- **Custom maps in Add layer** — discovered TileJSON sources appear in a "Custom maps" optgroup in the Add layer dropdown
 - **Runtime adapter** — `tauri-bridge.js` provides a unified API; browser mode falls back gracefully (no-op or error for desktop-only features)
 - **Desktop config injection** — Rust injects `__SLOPE_RUNTIME__` and `__SLOPE_DESKTOP_CONFIG__` globals into the webview at startup
 
