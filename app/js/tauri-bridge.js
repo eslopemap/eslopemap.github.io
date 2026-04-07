@@ -24,31 +24,9 @@ function desktopConfig() {
 }
 
 // ---------------------------------------------------------------------------
-// Tauri API lazy-loaders (only imported when in desktop mode)
+// Tauri v2 IPC — injected by the runtime via window.__TAURI_INTERNALS__
 // ---------------------------------------------------------------------------
 
-let _tauriCore = null;
-let _tauriEvent = null;
-
-async function tauriCore() {
-  if (!isTauri()) return null;
-  if (!_tauriCore) {
-    // @tauri-apps/api is available via Tauri's built-in module loader
-    _tauriCore = await import('https://unpkg.com/@tauri-apps/api/core');
-  }
-  return _tauriCore;
-}
-
-async function tauriEvent() {
-  if (!isTauri()) return null;
-  if (!_tauriEvent) {
-    _tauriEvent = await import('https://unpkg.com/@tauri-apps/api/event');
-  }
-  return _tauriEvent;
-}
-
-// In Tauri v2, the IPC is injected by the runtime — we use window.__TAURI__
-// which is the standard way to access invoke/listen without importing modules.
 function getTauriInternals() {
   return globalThis.__TAURI_INTERNALS__ ?? globalThis.__TAURI__;
 }
@@ -58,11 +36,6 @@ async function invoke(cmd, args) {
   if (internals?.invoke) {
     return internals.invoke(cmd, args);
   }
-  // Fallback: try dynamic import
-  const core = await tauriCore();
-  if (core?.invoke) {
-    return core.invoke(cmd, args);
-  }
   throw new Error(`Tauri invoke not available for command: ${cmd}`);
 }
 
@@ -70,10 +43,6 @@ async function listen(event, handler) {
   const internals = getTauriInternals();
   if (internals?.event?.listen) {
     return internals.event.listen(event, handler);
-  }
-  const eventMod = await tauriEvent();
-  if (eventMod?.listen) {
-    return eventMod.listen(event, handler);
   }
   throw new Error(`Tauri event listener not available for: ${event}`);
 }
