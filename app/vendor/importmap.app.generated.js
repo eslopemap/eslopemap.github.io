@@ -11,6 +11,8 @@
   
       "@kurkle/color": "./vendor/@kurkle/color/0.4.0/dist/color.esm.js",
   
+      "fflate": "./vendor/fflate/0.8.2/esm/browser.js",
+  
       "pmtiles": "./vendor/pmtiles/4.4.0/dist/esm/index.js",
   
       "chartjs-plugin-annotation": "./vendor/chartjs-plugin-annotation/3.1.0/dist/chartjs-plugin-annotation.esm.js"

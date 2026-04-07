@@ -77,6 +77,18 @@
       }
     },
     {
+      "name": "fflate",
+      "range": "^0.8",
+      "files": [
+        "esm/browser.js"
+      ],
+      "importMap": {
+        "app": {
+          "fflate": "esm/browser.js"
+        }
+      }
+    },
+    {
       "name": "pmtiles",
       "range": "^4",
       "files": [

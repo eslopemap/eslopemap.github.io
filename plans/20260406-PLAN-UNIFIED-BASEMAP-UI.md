@@ -90,7 +90,7 @@ state.js           →  basemap: 'osm'           →  basemapStack: ['osm']
 1. **Folder scanning**: When user picks a GPX folder (or a dedicated "Map tiles" folder), scan for `*.mbtiles` and `*.pmtiles` files
 2. **Rust command**: `scan_tile_folder(path)` → returns `Vec<TileSourceEntry>` for all tile files found
 3. **Auto-register**: On folder scan, call `addTileSource` for each found file, then `registerUserSource` in JS
-4. **MBTiles metadata**: Read `metadata` table to extract name, format, bounds, min/max zoom — expose via `get_tile_source_info(name)` command
+4. **MBTiles metadata**: Read `metadata` table to extract name, format, bounds, min/max zoom — expose via `get_tile_source_info(name)` command. Hooks into current mechanism to allow flying to an area covered by the mbtiles if needed.
 5. **Persistence**: Save user source config to a JSON file in the app data directory (`~/.slope-desktop/sources.json` or Tauri's `appDataDir`)
 
 **Tests**: Rust unit tests for folder scanning, metadata parsing
