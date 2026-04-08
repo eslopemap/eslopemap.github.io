@@ -4,9 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.eslopemap.slope",
   "build": {
-    "frontendDist": "../app",
-    "devUrl": "http://localhost:8089/app/",
-    "beforeDevCommand": "python3 -m http.server 8089"
+    "frontendDist": "../app"
+    
   },
   "app": {
     "security": {
