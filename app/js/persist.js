@@ -6,6 +6,7 @@ const WAYPOINTS_KEY = 'slope:waypoints';
 const SETTINGS_KEY = 'slope:settings';
 const PROFILE_SETTINGS_KEY = 'slope:profile-settings';
 const WORKSPACE_KEY = 'slope:workspace';
+const USER_SOURCES_KEY = 'slope:user-sources';
 
 // ---- Tracks ----
 
@@ -223,4 +224,19 @@ function migrateNodes(nodes) {
     if (node._legacyTrackIds) { node._trackIds = node._legacyTrackIds; delete node._legacyTrackIds; }
     if (node.children) migrateNodes(node.children);
   }
+}
+
+// ---- User sources ----
+
+export function saveUserSources(sources) {
+  try {
+    localStorage.setItem(USER_SOURCES_KEY, JSON.stringify(sources));
+  } catch { /* quota exceeded or private mode */ }
+}
+
+export function loadUserSources() {
+  try {
+    const raw = localStorage.getItem(USER_SOURCES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
 }

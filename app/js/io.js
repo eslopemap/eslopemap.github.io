@@ -566,24 +566,30 @@ export function initIO(deps) {
   tracksFns = deps;
 
   const dropOverlay = document.getElementById('drop-overlay');
+  const mapContainer = document.getElementById('map') || document.body;
 
   // Drag & drop import (with directory support)
   let dragCounter = 0;
-  document.addEventListener('dragenter', (e) => {
+  mapContainer.addEventListener('dragenter', (e) => {
+    // Only show overlay for file drops, not UI element dragging
+    if (e.dataTransfer && !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
     dragCounter++;
     dropOverlay.classList.add('visible');
   });
-  document.addEventListener('dragleave', (e) => {
+  mapContainer.addEventListener('dragleave', (e) => {
+    if (e.dataTransfer && !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
     dragCounter--;
     if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('visible'); }
   });
-  document.addEventListener('dragover', (e) => {
+  mapContainer.addEventListener('dragover', (e) => {
+    if (e.dataTransfer && !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   });
-  document.addEventListener('drop', async (e) => {
+  mapContainer.addEventListener('drop', async (e) => {
+    if (e.dataTransfer && !Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
     dragCounter = 0;
     dropOverlay.classList.remove('visible');

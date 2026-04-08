@@ -35,7 +35,7 @@ import {
 import { initTracks, getTracksState, resetForTest } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
-import { loadSettings, saveSettings } from './persist.js';
+import { loadSettings, saveSettings, loadUserSources } from './persist.js';
 import { initShortcuts, registerShortcut } from './shortcuts.js';
 import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
 import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection, getCurrentSelection } from './selection-tools.js';
@@ -157,6 +157,14 @@ if (persisted) {
   migrateSettings(persisted);
   for (const k of Object.keys(persisted)) {
     if (persisted[k] !== undefined) state[k] = persisted[k];
+  }
+}
+
+// Load custom user layers
+const savedUserSources = loadUserSources();
+if (savedUserSources) {
+  for (const src of savedUserSources) {
+    registerUserSource(src);
   }
 }
 

@@ -2,6 +2,7 @@
 // Each entry describes sources, map layers, UI metadata, and optional region bounds.
 
 import { basemapOpacityExpr } from './constants.js';
+import { saveUserSources } from './persist.js';
 
 /**
  * @typedef {Object} CatalogEntry
@@ -386,12 +387,13 @@ export function registerUserSource(entry) {
   unregisterUserSource(entry.id);
   _userSources.push({ ...entry, userDefined: true });
   _rebuildIndex();
+  saveUserSources(_userSources);
 }
 
 /** Remove a user source by id. Returns true if found. */
 export function unregisterUserSource(id) {
   const idx = _userSources.findIndex(e => e.id === id);
-  if (idx >= 0) { _userSources.splice(idx, 1); _rebuildIndex(); return true; }
+  if (idx >= 0) { _userSources.splice(idx, 1); _rebuildIndex(); saveUserSources(_userSources); return true; }
   return false;
 }
 
@@ -399,6 +401,7 @@ export function unregisterUserSource(id) {
 export function clearUserSources() {
   _userSources.length = 0;
   _rebuildIndex();
+  saveUserSources(_userSources);
 }
 
 /** Read-only snapshot of current user sources. */

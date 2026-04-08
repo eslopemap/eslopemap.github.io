@@ -114,10 +114,24 @@ function getBasemapOpacity(state, id) {
  * Stack order: first = bottom, last = top. All below `dem-loader`.
  */
 export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
+  // Ensure we don't accidentally get an empty array if 'none' isn't explicitly removed.
+  if (ids.length === 0) ids = ['none'];
   state.basemapStack = [...ids];
-  state.basemap = ids[0] || 'none';
 
-  // Ensure styles are loaded for all stack entries
+  // Backward compatibility: keep state.basemap synced with primary (bottom) layer
+  state.basemap = state.basemapStack[0] || 'none';
+
+  // Ensure visibility in layerSettings so it shows up if it was previously hidden
+  const settings = { ...(state.layerSettings || {}) };
+  let settingsChanged = false;
+  for (const id of ids) {
+    if (settings[id]?.hidden) {
+      settings[id] = { ...settings[id], hidden: false };
+      settingsChanged = true;
+    }
+  }
+  if (settingsChanged) state.layerSettings = settings;
+
   for (const id of ids) {
     if (typeof map.__ensureBasemapStyle === 'function') {
       await map.__ensureBasemapStyle(id);
@@ -190,6 +204,11 @@ export function setOverlay(map, state, catalogId, visible) {
     overlays.add(catalogId);
     // On-demand: create sources/layers if not yet on the map
     ensureCatalogEntry(map, catalogId);
+    
+    // Force visibility to false in layerSettings so it shows up!
+    const settings = { ...(state.layerSettings || {}) };
+    settings[catalogId] = { ...(settings[catalogId] || {}), hidden: false };
+    state.layerSettings = settings;
   } else {
     overlays.delete(catalogId);
   }

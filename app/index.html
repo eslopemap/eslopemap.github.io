@@ -35,7 +35,7 @@
   <div id="controls-wrapper">
   <div id="bar-left">
     <div id="panel-toggles">
-      <button id="layer-order-toggle" class="panel-toggle-btn" title="Layers">🗂 <span class="btn-label">Layers</span></button>
+      <button id="layer-order-toggle" class="panel-toggle-btn active" title="Layers">🗂 <span class="btn-label">Layers</span></button>
       <button id="settings-controls-toggle" class="panel-toggle-btn" title="Settings">⚙ <span class="btn-label">Settings</span></button>
       <button id="profile-toggle-btn" class="panel-toggle-btn" title="Elevation profile" disabled>📈 <span class="btn-label">Profile</span></button>
       <button id="tracks-btn" class="panel-toggle-btn" title="Track list" disabled>📍 <span class="btn-label">Tracks</span></button>
@@ -74,7 +74,7 @@
   <select id="basemap" style="display:none"><option value="none">None</option></select>
   <input id="terrain3d" type="checkbox" style="display:none" />
 
-  <div id="controls" class="panel-surface panel-padded">
+  <div id="controls" class="panel-surface panel-padded collapsed">
     <div class="row">
       <label for="cursorInfoMode"><strong>Elevation &amp; slope</strong></label><br />
       <select id="cursorInfoMode">
@@ -114,7 +114,7 @@
     </div>
   </div>
 
-  <div id="layer-order-panel" class="panel-surface panel-padded">
+  <div id="layer-order-panel" class="panel-surface panel-padded visible">
     <div class="row basemap-row">
       <label for="basemap-primary"><strong>Basemap</strong></label><br />
       <select id="basemap-primary"></select>

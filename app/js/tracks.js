@@ -20,7 +20,7 @@ const waypoints = [];
 let activeTrackId = null;
 let trackColorIdx = 0;
 let mapReady = false;
-let profileClosed = false;
+let profileClosed = true;
 let activeSelectionSpan = null;
 let promotedTrackId = null;  // track currently promoted to its own source for editing
 
