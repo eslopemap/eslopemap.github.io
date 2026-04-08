@@ -531,14 +531,22 @@ layerAdvancedToggle.addEventListener('click', () => {
 function refreshDebugLayers() {
   const output = document.getElementById('debug-layers-output');
   if (!output) return;
-  const layers = map.getStyle()?.layers || [];
+  const style = map.getStyle();
+  const layers = style?.layers || [];
+  const sources = style?.sources || {};
   const lines = layers.map((l, i) => {
     const vis = l.layout?.visibility || 'visible';
-    const src = l.source || '—';
     const flag = vis === 'visible' ? '●' : '○';
-    return `${String(i).padStart(2)} ${flag} ${l.type.padEnd(16)} ${l.id.padEnd(38)} src: ${src}`;
+    const src = l.source ? sources[l.source] : null;
+    const zMin = l.minzoom ?? src?.minzoom ?? '';
+    const zMax = l.maxzoom ?? src?.maxzoom ?? '';
+    const zRange = (zMin !== '' || zMax !== '') ? `z${zMin}-${zMax}` : '';
+    const bounds = src?.bounds ? `[${src.bounds.map(v => v.toFixed(1)).join(',')}]` : '';
+    const blend = l.paint?.['blend-mode'] || '';
+    const meta = [zRange, bounds, blend].filter(Boolean).join(' ');
+    return `${String(i).padStart(2)} ${flag} ${l.type.padEnd(16)} ${l.id.padEnd(38)} ${meta}`;
   });
-  lines.push(`\nTotal: ${layers.length} layers`);
+  lines.push(`\nTotal: ${layers.length} layers | Sources: ${Object.keys(sources).length}`);
   output.textContent = lines.join('\n');
 }
 
