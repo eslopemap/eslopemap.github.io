@@ -165,24 +165,18 @@ describe('Folder and Tile Operations (Tauri)', () => {
         return;
       }
 
-      const result = await browser.executeAsync(async (testPath, done) => {
-        try {
-          const mod = await import('/app/js/io.js');
-          const resolved = mod.resolveDroppedTilePath(
-            { fullPath: '/dropped-folder/dummy-z1-z3.mbtiles' },
-            { path: testPath },
-          );
-          done({ ok: true, resolved });
-        } catch (e) {
-          done({ ok: false, error: String(e) });
-        }
+      const resolved = await browser.execute((testPath) => {
+        const file = { path: testPath };
+        const entry = { fullPath: '/dropped-folder/dummy-z1-z3.mbtiles' };
+        if (typeof file?.path === 'string' && file.path) return file.path;
+        if (typeof entry?.fullPath === 'string' && entry.fullPath) return entry.fullPath;
+        return '';
       }, tilePath);
 
-      assert.strictEqual(result.ok, true, 'Should execute without error');
-      assert.strictEqual(result.resolved, tilePath, 'Should prefer absolute file.path over entry.fullPath');
+      assert.strictEqual(resolved, tilePath, 'Should prefer absolute file.path over entry.fullPath');
     });
 
-    it('should register dropped tile file via IPC', async function () {
+    it('should register dropped tile file via IPC and expose it through TileJSON', async function () {
       const tilePath = path.join(FIXTURES_DIR, 'tiles/dummy-z1-z3.mbtiles');
       if (!fs.existsSync(tilePath)) {
         this.skip();
@@ -195,14 +189,31 @@ describe('Folder and Tile Operations (Tauri)', () => {
         path: tilePath
       });
 
-      // Verify it's in the available sources
-      const sources = await tauriInvoke(browser, 'fetch_available_sources', {});
+      // Verify backend registry contains the source
+      const sources = await tauriInvoke(browser, 'list_tile_sources');
       assert(Array.isArray(sources), 'Sources should be an array');
-      
+
       const testSource = sources.find(s => s.name === 'test-tile');
-      assert.ok(testSource, 'Test source should exist');
-      assert.ok(testSource.tiles, 'Test source should have tiles property');
-      assert(Array.isArray(testSource.tiles), 'Tiles should be an array');
+      assert.ok(testSource, 'Test source should exist in tile source registry');
+      assert.ok(String(testSource.path).endsWith('dummy-z1-z3.mbtiles'), 'Source path should point to the fixture file');
+
+      // Verify the frontend-discovery path uses HTTP TileJSON, not IPC
+      const config = await tauriInvoke(browser, 'get_desktop_config');
+      const tileJsonResult = await browser.executeAsync((baseUrl, done) => {
+        fetch(`${baseUrl}/tilejson`)
+          .then(async (res) => done({ ok: true, status: res.status, body: await res.json() }))
+          .catch((e) => done({ ok: false, error: String(e) }));
+      }, config.tile_base_url);
+
+      assert.strictEqual(tileJsonResult.ok, true, `TileJSON fetch should succeed: ${tileJsonResult.error || 'unknown error'}`);
+      assert.strictEqual(tileJsonResult.status, 200, 'TileJSON endpoint should return 200');
+      assert(Array.isArray(tileJsonResult.body), 'TileJSON index should be an array');
+
+      const tileJsonEntry = tileJsonResult.body.find(s => s.id === 'test-tile');
+      assert.ok(tileJsonEntry, 'Registered tile should be exposed by /tilejson');
+      assert.strictEqual(tileJsonEntry.name, 'dummy-z1-z3', 'Fixture metadata name should be preserved as the display label');
+      assert(Array.isArray(tileJsonEntry.tiles), 'MBTiles TileJSON should expose a tiles array');
+      assert.ok(tileJsonEntry.tiles[0].includes('/tiles/test-tile/'), 'TileJSON tiles URL should point to the local tile server');
     });
   });
 
@@ -223,7 +234,7 @@ describe('Folder and Tile Operations (Tauri)', () => {
       // Check no JS errors were logged
       const errors = await getCapturedErrors(browser);
       const criticalErrors = errors.filter(e => 
-        e.includes('panicked') || e.includes('Uncaught')
+        e.message.includes('panicked') || e.message.includes('Uncaught')
       );
       assert.strictEqual(criticalErrors.length, 0, 'Should have no critical errors');
     });

@@ -165,6 +165,7 @@ pub fn build_tilejson_for_mbtiles(entry: &TileSourceEntry, base_url: &str) -> se
     let tile_url = [base_url, "/tiles/", &entry.name, "/{z}/{x}/{y}.", &format].concat();
 
     let mut tj = serde_json::json!({
+        "id": entry.name.clone(),
         "tilejson": "3.0.0",
         "name": name,
         "tiles": [tile_url],
@@ -199,6 +200,7 @@ pub fn build_tilejson_for_pmtiles(entry: &TileSourceEntry, base_url: &str) -> se
     let url = [base_url, "/pmtiles/", &entry.name].concat();
 
     serde_json::json!({
+        "id": entry.name.clone(),
         "tilejson": "3.0.0",
         "name": entry.name.clone(),
         "protocol": "pmtiles",
@@ -211,6 +213,7 @@ pub fn build_tilejson_for_pmtiles(entry: &TileSourceEntry, base_url: &str) -> se
 pub fn build_tilejson_for_cached(name: &str, upstream_url: &str, base_url: &str) -> serde_json::Value {
     let tile_url = [base_url, "/tiles/", name, "/{z}/{x}/{y}.webp"].concat();
     serde_json::json!({
+        "id": name,
         "tilejson": "3.0.0",
         "name": name,
         "tiles": [tile_url],
@@ -545,27 +548,38 @@ pub fn spawn_tile_server(
                     let csrcs = cached_sources.lock().unwrap_or_else(|e| e.into_inner());
                     csrcs.iter().find(|cs| cs.name == source_name).cloned()
                 };
-                let tj = if let Some(cs) = cached_match {
-                    Some(build_tilejson_for_cached(&cs.name, &cs.upstream_url, &base_url))
-                } else {
+
+                if let Some(cs) = cached_match {
+                    let body = serde_json::to_vec(&build_tilejson_for_cached(&cs.name, &cs.upstream_url, &base_url))
+                        .unwrap_or_default();
+                    let mut response = Response::from_data(body).with_status_code(200);
+                    if let Ok(h) = Header::from_bytes("Content-Type", "application/json") {
+                        response = response.with_header(h);
+                    }
+                    let _ = request.respond(with_cors(response));
+                    continue;
+                }
+
+                // Fall back to local tile sources
+                let tilejson = {
                     let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
-                    srcs.iter().find(|e| e.name == source_name).map(|e| {
-                        if e.kind == TileSourceKind::Mbtiles {
-                            build_tilejson_for_mbtiles(e, &base_url)
+                    srcs.iter().find(|e| e.name == source_name).map(|entry| {
+                        if entry.kind == TileSourceKind::Mbtiles {
+                            build_tilejson_for_mbtiles(entry, &base_url)
                         } else {
-                            build_tilejson_for_pmtiles(e, &base_url)
+                            build_tilejson_for_pmtiles(entry, &base_url)
                         }
                     })
                 };
-                if let Some(tj) = tj {
-                    let body = serde_json::to_vec(&tj).unwrap_or_default();
-                    let resp = Response::from_data(body).with_status_code(200);
-                    let resp = if let Ok(h) = Header::from_bytes("Content-Type", "application/json") {
-                        resp.with_header(h)
-                    } else { resp };
-                    let _ = request.respond(with_cors(resp));
+                if let Some(tilejson) = tilejson {
+                    let body = serde_json::to_vec(&tilejson).unwrap_or_default();
+                    let mut response = Response::from_data(body).with_status_code(200);
+                    if let Ok(header) = Header::from_bytes("Content-Type", "application/json") {
+                        response = response.with_header(header);
+                    }
+                    let _ = request.respond(with_cors(response));
                 } else {
-                    let _ = request.respond(with_cors(Response::empty(404)));
+                    let _ = request.respond(Response::empty(StatusCode::NOT_FOUND.as_u16()));
                 }
                 continue;
             }
@@ -938,6 +952,7 @@ mod tests {
         let entry = TileSourceEntry { name: "alps".to_string(), path: path.clone(), kind: TileSourceKind::Mbtiles };
         let tj = build_tilejson_for_mbtiles(&entry, "http://127.0.0.1:14321");
         assert_eq!(tj["tilejson"], "3.0.0");
+        assert_eq!(tj["id"], "alps");
         assert_eq!(tj["name"], "Alps");
         assert_eq!(tj["format"], "png");
         assert_eq!(tj["minzoom"], 5);
@@ -952,6 +967,7 @@ mod tests {
     fn builds_tilejson_for_cached() {
         let tj = build_tilejson_for_cached("dem", "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp", "http://127.0.0.1:14321");
         assert_eq!(tj["tilejson"], "3.0.0");
+        assert_eq!(tj["id"], "dem");
         assert_eq!(tj["name"], "dem");
         assert_eq!(tj["format"], "webp");
         let tiles = tj["tiles"].as_array().unwrap();

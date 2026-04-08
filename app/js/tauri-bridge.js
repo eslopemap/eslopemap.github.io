@@ -173,8 +173,9 @@ export async function fetchAvailableSources() {
  */
 export function buildCatalogEntryFromTileJson(tj, category = 'basemap') {
   const name = tj.name || 'unknown';
-  const id = `tilejson-${name}`;
-  const sourceId = `src-tj-${name}`;
+  const stableId = tj.id || name;
+  const id = `tilejson-${stableId}`;
+  const sourceId = `src-tj-${stableId}`;
 
   let sourceDef;
   if (tj.protocol === 'pmtiles') {

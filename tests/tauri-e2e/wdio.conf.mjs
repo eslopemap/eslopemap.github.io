@@ -36,8 +36,12 @@ export const config = {
 
         // Launch the Tauri app (it starts the WebDriver server on 4445)
         appProcess = spawn(binaryPath, [], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env },
+          stdio: ["ignore", "pipe", "pipe"],
+          env: {
+            ...process.env,
+            TAURI_E2E_TESTS: '1',
+            RUST_LOG: "tauri=debug,tauri_plugin_webdriver=trace,webdriver=trace",  // for debugging tauri-driver issues
+          },
         });
         appProcess.stdout.on('data', (d) => process.stdout.write(`[app] ${d}`));
         appProcess.stderr.on('data', (d) => process.stderr.write(`[app:err] ${d}`));
@@ -50,7 +54,7 @@ export const config = {
         });
 
         // Wait for the WebDriver server to be ready
-        const maxWait = 30000;
+        const maxWait = 10000;
         const start = Date.now();
         while (Date.now() - start < maxWait) {
             try {
@@ -59,10 +63,14 @@ export const config = {
                     console.log('[wdio] WebDriver server ready');
                     return;
                 }
-            } catch (_) { /* not ready yet */ }
+            } catch (e) { // not ready yet
+                if (Date.now() - start > maxWait - 1000) {
+                    console.log('[wdio] waiting for WD server:', e);
+                }
+            }
             await new Promise(r => setTimeout(r, 500));
         }
-        throw new Error('Tauri app WebDriver server did not start within 30s');
+        throw new Error(`Tauri app WebDriver server did not start within ${maxWait/1000}s`);
     },
 
     onComplete: async function () {

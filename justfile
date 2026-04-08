@@ -39,7 +39,7 @@ build:
 
 # Run the Tauri desktop app in dev mode
 dev:
-    cargo tauri dev
+    cargo tauri dev --features webdriver
 
 # Build the Tauri desktop app with webdriver support
 tauri-build-webdriver:
@@ -60,7 +60,7 @@ test-rust-coverage:
 # ── All tests ──────────────────────────────────────────────────────
 
 # Run all test suites (JS unit + Playwright E2E + Rust)
-test-all: test-unit test-e2e test-rust
+test-all:  test-rust test-unit test-tauri-e2e test-e2e
 
 # ── Dependencies ───────────────────────────────────────────────────
 
