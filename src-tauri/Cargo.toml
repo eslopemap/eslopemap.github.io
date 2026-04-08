@@ -26,7 +26,7 @@ sha2 = "0.10"
 tiny_http = "0.12"
 http = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
-ureq = "2"
+ureq = "3"
 filetime = "0.2"
 
 # Config + OS paths

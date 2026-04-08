@@ -105,10 +105,10 @@ describe('desktop tile source helpers', () => {
 
   it('registerDesktopTileSource adds a single source and refreshes UI', async () => {
     const refreshUi = vi.fn();
-    const ok = await registerDesktopTileSource('drop-a.mbtiles', '/tiles/drop-a.mbtiles', { refreshUi, logPrefix: '[drop]' });
+    const catalogId = await registerDesktopTileSource('drop-a.mbtiles', '/tiles/drop-a.mbtiles', { refreshUi, logPrefix: '[drop]' });
     const registry = await import('../../app/js/layer-registry.js');
 
-    expect(ok).toBe(true);
+    expect(catalogId).toBe('tilejson-drop-a');
     expect(refreshUi).toHaveBeenCalledTimes(1);
     expect(registry.getCatalogEntry('tilejson-drop-a')).toBeTruthy();
   });

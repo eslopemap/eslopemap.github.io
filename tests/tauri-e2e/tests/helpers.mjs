@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import assert from 'assert';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCREENSHOTS_DIR = path.resolve(__dirname, '../screenshots');
@@ -63,7 +64,11 @@ export async function takeScreenshot(browser, name) {
 export async function installErrorCapture(browser) {
     await browser.execute(() => {
         // Idempotent — only install once
-        if (document.getElementById('__test_errors__')) return;
+        const existingContainer = document.getElementById('__test_errors__');
+        if (existingContainer) {
+            existingContainer.replaceChildren();
+            return;
+        }
 
         const container = document.createElement('div');
         container.id = '__test_errors__';
@@ -128,6 +133,18 @@ export async function getCapturedErrors(browser) {
             message: el.textContent,
         }));
     });
+}
+
+/**
+ * Assert that no captured errors exist.
+ */
+export async function assertNoCapturedErrors(browser) {
+    const errors = await getCapturedErrors(browser);
+    assert.strictEqual(
+        errors.length,
+        0,
+        `Expected no captured errors, got: ${errors.map(e => `[${e.type}] ${e.message}`).join(' | ')}`,
+    );
 }
 
 /**

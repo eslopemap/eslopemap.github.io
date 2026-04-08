@@ -1755,13 +1755,15 @@ map.on('error', (e) => {
 
 // ---- Desktop: auto-discover tile sources via TileJSON ----
 
+const refreshTileLayers = () => {
+  renderBasemapPrimary();
+  renderAddLayerSelect();
+  renderLayerOrderPanel();
+};
+
 if (isTauri()) {
   discoverAndRegisterDesktopTileSources({
-    refreshUi: () => {
-      renderBasemapPrimary();
-      renderAddLayerSelect();
-      renderLayerOrderPanel();
-    },
+    refreshUi: refreshTileLayers,
     logPrefix: '[tile-sources]'
   }).catch(e => console.warn('[tile-sources] discovery failed:', e));
 }
@@ -1829,11 +1831,5 @@ Object.defineProperties(window, {
   resetForTest:        { get() { return resetForTest; } },
   layerRegistry:       { get() { return _layerRegistryProxy; } },
   renderAddLayerSelect: { get() { return renderAddLayerSelect; } },
-  refreshTileLayers:   { get() { return () => {
-    renderBasemapPrimary();
-    renderAddLayerSelect();
-    renderLayerOrderPanel();
-  }; } },
+  refreshTileLayers:   { get() { return refreshTileLayers; } },
 });
-
-

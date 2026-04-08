@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { waitForTauri, tauriInvoke, installErrorCapture, getCapturedErrors } from './helpers.mjs';
+import { waitForTauri, tauriInvoke, installErrorCapture, assertNoCapturedErrors } from './helpers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.resolve(__dirname, '../../fixtures');
@@ -19,11 +19,12 @@ describe('Folder and Tile Operations (Tauri)', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slope-test-'));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Clean up temp dir
     if (tempDir && fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+    await assertNoCapturedErrors(browser);
   });
 
   describe('Open Folder Dialog', function () {
@@ -231,12 +232,6 @@ describe('Folder and Tile Operations (Tauri)', () => {
         assert(!String(e).includes('panicked'), 'Should not panic on invalid path');
       }
 
-      // Check no JS errors were logged
-      const errors = await getCapturedErrors(browser);
-      const criticalErrors = errors.filter(e => 
-        e.message.includes('panicked') || e.message.includes('Uncaught')
-      );
-      assert.strictEqual(criticalErrors.length, 0, 'Should have no critical errors');
     });
 
     it('should handle tile file without path gracefully', async function () {

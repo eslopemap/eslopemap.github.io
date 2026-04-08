@@ -797,10 +797,23 @@ async function handleTileFile(name, path) {
 
   console.info(`[tile-drop] registering ${name} from ${path}`);
   const { registerDesktopTileSource } = await import('./desktop-tile-sources.js');
-  await registerDesktopTileSource(name, path, {
+  const catalogId = await registerDesktopTileSource(name, path, {
     refreshUi: typeof window.refreshTileLayers === 'function' ? window.refreshTileLayers : null,
     logPrefix: '[tile-drop]'
   });
+
+  if (!catalogId) return;
+
+  const primary = document.getElementById('basemap-primary');
+  if (!primary) return;
+  const option = Array.from(primary.options).find(opt => opt.value === catalogId);
+  if (!option) {
+    console.warn(`[tile-drop] primary basemap option not found for ${catalogId}`);
+    return;
+  }
+
+  primary.value = catalogId;
+  primary.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 /** Tier 3: Read directory entries from drag & drop */

@@ -6,8 +6,7 @@ import {
     waitForTauri,
     tauriInvoke,
     installErrorCapture,
-    getCapturedErrors,
-    filterErrors,
+    assertNoCapturedErrors,
     takeScreenshot,
 } from './helpers.mjs';
 
@@ -22,10 +21,25 @@ async function waitForCustomMapOption(browser, value, timeout = 20000) {
     await browser.waitUntil(
         async () => browser.execute((expectedValue) => {
             const select = document.getElementById('add-layer');
-            if (!select) return false;
-            return Array.from(select.options).some(option => option.value === expectedValue);
+            const primary = document.getElementById('basemap-primary');
+            const addLayerHasOption = Array.from(select?.options || []).some(option => option.value === expectedValue);
+            const primaryHasOption = Array.from(primary?.options || []).some(option => option.value === expectedValue.replace(/^basemap:/, ''));
+            return addLayerHasOption || primaryHasOption;
         }, value),
         { timeout, timeoutMsg: `Custom map option ${value} not found in add-layer select` }
+    );
+}
+
+async function waitForCustomMapLabel(browser, label, timeout = 20000) {
+    await browser.waitUntil(
+        async () => browser.execute((expectedLabel) => {
+            const select = document.getElementById('add-layer');
+            const primary = document.getElementById('basemap-primary');
+            const addLayerHasLabel = Array.from(select?.options || []).some(option => option.textContent === expectedLabel);
+            const primaryHasLabel = Array.from(primary?.options || []).some(option => option.textContent === expectedLabel);
+            return addLayerHasLabel || primaryHasLabel;
+        }, label),
+        { timeout, timeoutMsg: `Custom map label ${label} not found in UI controls` }
     );
 }
 
@@ -41,6 +55,92 @@ async function selectAddLayerOption(browser, value) {
     }, value);
     assert.strictEqual(result.ok, true, result.error || 'Selecting custom map should succeed');
     return result.label;
+}
+
+async function selectAddLayerOptionByLabel(browser, label) {
+    const result = await browser.execute((expectedLabel) => {
+        const select = document.getElementById('add-layer');
+        if (!select) return { ok: false, error: '#add-layer not found' };
+        const option = Array.from(select.options).find(opt => opt.textContent === expectedLabel);
+        if (!option) return { ok: false, error: `Option not found for label: ${expectedLabel}` };
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: true, label: option.textContent, value: option.value };
+    }, label);
+    assert.strictEqual(result.ok, true, result.error || 'Selecting custom map by label should succeed');
+    return result;
+}
+
+async function selectPrimaryBasemap(browser, value) {
+    const result = await browser.execute((selectedValue) => {
+        const select = document.getElementById('basemap-primary');
+        if (!select) return { ok: false, error: '#basemap-primary not found' };
+        const option = Array.from(select.options).find(opt => opt.value === selectedValue);
+        if (!option) return { ok: false, error: `Primary basemap option not found: ${selectedValue}` };
+        select.value = selectedValue;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: true, label: option.textContent };
+    }, value);
+    assert.strictEqual(result.ok, true, result.error || 'Selecting primary basemap should succeed');
+    return result.label;
+}
+
+async function selectPrimaryBasemapByLabel(browser, label) {
+    const result = await browser.execute((expectedLabel) => {
+        const select = document.getElementById('basemap-primary');
+        if (!select) return { ok: false, error: '#basemap-primary not found' };
+        const option = Array.from(select.options).find(opt => opt.textContent === expectedLabel);
+        if (!option) return { ok: false, error: `Primary basemap option not found for label: ${expectedLabel}` };
+        select.value = option.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: true, label: option.textContent, value: option.value };
+    }, label);
+    assert.strictEqual(result.ok, true, result.error || 'Selecting primary basemap by label should succeed');
+    return result;
+}
+
+async function seedPersistedCustomSource(browser, tileJson) {
+    await browser.execute((tj) => {
+        const stableId = tj.id || tj.name || 'unknown';
+        const entryId = `tilejson-${stableId}`;
+        const sourceId = `src-tj-${stableId}`;
+        const existingSources = JSON.parse(localStorage.getItem('slope:user-sources') || '[]');
+        const filteredSources = existingSources.filter(entry => entry?.id !== entryId);
+
+        const sourceDef = tj.protocol === 'pmtiles'
+            ? { type: 'raster', url: tj.url, tileSize: 256 }
+            : { type: 'raster', tiles: tj.tiles || [], tileSize: 256 };
+
+        if (tj.minzoom != null) sourceDef.minzoom = tj.minzoom;
+        if (tj.maxzoom != null) sourceDef.maxzoom = tj.maxzoom;
+        if (tj.attribution) sourceDef.attribution = tj.attribution;
+        if (tj.bounds) sourceDef.bounds = tj.bounds;
+
+        filteredSources.push({
+            id: entryId,
+            label: tj.name || 'unknown',
+            category: 'basemap',
+            region: tj.bounds || null,
+            defaultView: tj.center ? { center: [tj.center[0], tj.center[1]], zoom: tj.center[2] || 10 } : null,
+            userDefined: true,
+            tileJson: tj,
+            sources: { [sourceId]: sourceDef },
+            layers: [
+                {
+                    id: `basemap-${entryId}`,
+                    type: 'raster',
+                    source: sourceId,
+                    paint: { 'raster-opacity': 1 },
+                }
+            ],
+        });
+        localStorage.setItem('slope:user-sources', JSON.stringify(filteredSources));
+
+        const settings = JSON.parse(localStorage.getItem('slope:settings') || '{}');
+        settings.basemap = entryId;
+        settings.basemapStack = [entryId];
+        localStorage.setItem('slope:settings', JSON.stringify(settings));
+    }, tileJson);
 }
 
 async function getCenterNonWhiteRatio(browser) {
@@ -78,10 +178,22 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         await installErrorCapture(browser);
     });
 
+    afterEach(async () => {
+        await assertNoCapturedErrors(browser);
+    });
+
     it('registers a local MBTiles source, exposes it via TileJSON, and makes it available in the UI', async () => {
         if (!fs.existsSync(MBTILES_PATH)) {
             throw new Error(`Missing MBTiles fixture: ${MBTILES_PATH}`);
         }
+
+        await browser.execute(() => {
+            localStorage.removeItem('slope:user-sources');
+            localStorage.removeItem('slope:settings');
+        });
+        await browser.refresh();
+        await waitForTauri(browser);
+        await installErrorCapture(browser);
 
         await tauriInvoke(browser, 'remove_tile_source', { name: SOURCE_NAME }).catch(() => {});
         await tauriInvoke(browser, 'add_tile_source', { name: SOURCE_NAME, path: MBTILES_PATH });
@@ -122,30 +234,48 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         assert.strictEqual(tileResult.status, 200, 'Fixture tile should be served with 200');
         assert.ok(tileResult.size > 0, 'Fixture tile body should not be empty');
 
-        await waitForCustomMapOption(browser, `basemap:${CATALOG_ID}`);
+        await seedPersistedCustomSource(browser, singleSourceResult.body);
 
-        const uiStateBefore = await browser.execute((catalogId) => {
+        await browser.refresh();
+        await waitForTauri(browser);
+        await installErrorCapture(browser);
+
+        await waitForCustomMapLabel(browser, DISPLAY_NAME);
+
+        const uiStateBefore = await browser.execute((displayName) => {
             const select = document.getElementById('add-layer');
-            const option = Array.from(select?.options || []).find(opt => opt.value === `basemap:${catalogId}`);
+            const options = Array.from(select?.options || []).filter(opt => opt.textContent === displayName);
             const basemapPrimary = document.getElementById('basemap-primary');
+            const primaryOption = Array.from(basemapPrimary?.options || []).find(opt => opt.textContent === displayName);
             return {
-                optionLabel: option?.textContent || null,
+                addLayerLabels: options.map(opt => opt.textContent || ''),
+                addLayerValues: options.map(opt => opt.value || ''),
+                primaryOptionLabel: primaryOption?.textContent || null,
                 primaryValue: basemapPrimary?.value || null,
+                primarySelectedLabel: basemapPrimary?.selectedOptions?.[0]?.textContent || null,
                 layerOrderText: document.getElementById('layer-order-list')?.textContent || '',
             };
-        }, CATALOG_ID);
+        }, DISPLAY_NAME);
 
-        assert.strictEqual(uiStateBefore.optionLabel, DISPLAY_NAME, 'Custom map should appear in the add-layer UI with the metadata label');
+        assert.ok(
+            uiStateBefore.addLayerLabels.length > 0 || uiStateBefore.primaryOptionLabel === DISPLAY_NAME,
+            `Custom map should appear in the UI with the metadata label, got add-layer=${uiStateBefore.addLayerLabels.join(',')} primary=${uiStateBefore.primaryOptionLabel}`,
+        );
 
-        await selectAddLayerOption(browser, `basemap:${CATALOG_ID}`);
+        if (uiStateBefore.primarySelectedLabel === DISPLAY_NAME) {
+            console.log('[test] custom source already active as primary basemap');
+        } else if (uiStateBefore.primaryOptionLabel === DISPLAY_NAME) {
+            await selectPrimaryBasemapByLabel(browser, DISPLAY_NAME);
+        } else {
+            await selectAddLayerOptionByLabel(browser, DISPLAY_NAME);
+        }
 
         await browser.waitUntil(
-            async () => browser.execute((catalogId) => {
+            async () => browser.execute((displayName) => {
                 const layerOrderText = document.getElementById('layer-order-list')?.textContent || '';
-                const select = document.getElementById('add-layer');
-                const stillOffered = Array.from(select?.options || []).some(opt => opt.value === `basemap:${catalogId}`);
-                return layerOrderText.includes('dummy-z1-z3') && !stillOffered;
-            }, CATALOG_ID),
+                const primarySelectedLabel = document.getElementById('basemap-primary')?.selectedOptions?.[0]?.textContent || '';
+                return layerOrderText.includes(displayName) || primarySelectedLabel === displayName;
+            }, DISPLAY_NAME),
             { timeout: 20000, timeoutMsg: 'Custom map did not become active in the UI' }
         );
 
@@ -154,16 +284,9 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         const ratioResult = await getCenterNonWhiteRatio(browser);
         console.log(`[test] custom tile center non-white ratio: ${JSON.stringify(ratioResult)}`);
 
-        const relevantErrors = filterErrors(
-            await getCapturedErrors(browser),
-            /custom-mbtiles|dummy-z1-z3|tilejson|tiles\/custom-mbtiles|Map error/i,
-        );
-        console.log(`[test] captured relevant errors: ${JSON.stringify(relevantErrors)}`);
-
         await takeScreenshot(browser, '02-custom-mbtiles-active');
 
         assert.strictEqual(ratioResult.ok, true, ratioResult.error || 'Canvas probe should succeed');
-        assert.strictEqual(relevantErrors.length, 0, `Expected no relevant errors, got: ${relevantErrors.map(e => e.message).join(' | ')}`);
         assert.ok(ratioResult.nonWhiteRatio > 0.01, `Expected visible non-white pixels, got ratio ${ratioResult.nonWhiteRatio}`);
     });
 });

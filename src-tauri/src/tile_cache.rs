@@ -9,16 +9,42 @@
 // are evicted.
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
+use ureq::{self, Agent, Body};
 
 // ---------------------------------------------------------------------------
 // Cached upstream source definition
 // ---------------------------------------------------------------------------
+
+fn tauri_e2e_tests_enabled() -> bool {
+    match std::env::var("TAURI_E2E_TESTS") {
+        Ok(value) => value == "1" || value.eq_ignore_ascii_case("true"),
+        Err(_) => false,
+    }
+}
+
+fn fetch_upstream(url: &str) -> Result<ureq::http::Response<Body>, ureq::Error> {
+    if tauri_e2e_tests_enabled() {
+        let agent: Agent = Agent::config_builder()
+            .tls_config(
+                ureq::tls::TlsConfig::builder()
+                    .disable_verification(true)
+                    .build()
+            )
+            .build()
+            .new_agent();
+        return agent
+            .get(url)
+            .call();
+    }
+
+    ureq::get(url).call()
+}
 
 /// A tile source backed by a remote URL with a local disk cache.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,14 +133,14 @@ impl TileCache {
             .replace("{y}", &y.to_string());
 
         // Fetch from upstream
-        match ureq::get(&url).call() {
-            Ok(response) => {
-                let status = response.status();
+        match fetch_upstream(&url) {
+            Ok(mut response) => {
+                let status = response.status().as_u16();
                 if status != 200 {
                     return (status, "text/plain; charset=utf-8", Vec::new());
                 }
                 let mut body = Vec::new();
-                if let Err(e) = response.into_reader().read_to_end(&mut body) {
+                if let Err(e) = response.body_mut().as_reader().read_to_end(&mut body) {
                     eprintln!("[tile-cache] upstream read error for {url}: {e}");
                     return (502, "text/plain; charset=utf-8", b"upstream read error".to_vec());
                 }
@@ -316,7 +342,7 @@ pub fn clear_cache_dir(root: &Path) -> bool {
 
 fn extract_status_from_ureq_error(e: &ureq::Error) -> Option<u16> {
     match e {
-        ureq::Error::Status(code, _) => Some(*code),
+        ureq::Error::StatusCode(code) => Some(*code),
         _ => None,
     }
 }

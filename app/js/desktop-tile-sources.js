@@ -44,26 +44,27 @@ export async function discoverAndRegisterDesktopTileSources(options = {}) {
  * @param {string} name
  * @param {string} path
  * @param {{ refreshUi?: (() => void) | null, logPrefix?: string }} [options]
- * @returns {Promise<boolean>}
+ * @returns {Promise<string|null>}
  */
 export async function registerDesktopTileSource(name, path, options = {}) {
-  if (!isTauri()) return false;
+  if (!isTauri()) return null;
   const { refreshUi = null, logPrefix = '[tile-sources]' } = options;
   const cleanName = name.replace(/\.(mbtiles|pmtiles)$/i, '');
 
   await addTileSource(cleanName, path);
 
   const sources = await fetchAvailableSources();
-  const tj = sources.find(source => source.name === cleanName);
+  const tj = sources.find(source => source.id === cleanName || source.name === cleanName);
   if (!tj) {
     console.warn(`${logPrefix} TileJSON not found for '${cleanName}'`);
-    return false;
+    return null;
   }
 
-  registerUserSource(buildCatalogEntryFromTileJson(tj));
+  const entry = buildCatalogEntryFromTileJson(tj);
+  registerUserSource(entry);
   console.info(`${logPrefix} registered '${cleanName}' as layer`);
   refreshUi?.();
-  return true;
+  return entry.id;
 }
 
 /**
