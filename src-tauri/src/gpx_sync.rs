@@ -297,6 +297,7 @@ impl GpxSyncManager {
         self.save_gpx(path, app_content)
     }
 
+    #[allow(dead_code)]
     pub fn drain_events(&mut self) -> Vec<SyncEvent> {
         std::mem::take(&mut self.pending_events)
     }

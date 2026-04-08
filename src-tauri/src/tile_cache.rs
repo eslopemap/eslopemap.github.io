@@ -249,11 +249,10 @@ impl TileCache {
     /// Get cache stats.
     pub fn stats(&self) -> CacheStats {
         let root = self.root();
-        let files = collect_cache_files(&root);
         CacheStats {
             root: root.to_string_lossy().to_string(),
-            total_size_bytes: files.iter().map(|(_, s, _)| s).sum(),
-            file_count: files.len() as u64,
+            total_size_bytes: self.total_size_bytes(),
+            file_count: collect_cache_files(&root).len() as u64,
             max_size_bytes: self.inner.lock().unwrap().max_bytes,
         }
     }

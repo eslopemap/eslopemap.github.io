@@ -242,14 +242,33 @@ fn scan_tile_folder(
 struct DesktopConfig {
     runtime: String,
     tile_base_url: String,
+    test_mode: bool,
+    config_path: String,
+    cache_root: String,
+    cached_source_names: Vec<String>,
 }
 
 #[tauri::command]
 fn get_desktop_config(state: State<'_, ManagedState>) -> Result<DesktopConfig, String> {
     let app_state = state.lock().map_err(|e| e.to_string())?;
+    let cached_source_names = app_state
+        .cached_sources
+        .lock()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|source| source.name.clone())
+        .collect();
     Ok(DesktopConfig {
         runtime: "tauri".to_string(),
         tile_base_url: format!("http://127.0.0.1:{}", app_state.tile_port),
+        test_mode: std::env::var("TAURI_E2E_TESTS")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false),
+        config_path: config::effective_config_file_path()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        cache_root: app_state.tile_cache.root().to_string_lossy().to_string(),
+        cached_source_names,
     })
 }
 

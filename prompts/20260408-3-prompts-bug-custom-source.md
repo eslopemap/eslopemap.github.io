@@ -33,3 +33,14 @@ disable certificate check in the tests as my corpo VPN/proxy messes up those.
   * change the functionality so that a newly imported custom source (if only one, ie file case fnot folder case) is always added as a basemap layer by default
   * see if that helps with the test
   * try to move the test forward up to the point where you can take a screenshot and validate with the screenshot that the source is added
+
+---
+
+- be careful about existing persisted config on client & server (slopemapper.toml) & server-side tile-cache  interfering in the e2e test.
+be more principled about 'test mode' (currently there is a test mode in the UI that deselects some default layers, but that may not be enough and not enabled everywhere it needs to)
+- I got ReferenceError: Can't find variable: buildCatalogEntryFromTileJson
+- on drag and drop tile I now get Source Map "http://127.0.0.1:1430/vendor/chart.js/4.5.1/dist/chart.js.map" has SyntaxError: JSON Parse error: Unrecognized token '<'
+- there are some cargo build warnings, adress them, maybe cache was not finished ? do not remove dead code without thinking what unfinished feature it may be part of
+- in the failing/white test, display the maplibre layer list (eg from the settings panel) and check it against what you expect
+- if test still shows white and you have some ideas, try to narrow it further or suggest next steps
+- keep adding to report and git-commit-ing when appropriate

@@ -5,8 +5,10 @@ import { fileURLToPath } from 'url';
 import {
     waitForTauri,
     tauriInvoke,
+    resetDesktopTestState,
     installErrorCapture,
     assertNoCapturedErrors,
+    getMapDebugSnapshot,
     takeScreenshot,
 } from './helpers.mjs';
 
@@ -187,15 +189,9 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
             throw new Error(`Missing MBTiles fixture: ${MBTILES_PATH}`);
         }
 
-        await browser.execute(() => {
-            localStorage.removeItem('slope:user-sources');
-            localStorage.removeItem('slope:settings');
-        });
-        await browser.refresh();
-        await waitForTauri(browser);
+        await resetDesktopTestState(browser, { tileSourceNames: [SOURCE_NAME] });
         await installErrorCapture(browser);
 
-        await tauriInvoke(browser, 'remove_tile_source', { name: SOURCE_NAME }).catch(() => {});
         await tauriInvoke(browser, 'add_tile_source', { name: SOURCE_NAME, path: MBTILES_PATH });
 
         const listedSources = await tauriInvoke(browser, 'list_tile_sources');
@@ -203,6 +199,12 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         assert.ok(listed, 'Source should be present in Tauri tile registry');
 
         const config = await tauriInvoke(browser, 'get_desktop_config');
+        console.log(`[test] desktop config: ${JSON.stringify(config)}`);
+        assert.strictEqual(config.test_mode, true, 'Desktop config should report test mode during WDIO runs');
+        assert.ok(config.config_path.includes('slopemapper-tauri-e2e'), `Expected isolated test config path, got ${config.config_path}`);
+        assert.ok(config.cache_root.includes('slopemapper-tauri-e2e'), `Expected isolated test cache root, got ${config.cache_root}`);
+        assert.ok(Array.isArray(config.cached_source_names) && config.cached_source_names.includes('dem'), 'Desktop config should expose cached upstream source names');
+
         const tileJsonResult = await browser.executeAsync((baseUrl, done) => {
             fetch(`${baseUrl}/tilejson`)
                 .then(async (res) => done({ ok: true, status: res.status, body: await res.json() }))
@@ -280,6 +282,9 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         );
 
         await browser.pause(2000);
+
+        const debugSnapshot = await getMapDebugSnapshot(browser);
+        console.log(`[test] map debug snapshot: ${JSON.stringify(debugSnapshot)}`);
 
         const ratioResult = await getCenterNonWhiteRatio(browser);
         console.log(`[test] custom tile center non-white ratio: ${JSON.stringify(ratioResult)}`);

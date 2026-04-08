@@ -46,7 +46,7 @@ import { initWebImport } from './web-import.js';
 import { initSavedDataPanel } from './saved-data.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
-import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx } from './tauri-bridge.js';
+import { buildCatalogEntryFromTileJson, getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx } from './tauri-bridge.js';
 import { initPmtilesProtocol } from './pmtiles-protocol.js';
 
 // ---- State (reactive via Proxy) ----

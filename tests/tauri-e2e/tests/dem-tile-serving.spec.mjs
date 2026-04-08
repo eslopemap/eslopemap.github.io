@@ -173,11 +173,7 @@ describe('DEM Tile Serving (Tauri desktop)', () => {
                 `dem/${t.z}/${t.x}/${t.y}.webp should be 200, got ${result.status}`);
         }
 
-        // Verify no fetch errors were captured
-        const allErrors = await getCapturedErrors(browser);
-        const demErrors = filterErrors(allErrors, /tiles\/dem\/.*(363|364|365).*\.webp/);
-        assert.strictEqual(demErrors.length, 0,
-            `Expected no fetch errors for injected tiles, got: ${demErrors.map(e => e.message).join(', ')}`);
+        await assertNoCapturedErrors(browser);
 
         await takeScreenshot(browser, '01-dem-tile-cache-working');
     });

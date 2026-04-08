@@ -36,6 +36,32 @@ export async function tauriInvoke(browser, cmd, args = {}) {
     return result.value;
 }
 
+/** Enter the app's hash-driven UI test mode. */
+export async function enterDesktopTestMode(browser) {
+    await browser.url('http://app.localhost/index.html#test_mode=true');
+    await waitForTauri(browser);
+}
+
+/** Reset frontend storage and backend cache/source state for deterministic desktop tests. */
+export async function resetDesktopTestState(browser, options = {}) {
+    const { tileSourceNames = [] } = options;
+    await enterDesktopTestMode(browser);
+    await browser.execute(() => {
+        localStorage.removeItem('slope:tracks');
+        localStorage.removeItem('slope:waypoints');
+        localStorage.removeItem('slope:settings');
+        localStorage.removeItem('slope:profile-settings');
+        localStorage.removeItem('slope:workspace');
+        localStorage.removeItem('slope:user-sources');
+    });
+    await tauriInvoke(browser, 'clear_tile_cache').catch(() => false);
+    for (const name of tileSourceNames) {
+        await tauriInvoke(browser, 'remove_tile_source', { name }).catch(() => false);
+    }
+    await browser.refresh();
+    await waitForTauri(browser);
+}
+
 /** Take a screenshot and return its path. */
 export async function takeScreenshot(browser, name) {
     fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
@@ -171,4 +197,35 @@ export async function waitForError(browser, pattern, timeout = 30000) {
         },
         { timeout, timeoutMsg: `No captured error matching ${pattern} within ${timeout}ms` }
     );
+}
+
+/** Capture current MapLibre style/debug state from the page. */
+export async function getMapDebugSnapshot(browser) {
+    return browser.execute(() => {
+        const debugText = document.getElementById('debug-layers-output')?.textContent || '';
+        const style = window.map?.getStyle?.() || null;
+        const layers = Array.isArray(style?.layers)
+            ? style.layers.map(layer => ({
+                id: layer.id,
+                type: layer.type,
+                source: layer.source || null,
+                visibility: layer.layout?.visibility || 'visible',
+            }))
+            : [];
+        const sources = style?.sources
+            ? Object.fromEntries(Object.entries(style.sources).map(([id, source]) => [id, {
+                type: source?.type || null,
+                tiles: Array.isArray(source?.tiles) ? source.tiles : null,
+                url: source?.url || null,
+                bounds: source?.bounds || null,
+            }]))
+            : {};
+        return {
+            debugText,
+            layers,
+            sources,
+            basemapPrimary: document.getElementById('basemap-primary')?.value || null,
+            basemapPrimaryLabel: document.getElementById('basemap-primary')?.selectedOptions?.[0]?.textContent || null,
+        };
+    });
 }

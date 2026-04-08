@@ -83,9 +83,27 @@ pub fn config_file_path() -> Option<PathBuf> {
     config_dir().map(|d| d.join("slopemapper.toml"))
 }
 
+fn tauri_e2e_tests_enabled() -> bool {
+    match std::env::var("TAURI_E2E_TESTS") {
+        Ok(value) => value == "1" || value.eq_ignore_ascii_case("true"),
+        Err(_) => false,
+    }
+}
+
+pub fn test_state_root() -> PathBuf {
+    std::env::temp_dir().join("slopemapper-tauri-e2e")
+}
+
+pub fn effective_config_file_path() -> Option<PathBuf> {
+    if tauri_e2e_tests_enabled() {
+        return Some(test_state_root().join("slopemapper.toml"));
+    }
+    config_file_path()
+}
+
 /// Load config from the default location. Returns defaults if file is missing.
 pub fn load_config() -> AppConfig {
-    let Some(path) = config_file_path() else {
+    let Some(path) = effective_config_file_path() else {
         println!("[config] no config dir available, using defaults");
         return AppConfig::default();
     };
@@ -114,6 +132,9 @@ pub fn load_config_from(path: &Path) -> AppConfig {
 
 /// Resolve the effective tile cache directory from config.
 pub fn resolve_cache_dir(cfg: &AppConfig) -> PathBuf {
+    if tauri_e2e_tests_enabled() {
+        return test_state_root().join("tiles");
+    }
     if !cfg.cache.path.is_empty() {
         return PathBuf::from(&cfg.cache.path);
     }

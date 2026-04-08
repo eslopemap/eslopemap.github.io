@@ -77,7 +77,14 @@ describe('tauri-bridge in desktop mode', () => {
       invoke: (cmd, args) => {
         invokeLog.push({ cmd, args });
         if (cmd === 'get_desktop_config') {
-          return Promise.resolve({ runtime: 'tauri', tile_base_url: 'http://127.0.0.1:14321' });
+          return Promise.resolve({
+            runtime: 'tauri',
+            tile_base_url: 'http://127.0.0.1:14321',
+            test_mode: true,
+            config_path: '/tmp/slopemapper-tauri-e2e/slopemapper.toml',
+            cache_root: '/tmp/slopemapper-tauri-e2e/tiles',
+            cached_source_names: ['dem'],
+          });
         }
         if (cmd === 'get_snapshot') {
           return Promise.resolve({ folder: '/tmp/gpx', files: [] });
@@ -108,6 +115,8 @@ describe('tauri-bridge in desktop mode', () => {
   it('getDesktopConfig invokes Tauri command', async () => {
     const config = await getDesktopConfig();
     expect(config.runtime).toBe('tauri');
+    expect(config.test_mode).toBe(true);
+    expect(config.cached_source_names).toEqual(['dem']);
     expect(invokeLog.some(l => l.cmd === 'get_desktop_config')).toBe(true);
   });
 

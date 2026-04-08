@@ -193,6 +193,115 @@ So the rendering investigation is now narrowed to:
 - “selected and added in UI” is working,
 - “visually rendered as expected on screen” is still not proven.
 
+### 11. A separate regression caused `ReferenceError: Can't find variable: buildCatalogEntryFromTileJson`
+
+During the follow-up pass, a concrete runtime regression was found in `app/js/main.js`.
+
+The file exposes `buildCatalogEntryFromTileJson` through the E2E-facing `window.layerRegistry` proxy, but the symbol was not imported into `main.js`.
+
+That can produce:
+- `ReferenceError: Can't find variable: buildCatalogEntryFromTileJson`
+
+The fix is straightforward:
+- import `buildCatalogEntryFromTileJson` from `app/js/tauri-bridge.js` in `main.js`
+
+### 12. Desktop Tauri e2e needed stricter isolation from persisted config/cache state
+
+The user explicitly called out possible interference from:
+- frontend persisted `localStorage`
+- backend `slopemapper.toml`
+- backend tile cache state
+
+The desktop test path is now being made more principled in two layers:
+
+1. Frontend test helpers
+- a helper now navigates to `#test_mode=true`
+- clears all `slope:*` localStorage keys relevant to map/layer state
+- clears the backend tile cache
+- removes specific desktop tile sources before each targeted run
+
+2. Rust config/cache resolution
+- in `TAURI_E2E_TESTS=1`, config now resolves to a temp test root under the OS temp dir
+- the tile cache root also resolves to that same temp test root instead of the normal OS cache path
+
+This is intended to prevent desktop tests from accidentally inheriting a real user config or cache population.
+
+### 13. The biggest current Tauri flake is a stale desktop process, not the custom-source logic itself
+
+The latest rerun produced the most important new diagnostic finding so far.
+
+Observed facts from the run:
+- the newly spawned app logged that it was using the temp e2e config/cache root
+- but the WebDriver session returned `get_desktop_config()` values from the normal OS config/cache locations
+- the spawned app then failed to bind both:
+  - tile server `127.0.0.1:14321`
+  - webdriver `127.0.0.1:4445`
+
+Direct inspection showed an already-running `slope-desktop` process still listening on both ports.
+
+That means the test had silently attached to the stale desktop instance instead of the freshly spawned e2e instance.
+
+This explains why the run could look inconsistent or "hit-or-miss":
+- the actual app under test might not be the one just launched for that spec
+- it may not be in `TAURI_E2E_TESTS` mode
+- it may be using real persisted config/cache state
+
+### 14. WDIO launcher now fails fast if the required desktop ports are already occupied
+
+To stop the silent stale-process attachment problem, `tests/tauri-e2e/wdio.conf.mjs` now checks ports before launching:
+- `4445` (webdriver)
+- `14321` (desktop tile server)
+
+If either port is already in use, the run now fails immediately with a clear error telling the developer to stop the stale `slope-desktop` process first.
+
+This is a much better failure mode than accidentally testing the wrong app instance.
+
+### 15. Missing Chart.js source map was generating avoidable resource-noise during UI runs
+
+Another non-root-cause but real issue:
+- `app/vendor/chart.js/4.5.1/dist/chart.js` references `chart.js.map`
+- that file was not present in the vendored tree
+
+This can surface as a noisy browser-side resource/source-map error during drag/drop or other UI runs.
+
+A minimal valid `chart.js.map` file was added so this no longer pollutes captured desktop test errors.
+
+### 16. The next authoritative white-screen pass should use the new MapLibre/debug diagnostics on a clean desktop instance
+
+The custom-source Tauri spec now also includes support for logging:
+- desktop config diagnostics
+- current MapLibre style sources/layers
+- the app's existing debug layer panel output
+
+However, the clean rerun of that path is currently blocked until the stale port-owning `slope-desktop` process is stopped.
+
+### 17. Clean rerun result: the custom basemap does render correctly when the test talks to the right desktop app
+
+After stopping the stale `slope-desktop` process and rerunning the focused custom-source Tauri spec against a clean desktop instance:
+
+- the spec passed again,
+- the desktop config diagnostics matched test-mode expectations,
+- the screenshot was no longer white,
+- the map visibly rendered the custom basemap,
+- the MapLibre style dump showed the expected custom raster layer and source:
+  - layer `basemap-tilejson-custom-mbtiles`
+  - source `src-tj-custom-mbtiles`
+  - source tiles `http://127.0.0.1:14321/tiles/custom-mbtiles/{z}/{x}/{y}.png`
+
+This changes the interpretation of the earlier white screenshot significantly.
+
+Current best explanation:
+- the earlier white / hit-or-miss behavior was strongly affected by stale-process contamination,
+- not by the custom source failing to enter the catalog or failing to attach to the MapLibre style graph.
+
+The clean rerun now demonstrates that:
+- the custom source is registered,
+- selected as basemap,
+- present in the style,
+- and visually rendered in the screenshot.
+
+The remaining action items are therefore mostly cleanup/reliability work rather than a still-open core rendering failure.
+
 ## Files Changed In This Pass
 
 - `src-tauri/src/tile_server.rs`
@@ -209,7 +318,7 @@ So the rendering investigation is now narrowed to:
 ## Remaining Follow-up
 
  The current follow-up is narrower now:
- - keep the `ureq 3` migration and helper changes committed together with the report updates
- - treat the screenshot as the current source of truth for the custom-source desktop rendering state
- - replace or refine the current canvas probe so it agrees with saved screenshot output instead of producing a false-positive non-white result
- - continue from “source selected in UI but map still visually white” as the next rendering-debug target
+ - keep the new stale-port guard in place so WDIO cannot silently attach to the wrong app again
+ - keep the stricter desktop test-state reset and config/cache isolation path
+ - optionally revisit port configurability later so `cargo tauri dev` and WDIO can coexist more comfortably
+ - commit the current reliability/debugging improvements together with the updated report
