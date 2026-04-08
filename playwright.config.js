@@ -2,8 +2,7 @@
 // Playwright config for slope.html E2E tests.
 //
 // python3 http.server is used instead of `npx serve` because serve crashed
-// mid-suite (ERR_CONNECTION_REFUSED after a few tests). Python's stdlib server
-// is stable across all 36 tests.
+// mid-suite (ERR_CONNECTION_REFUSED after a few tests). 
 //
 // --use-gl=angle + --use-angle=swiftshader are required for WebGL in headless
 // Chromium (MapLibre GL JS needs a GPU context).

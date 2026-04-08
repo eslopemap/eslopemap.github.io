@@ -17,14 +17,15 @@ import {
 } from './ui.js';
 
 import {
-  buildCatalogSources, buildCatalogLayers, getBasemaps, getOverlays, getCatalogEntry,
-  getAllEntries, registerUserSource, unregisterUserSource, clearUserSources, getUserSources,
+  getCatalogEntry, getBasemaps, getOverlays, getUserSources, getLayerIds,
+  getAllEntries,
+  registerUserSource, unregisterUserSource, clearUserSources,
 } from './layer-registry.js';
 import {
   setBasemap, setBasemapStack, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
   syncLayerOrder, reorderLayer, applyLayerOpacity, setLayerVisible, removeLayer,
   createBookmark, applyBookmark, deleteBookmark, renameBookmark,
-  migrateSettings,
+  migrateSettings, ensureCatalogEntry,
 } from './layer-engine.js';
 
 import {
@@ -334,7 +335,6 @@ function buildAppStyle() {
       // larger shared tile cache does not isolate those different behaviors.
       [DEM_TERRAIN_SOURCE_ID]: buildTerrainSourceDefinition(),
       [DEM_HD_SOURCE_ID]: buildTerrainSourceDefinition(),
-      ...buildCatalogSources(),
     },
     layers: [
       {
@@ -345,7 +345,6 @@ function buildAppStyle() {
       buildDemLoaderLayer(),
       buildAnalysisLayer(),
       buildAnalysisReliefLayer(),
-      ...buildCatalogLayers()
     ]
   };
 }
@@ -362,13 +361,17 @@ function ensureLayer(map, layerDefinition, beforeId) {
   }
 }
 
-function ensureCatalogRuntimeLayers(map) {
-  const sources = buildCatalogSources();
-  for (const [sourceId, sourceDefinition] of Object.entries(sources)) {
-    ensureSource(map, sourceId, sourceDefinition);
-  }
-  for (const layer of buildCatalogLayers()) {
-    ensureLayer(map, layer, 'dem-loader');
+/**
+ * Ensure sources/layers exist for all currently active catalog entries.
+ * Used after style.load to re-inject only what's needed.
+ */
+function ensureActiveCatalogLayers(map, state) {
+  const active = new Set([
+    ...(state.basemapStack || []),
+    ...(state.activeOverlays || []),
+  ]);
+  for (const catalogId of active) {
+    ensureCatalogEntry(map, catalogId);
   }
 }
 
@@ -409,7 +412,7 @@ function ensureAppRuntimeLayers(map) {
   ensureLayer(map, buildDemLoaderLayer());
   ensureLayer(map, buildAnalysisLayer());
   ensureLayer(map, buildAnalysisReliefLayer());
-  ensureCatalogRuntimeLayers(map);
+  ensureActiveCatalogLayers(map, state);
   ensureContourLayers(map);
   ensureDebugGridLayer(map);
 }
@@ -1720,8 +1723,6 @@ if (isTauri()) {
     }
     if (registered > 0) {
       console.info(`[tile-sources] registered ${registered} custom map(s) from tile server`);
-      // Add the new sources/layers to the live map
-      ensureCatalogRuntimeLayers(map);
       renderBasemapPrimary();
       renderAddLayerSelect();
       renderLayerOrderPanel();
@@ -1793,7 +1794,6 @@ Object.defineProperties(window, {
   layerRegistry:       { get() { return _layerRegistryProxy; } },
   renderAddLayerSelect: { get() { return renderAddLayerSelect; } },
   refreshTileLayers:   { get() { return () => {
-    ensureCatalogRuntimeLayers(map);
     renderBasemapPrimary();
     renderAddLayerSelect();
     renderLayerOrderPanel();

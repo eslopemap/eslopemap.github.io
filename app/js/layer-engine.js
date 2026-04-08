@@ -13,6 +13,26 @@ function setLayerVisibilitySafe(map, layerId, visible) {
   map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
 }
 
+/**
+ * On-demand: ensure a single catalog entry's sources and layers exist on the map.
+ * Layers are added hidden (visibility: 'none') before 'dem-loader'.
+ */
+export function ensureCatalogEntry(map, catalogId) {
+  const entry = getCatalogEntry(catalogId);
+  if (!entry) return;
+  for (const [sourceId, sourceDef] of Object.entries(entry.sources)) {
+    if (!map.getSource(sourceId)) map.addSource(sourceId, sourceDef);
+  }
+  for (const layer of entry.layers) {
+    if (!map.getLayer(layer.id)) {
+      map.addLayer(
+        { ...layer, layout: { ...(layer.layout || {}), visibility: 'none' } },
+        map.getLayer('dem-loader') ? 'dem-loader' : undefined,
+      );
+    }
+  }
+}
+
 function getNativeBasemapLayerIds(map) {
   if (!map.__nativeBasemapLayerIds) {
     map.__nativeBasemapLayerIds = new Map();
@@ -102,11 +122,17 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
     if (typeof map.__ensureBasemapStyle === 'function') {
       await map.__ensureBasemapStyle(id);
     }
+    // On-demand: create sources/layers if not yet on the map
+    ensureCatalogEntry(map, id);
   }
 
-  // Collect all layer IDs that should be visible
+  // Collect all layer IDs that should be visible (respecting manual hidden state)
+  const hiddenEntries = new Set(
+    Object.entries(state.layerSettings || {}).filter(([, s]) => s.hidden).map(([id]) => id)
+  );
   const activeIds = new Set();
   for (const id of ids) {
+    if (hiddenEntries.has(id)) continue; // respect manually-hidden basemaps
     for (const layerId of getCatalogLayerIdsForMap(map, id)) {
       activeIds.add(layerId);
     }
@@ -162,6 +188,8 @@ export function setOverlay(map, state, catalogId, visible) {
   const overlays = new Set(state.activeOverlays);
   if (visible) {
     overlays.add(catalogId);
+    // On-demand: create sources/layers if not yet on the map
+    ensureCatalogEntry(map, catalogId);
   } else {
     overlays.delete(catalogId);
   }
@@ -182,8 +210,12 @@ export function setOverlay(map, state, catalogId, visible) {
  */
 export function applyAllOverlays(map, state) {
   const active = new Set(state.activeOverlays);
+  const hiddenEntries = new Set(
+    Object.entries(state.layerSettings || {}).filter(([, s]) => s.hidden).map(([id]) => id)
+  );
   for (const entry of getOverlays()) {
-    const visible = active.has(entry.id);
+    const visible = active.has(entry.id) && !hiddenEntries.has(entry.id);
+    if (active.has(entry.id)) ensureCatalogEntry(map, entry.id);
     for (const layer of entry.layers) {
       setLayerVisibilitySafe(map, layer.id, visible);
     }

@@ -446,34 +446,6 @@ export function getAllBasemapLayerIds() {
   return getBasemaps().flatMap(e => e.layers.map(l => l.id));
 }
 
-/** All MapLibre layer IDs for all overlays */
-export function getAllOverlayLayerIds() {
-  return getOverlays().flatMap(e => e.layers.map(l => l.id));
-}
-
-/** Build aggregated sources object from the full catalog (for initial style) */
-export function buildCatalogSources() {
-  const sources = {};
-  for (const entry of getAllEntries()) {
-    Object.assign(sources, entry.sources);
-  }
-  return sources;
-}
-
-/** Build aggregated layers array from the full catalog (all start hidden) */
-export function buildCatalogLayers() {
-  const layers = [];
-  for (const entry of getAllEntries()) {
-    for (const layer of entry.layers) {
-      layers.push({
-        ...layer,
-        layout: { ...(layer.layout || {}), visibility: 'none' }
-      });
-    }
-  }
-  return layers;
-}
-
 /**
  * Generate an auto-name for a bookmark from current basemap + overlays.
  * Format: "<Basemap> + <Overlay> [+ N others]"

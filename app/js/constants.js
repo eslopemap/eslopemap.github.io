@@ -160,8 +160,8 @@ export function interpolateStopsToLegendCss(stops) {
   return `linear-gradient(to right, ${parts.join(', ')})`;
 }
 
-// Layer group arrays have been moved to layer-registry.js (LAYER_CATALOG).
-// Use getCatalogEntry(), getLayerIds(), getAllBasemapLayerIds() from layer-registry.js instead.
+// Layer catalog lives in layer-registry.js (LAYER_CATALOG).
+// Layers are instantiated on-demand via ensureCatalogEntry() in layer-engine.js.
 
 /** MapLibre paint expression for basemap opacity via global-state */
 export function basemapOpacityExpr(multiplier = 1) {

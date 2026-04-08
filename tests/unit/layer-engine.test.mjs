@@ -206,24 +206,35 @@ describe('user source registry', () => {
     expect(srcDef.tiles).toBeUndefined();
   });
 
-  it('buildCatalogSources includes user sources', async () => {
+  it('ensureCatalogEntry adds sources and layers to map on demand', async () => {
     const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
+    const { ensureCatalogEntry } = await import('../../app/js/layer-engine.js');
     const entry = buildCatalogEntryFromTileJson(
       { name: 'test', tiles: ['http://localhost:14321/tiles/test/{z}/{x}/{y}.png'] }
     );
     registry.registerUserSource(entry);
-    const sources = registry.buildCatalogSources();
-    expect(sources['src-tj-test']).toBeTruthy();
+
+    const map = createMapMock();
+    ensureCatalogEntry(map, entry.id);
+
+    expect(map.sources.has('src-tj-test')).toBe(true);
+    expect(map.layers.has('basemap-tilejson-test')).toBe(true);
+    expect(map.layers.get('basemap-tilejson-test').layout.visibility).toBe('none');
   });
 
-  it('buildCatalogLayers includes user layers', async () => {
+  it('ensureCatalogEntry is idempotent', async () => {
     const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
+    const { ensureCatalogEntry } = await import('../../app/js/layer-engine.js');
     const entry = buildCatalogEntryFromTileJson(
       { name: 'test2', tiles: ['http://localhost:14321/tiles/test2/{z}/{x}/{y}.png'] }
     );
     registry.registerUserSource(entry);
-    const layers = registry.buildCatalogLayers();
-    expect(layers.some(l => l.id === 'basemap-tilejson-test2')).toBe(true);
+
+    const map = createMapMock();
+    ensureCatalogEntry(map, entry.id);
+    ensureCatalogEntry(map, entry.id); // second call should be no-op
+
+    expect(map.layers.has('basemap-tilejson-test2')).toBe(true);
   });
 });
 
