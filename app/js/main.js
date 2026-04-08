@@ -19,7 +19,6 @@ import {
 import {
   buildCatalogSources, buildCatalogLayers, getBasemaps, getOverlays, getCatalogEntry,
   getAllEntries, registerUserSource, unregisterUserSource, clearUserSources, getUserSources,
-  buildCatalogEntryFromTileSource,
 } from './layer-registry.js';
 import {
   setBasemap, setBasemapStack, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
@@ -1731,7 +1730,7 @@ if (isTauri()) {
 // ---- Expose key variables for E2E tests ----
 
 const _layerRegistryProxy = {
-  buildCatalogEntryFromTileSource, registerUserSource, unregisterUserSource,
+  buildCatalogEntryFromTileJson, registerUserSource, unregisterUserSource,
   clearUserSources, getUserSources, getAllEntries, getBasemaps, getOverlays,
 };
 

@@ -57,15 +57,22 @@ async function loadWithUserSource(page, tileServerUrl, opts) {
     { timeout: 10000 }
   );
 
-  // Register the user source via the layer-registry API
+  // Register the user source via the tauri-bridge API logic which expects a TileJSON
   await page.evaluate(({ tileBaseUrl, name, kind }) => {
-    // Access the layer-registry module via the global exports
+    const tj = kind === 'pmtiles' ? {
+      name,
+      protocol: 'pmtiles',
+      url: `pmtiles://${tileBaseUrl}/pmtiles/${name}`,
+      format: 'pmtiles'
+    } : {
+      name,
+      tiles: [`${tileBaseUrl}/tiles/${name}/{z}/{x}/{y}.png`],
+      format: 'png'
+    };
+
+    // Access the tauri-bridge module via layerRegistry proxy if possible
     const registry = (0, eval)('layerRegistry');
-    const entry = registry.buildCatalogEntryFromTileSource(
-      { name, path: `/fixtures/${name}`, kind },
-      tileBaseUrl,
-      'basemap'
-    );
+    const entry = registry.buildCatalogEntryFromTileJson(tj, 'basemap');
     registry.registerUserSource(entry);
 
     // Add the source and layer to the map
@@ -178,17 +185,20 @@ test.describe('User Catalog Integration', () => {
       registry.clearUserSources();
 
       // Register MBTiles source
-      const mbtEntry = registry.buildCatalogEntryFromTileSource(
-        { name: 'test-mbt', path: '/x.mbtiles', kind: 'mbtiles' },
-        tileBaseUrl
-      );
+      const mbtEntry = registry.buildCatalogEntryFromTileJson({
+        name: 'test-mbt',
+        tiles: [`${tileBaseUrl}/tiles/test-mbt/{z}/{x}/{y}.png`],
+        format: 'png'
+      }, 'basemap');
       registry.registerUserSource(mbtEntry);
 
       // Register PMTiles source
-      const pmtEntry = registry.buildCatalogEntryFromTileSource(
-        { name: 'test-pmt', path: '/x.pmtiles', kind: 'pmtiles' },
-        tileBaseUrl
-      );
+      const pmtEntry = registry.buildCatalogEntryFromTileJson({
+        name: 'test-pmt',
+        protocol: 'pmtiles',
+        url: `pmtiles://${tileBaseUrl}/pmtiles/test-pmt`,
+        format: 'pmtiles'
+      }, 'basemap');
       registry.registerUserSource(pmtEntry);
 
       // Verify catalog

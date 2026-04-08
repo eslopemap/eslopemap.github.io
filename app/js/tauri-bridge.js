@@ -175,14 +175,22 @@ export function buildCatalogEntryFromTileJson(tj, category = 'basemap') {
   const name = tj.name || 'unknown';
   const id = `tilejson-${name}`;
   const sourceId = `src-tj-${name}`;
-  const format = tj.format || 'png';
-  const tiles = tj.tiles || [];
 
-  const sourceDef = {
-    type: 'raster',
-    tiles,
-    tileSize: 256,
-  };
+  let sourceDef;
+  if (tj.protocol === 'pmtiles') {
+    sourceDef = {
+      type: 'raster',
+      url: tj.url,
+      tileSize: 256,
+    };
+  } else {
+    sourceDef = {
+      type: 'raster',
+      tiles: tj.tiles || [],
+      tileSize: 256,
+    };
+  }
+
   if (tj.minzoom != null) sourceDef.minzoom = tj.minzoom;
   if (tj.maxzoom != null) sourceDef.maxzoom = tj.maxzoom;
   if (tj.attribution) sourceDef.attribution = tj.attribution;

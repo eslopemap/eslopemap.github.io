@@ -170,52 +170,60 @@ describe('user source registry', () => {
     expect(registry.getOverlays().length).toBe(builtInCount + 1);
   });
 
-  it('buildCatalogEntryFromTileSource creates valid entry for mbtiles', () => {
-    const src = { name: 'alps-topo', path: '/data/alps.mbtiles', kind: 'mbtiles' };
-    const entry = registry.buildCatalogEntryFromTileSource(src, 'http://127.0.0.1:14321');
+  it('buildCatalogEntryFromTileJson creates valid entry for mbtiles', async () => {
+    const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
+    const tj = {
+      name: 'alps-topo',
+      tiles: ['http://127.0.0.1:14321/tiles/alps-topo/{z}/{x}/{y}.png'],
+      format: 'png',
+    };
+    const entry = buildCatalogEntryFromTileJson(tj, 'basemap');
 
-    expect(entry.id).toBe('user-alps-topo');
+    expect(entry.id).toBe('tilejson-alps-topo');
     expect(entry.label).toBe('alps-topo');
     expect(entry.category).toBe('basemap');
     expect(entry.userDefined).toBe(true);
-    expect(entry.localPath).toBe('/data/alps.mbtiles');
-    expect(entry.tileSourceKind).toBe('mbtiles');
-    expect(entry.sources['user-src-alps-topo'].tiles[0]).toContain('/tiles/alps-topo/');
+    expect(entry.sources['src-tj-alps-topo'].tiles[0]).toContain('/tiles/alps-topo/');
     expect(entry.layers).toHaveLength(1);
-    expect(entry.layers[0].id).toBe('basemap-user-alps-topo');
+    expect(entry.layers[0].id).toBe('basemap-tilejson-alps-topo');
   });
 
-  it('buildCatalogEntryFromTileSource creates valid entry for pmtiles', () => {
-    const src = { name: 'satellite', path: '/data/sat.pmtiles', kind: 'pmtiles' };
-    const entry = registry.buildCatalogEntryFromTileSource(src, 'http://127.0.0.1:14321', 'overlay');
+  it('buildCatalogEntryFromTileJson creates valid entry for pmtiles', async () => {
+    const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
+    const tj = {
+      name: 'satellite',
+      protocol: 'pmtiles',
+      url: 'pmtiles://http://127.0.0.1:14321/pmtiles/satellite',
+      format: 'pmtiles',
+    };
+    const entry = buildCatalogEntryFromTileJson(tj, 'overlay');
 
-    expect(entry.id).toBe('user-satellite');
+    expect(entry.id).toBe('tilejson-satellite');
     expect(entry.category).toBe('overlay');
-    expect(entry.tileSourceKind).toBe('pmtiles');
     // PMTiles sources use pmtiles:// protocol URL, not tiles array
-    const srcDef = entry.sources['user-src-satellite'];
+    const srcDef = entry.sources['src-tj-satellite'];
     expect(srcDef.url).toBe('pmtiles://http://127.0.0.1:14321/pmtiles/satellite');
     expect(srcDef.tiles).toBeUndefined();
   });
 
-  it('buildCatalogSources includes user sources', () => {
-    const entry = registry.buildCatalogEntryFromTileSource(
-      { name: 'test', path: '/x.mbtiles', kind: 'mbtiles' },
-      'http://localhost:14321'
+  it('buildCatalogSources includes user sources', async () => {
+    const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
+    const entry = buildCatalogEntryFromTileJson(
+      { name: 'test', tiles: ['http://localhost:14321/tiles/test/{z}/{x}/{y}.png'] }
     );
     registry.registerUserSource(entry);
     const sources = registry.buildCatalogSources();
-    expect(sources['user-src-test']).toBeTruthy();
+    expect(sources['src-tj-test']).toBeTruthy();
   });
 
-  it('buildCatalogLayers includes user layers', () => {
-    const entry = registry.buildCatalogEntryFromTileSource(
-      { name: 'test2', path: '/x.mbtiles', kind: 'mbtiles' },
-      'http://localhost:14321'
+  it('buildCatalogLayers includes user layers', async () => {
+    const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
+    const entry = buildCatalogEntryFromTileJson(
+      { name: 'test2', tiles: ['http://localhost:14321/tiles/test2/{z}/{x}/{y}.png'] }
     );
     registry.registerUserSource(entry);
     const layers = registry.buildCatalogLayers();
-    expect(layers.some(l => l.id === 'basemap-user-test2')).toBe(true);
+    expect(layers.some(l => l.id === 'basemap-tilejson-test2')).toBe(true);
   });
 });
 

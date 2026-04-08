@@ -193,6 +193,20 @@ pub fn build_tilejson_for_mbtiles(entry: &TileSourceEntry, base_url: &str) -> se
     tj
 }
 
+pub fn build_tilejson_for_pmtiles(entry: &TileSourceEntry, base_url: &str) -> serde_json::Value {
+    // PMTiles does not use standard XYZ URLs. MapLibre's PMTiles integration uses the pmtiles:// protocol.
+    // We emit a pseudo-TileJSON descriptor so the frontend can build the source correctly.
+    let url = [base_url, "/pmtiles/", &entry.name].concat();
+
+    serde_json::json!({
+        "tilejson": "3.0.0",
+        "name": entry.name.clone(),
+        "protocol": "pmtiles",
+        "url": format!("pmtiles://{url}"),
+        "format": "pmtiles",
+    })
+}
+
 /// Generate a TileJSON document for a cached upstream source (e.g. DEM).
 pub fn build_tilejson_for_cached(name: &str, upstream_url: &str, base_url: &str) -> serde_json::Value {
     let tile_url = [base_url, "/tiles/", name, "/{z}/{x}/{y}.webp"].concat();
@@ -511,6 +525,8 @@ pub fn spawn_tile_server(
                     for entry in srcs.iter() {
                         if entry.kind == TileSourceKind::Mbtiles {
                             all.push(build_tilejson_for_mbtiles(entry, &base_url));
+                        } else if entry.kind == TileSourceKind::Pmtiles {
+                            all.push(build_tilejson_for_pmtiles(entry, &base_url));
                         }
                     }
                 }
@@ -533,8 +549,13 @@ pub fn spawn_tile_server(
                     Some(build_tilejson_for_cached(&cs.name, &cs.upstream_url, &base_url))
                 } else {
                     let srcs = sources.lock().unwrap_or_else(|e| e.into_inner());
-                    srcs.iter().find(|e| e.name == source_name && e.kind == TileSourceKind::Mbtiles)
-                        .map(|e| build_tilejson_for_mbtiles(e, &base_url))
+                    srcs.iter().find(|e| e.name == source_name).map(|e| {
+                        if e.kind == TileSourceKind::Mbtiles {
+                            build_tilejson_for_mbtiles(e, &base_url)
+                        } else {
+                            build_tilejson_for_pmtiles(e, &base_url)
+                        }
+                    })
                 };
                 if let Some(tj) = tj {
                     let body = serde_json::to_vec(&tj).unwrap_or_default();

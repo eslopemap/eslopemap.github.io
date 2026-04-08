@@ -406,58 +406,6 @@ export function getUserSources() {
   return [..._userSources];
 }
 
-/**
- * Build a CatalogEntry from a Tauri TileSourceEntry.
- * @param {{name: string, path: string, kind: 'mbtiles'|'pmtiles'}} src
- * @param {string} tileBaseUrl — e.g. 'http://127.0.0.1:14321'
- * @param {'basemap'|'overlay'} [category='basemap']
- * @returns {CatalogEntry}
- */
-export function buildCatalogEntryFromTileSource(src, tileBaseUrl, category = 'basemap') {
-  const id = `user-${src.name}`;
-  const sourceId = `user-src-${src.name}`;
-
-  let sourceDef;
-  if (src.kind === 'pmtiles') {
-    // PMTiles: use pmtiles:// protocol URL pointing at the local range-serving endpoint.
-    // The pmtiles JS library's Protocol class handles tile extraction via Range requests.
-    sourceDef = {
-      type: 'raster',
-      url: `pmtiles://${tileBaseUrl}/pmtiles/${encodeURIComponent(src.name)}`,
-      tileSize: 256,
-      maxzoom: 18,
-    };
-  } else {
-    // MBTiles: standard XYZ tile URL served by the tile server.
-    sourceDef = {
-      type: 'raster',
-      tiles: [`${tileBaseUrl}/tiles/${encodeURIComponent(src.name)}/{z}/{x}/{y}.png`],
-      tileSize: 256,
-      maxzoom: 18,
-    };
-  }
-
-  return {
-    id,
-    label: src.name,
-    category,
-    region: null,
-    defaultView: null,
-    userDefined: true,
-    localPath: src.path,
-    tileSourceKind: src.kind,
-    sources: { [sourceId]: sourceDef },
-    layers: [
-      {
-        id: `basemap-${id}`,
-        type: 'raster',
-        source: sourceId,
-        paint: { 'raster-opacity': basemapOpacityExpr(1) }
-      }
-    ]
-  };
-}
-
 // ── Lookup helpers ──────────────────────────────────────────────────
 
 let _byId = new Map(LAYER_CATALOG.map(e => [e.id, e]));
