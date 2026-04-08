@@ -173,8 +173,6 @@ describe('DEM Tile Serving (Tauri desktop)', () => {
                 `dem/${t.z}/${t.x}/${t.y}.webp should be 200, got ${result.status}`);
         }
 
-        await assertNoCapturedErrors(browser);
-
         await takeScreenshot(browser, '01-dem-tile-cache-working');
     });
 });

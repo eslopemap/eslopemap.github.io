@@ -388,13 +388,11 @@ fn main() {
         tile_cache.clone(),
     );
 
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init());
     #[cfg(feature = "webdriver")]
-    {
-        builder = builder.plugin(tauri_plugin_webdriver::init());
-    }
+    let builder = builder.plugin(tauri_plugin_webdriver::init());
     builder
         .manage(Mutex::new(AppState {
             manager,
