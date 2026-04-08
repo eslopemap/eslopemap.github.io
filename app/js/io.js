@@ -3,7 +3,7 @@
 
 import { parseGPX as gpxjsParse, stringifyGPX } from '@we-gold/gpxjs';
 import { downloadFile } from './utils.js';
-import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile, onGpxSyncEvents, addTileSource, fetchAvailableSources, buildCatalogEntryFromTileJson, scanTileFolder } from './tauri-bridge.js';
+import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile } from './tauri-bridge.js';
 
 let tracksFns = {};  // wired at init
 
@@ -616,8 +616,14 @@ export function initIO(deps) {
         reader.onload = () => importFileContent(file.name, reader.result);
         reader.readAsText(file);
       } else if (TILE_PATTERN.test(file.name)) {
-        // Tile files require Tauri desktop; warn in browser
-        console.warn('[drop] Tile file drag-and-drop requires desktop mode:', file.name);
+        const path = resolveDroppedTilePath(null, file);
+        if (!isTauri()) {
+          console.warn('[drop] Tile file drag-and-drop requires desktop mode:', file.name);
+        } else if (!path) {
+          console.error('[tile-drop] No path available for:', file.name);
+        } else {
+          await handleTileFile(file.name, path);
+        }
       } else {
         console.warn('[drop] Unsupported file type, skipping:', file.name);
       }
@@ -656,6 +662,20 @@ export function initIO(deps) {
 
 const FILE_PATTERN = /\.(gpx|geojson|json)$/i;
 const TILE_PATTERN = /\.(mbtiles|pmtiles)$/i;
+
+/**
+ * Resolve the filesystem path for a dropped tile file.
+ * Prefers the absolute `File.path` exposed by Tauri/WebKit over
+ * `FileSystemEntry.fullPath`, which can be folder-relative for drag-dropped entries.
+ * @param {{ fullPath?: string } | null | undefined} entry
+ * @param {{ path?: string } | null | undefined} file
+ * @returns {string}
+ */
+export function resolveDroppedTilePath(entry, file) {
+  if (typeof file?.path === 'string' && file.path) return file.path;
+  if (typeof entry?.fullPath === 'string' && entry.fullPath) return entry.fullPath;
+  return '';
+}
 
 /** Tier 1: File System Access API (Chrome/Edge — read+write) */
 async function openDirectoryPicker() {
@@ -754,30 +774,12 @@ async function openFolderTauri() {
   // Also scan for tile files (.mbtiles, .pmtiles) in the same folder
   let tileCount = 0;
   try {
-    const tiles = await scanTileFolder(folderPath);
+    const { scanAndRegisterDesktopTileFolder } = await import('./desktop-tile-sources.js');
+    const { tiles } = await scanAndRegisterDesktopTileFolder(folderPath, {
+      refreshUi: typeof window.refreshTileLayers === 'function' ? window.refreshTileLayers : null,
+      logPrefix: '[io]'
+    });
     tileCount = tiles.length;
-    for (const tile of tiles) {
-      try {
-        // Register tile source with the tile server
-        await addTileSource(tile.name, tile.path);
-        
-        // Fetch TileJSON and register in layer catalog
-        const sources = await fetchAvailableSources();
-        const tj = sources.find(s => s.name === tile.name);
-        if (tj && window.layerRegistry?.registerUserSource) {
-          const entry = buildCatalogEntryFromTileJson(tj);
-          window.layerRegistry.registerUserSource(entry);
-          console.info(`[io] Registered tile source '${tile.name}' from folder`);
-        }
-      } catch (e) {
-        console.warn('[io] Failed to register tile:', tile.path, e);
-      }
-    }
-    
-    // Refresh the map layers and UI if tiles were added
-    if (tileCount > 0 && typeof window.refreshTileLayers === 'function') {
-      window.refreshTileLayers();
-    }
   } catch (e) {
     console.warn('[io] Tile scan failed:', e);
   }
@@ -787,6 +789,72 @@ async function openFolderTauri() {
   } else {
     console.info(`[io] Loaded ${gpxCount} GPX file(s) and ${tileCount} tile source(s) from folder`);
   }
+}
+
+/** Register a tile file via Tauri IPC and add to layer catalog */
+async function handleTileFile(name, path) {
+  if (!isTauri()) return;
+
+  console.info(`[tile-drop] registering ${name} from ${path}`);
+  const { registerDesktopTileSource } = await import('./desktop-tile-sources.js');
+  await registerDesktopTileSource(name, path, {
+    refreshUi: typeof window.refreshTileLayers === 'function' ? window.refreshTileLayers : null,
+    logPrefix: '[tile-drop]'
+  });
+}
+
+/** Tier 3: Read directory entries from drag & drop */
+async function readDirectoryEntries(dirEntry) {
+  const reader = dirEntry.createReader();
+  const entries = await new Promise((resolve) => {
+    reader.readEntries(resolve);
+  });
+  for (const entry of entries) {
+    if (entry.isFile) {
+      if (FILE_PATTERN.test(entry.name)) {
+        await readFileEntry(entry);
+      } else if (TILE_PATTERN.test(entry.name)) {
+        await handleTileFileEntry(entry);
+      }
+    } else if (entry.isDirectory) {
+      await readDirectoryEntries(entry);
+    }
+  }
+}
+
+function readFileEntry(entry) {
+  return new Promise((resolve) => {
+    entry.file((file) => {
+      file.text().then(text => {
+        importFileContent(file.name, text);
+        resolve();
+      });
+    });
+  });
+}
+
+/** Handle dropped tile file (.mbtiles/.pmtiles) — Tauri only */
+async function handleTileFileEntry(entry) {
+  if (!isTauri()) {
+    console.warn('[tile-drop] Tile file drag-and-drop requires desktop mode');
+    return;
+  }
+  return new Promise((resolve) => {
+    entry.file(async (file) => {
+      try {
+        const path = resolveDroppedTilePath(entry, file);
+        if (!path) {
+          console.error('[tile-drop] No path available for:', file.name);
+          resolve();
+          return;
+        }
+        await handleTileFile(file.name, path);
+      } catch (e) {
+        console.error('[tile-drop] failed to register tile file:', e);
+      }
+      resolve();
+    });
+  });
 }
 
 /** Save all tracks to a folder (Tier 1 only — File System Access API) */
@@ -840,95 +908,5 @@ async function saveToFolderTauri() {
     const filePath = `${folder}/${safeName}.gpx`;
     const gpxContent = buildTrackGPXString(t.name, t.coords);
     await saveGpxFile(filePath, gpxContent);
-  }
-}
-
-/** Tier 3: Read directory entries from drag & drop */
-async function readDirectoryEntries(dirEntry) {
-  const reader = dirEntry.createReader();
-  const entries = await new Promise((resolve) => {
-    reader.readEntries(resolve);
-  });
-  for (const entry of entries) {
-    if (entry.isFile) {
-      if (FILE_PATTERN.test(entry.name)) {
-        await readFileEntry(entry);
-      } else if (TILE_PATTERN.test(entry.name)) {
-        await handleTileFileEntry(entry);
-      }
-    } else if (entry.isDirectory) {
-      await readDirectoryEntries(entry);
-    }
-  }
-}
-
-function readFileEntry(entry) {
-  return new Promise((resolve) => {
-    entry.file((file) => {
-      file.text().then(text => {
-        importFileContent(file.name, text);
-        resolve();
-      });
-    });
-  });
-}
-
-/** Handle dropped tile file (.mbtiles/.pmtiles) — Tauri only */
-async function handleTileFileEntry(entry) {
-  if (!isTauri()) {
-    console.warn('[tile-drop] Tile file drag-and-drop requires desktop mode');
-    return;
-  }
-  return new Promise((resolve) => {
-    entry.file(async (file) => {
-      try {
-        // Use entry.fullPath (FileSystemFileEntry API) instead of file.path
-        // In Tauri, fullPath gives the absolute filesystem path
-        const path = entry.fullPath || file.path;
-        if (!path) {
-          console.error('[tile-drop] No path available for:', file.name);
-          resolve();
-          return;
-        }
-        await handleTileFile(file.name, path);
-      } catch (e) {
-        console.error('[tile-drop] failed to register tile file:', e);
-      }
-      resolve();
-    });
-  });
-}
-
-/** Register a tile file via Tauri IPC and add to layer catalog */
-async function handleTileFile(name, path) {
-  if (!isTauri()) return;
-  
-  // Extract a clean name (remove extension)
-  const cleanName = name.replace(/\.(mbtiles|pmtiles)$/i, '');
-  
-  console.info(`[tile-drop] registering ${name} from ${path}`);
-  
-  // Register with tile server
-  await addTileSource(cleanName, path);
-  
-  // Fetch all available sources to get the TileJSON for this one
-  const sources = await fetchAvailableSources();
-  const tj = sources.find(s => s.name === cleanName);
-  
-  if (tj) {
-    const entry = buildCatalogEntryFromTileJson(tj);
-    
-    // Register via window.layerRegistry to avoid circular import
-    if (window.layerRegistry?.registerUserSource) {
-      window.layerRegistry.registerUserSource(entry);
-      console.info(`[tile-drop] registered '${cleanName}' as layer`);
-      
-      // Add to map and refresh UI
-      if (typeof window.refreshTileLayers === 'function') {
-        window.refreshTileLayers();
-      }
-    }
-  } else {
-    console.warn(`[tile-drop] TileJSON not found for '${cleanName}'`);
   }
 }

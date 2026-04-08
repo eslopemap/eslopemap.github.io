@@ -184,9 +184,8 @@ export function updateCursorInfoVisibility(state) {
 
 // ---- URL hash ----
 
-export function parseHashParams() {
-  const hash = window.location.hash.replace(/^#/, '');
-  const fallback = {
+export function getDefaultViewState() {
+  return {
     center: [6.8652, 45.8326],
     zoom: 12,
     basemap: null,
@@ -196,8 +195,13 @@ export function parseHashParams() {
     terrainExaggeration: 1.4,
     testMode: false,
     bearing: 0,
-    pitch: 0
+    pitch: 0,
   };
+}
+
+export function parseHashParams() {
+  const hash = window.location.hash.replace(/^#/, '');
+  const overrides = {};
 
   if (hash.includes('=')) {
     const params = new URLSearchParams(hash);
@@ -222,21 +226,19 @@ export function parseHashParams() {
     const hasPitch = Number.isFinite(pitchRaw) && pitchRaw >= 0 && pitchRaw <= 85;
     const validModes = new Set(['', 'slope+relief', 'slope', 'aspect', 'color-relief']);
 
-    return {
-      center: (hasLng && hasLat) ? [lngRaw, latRaw] : fallback.center,
-      zoom: hasZoom ? zoomRaw : fallback.zoom,
-      basemap: (basemapRaw && getCatalogEntry(basemapRaw)) ? basemapRaw : null,
-      mode: validModes.has(modeRaw) ? modeRaw : fallback.mode,
-      slopeOpacity: hasOpacity ? opacityRaw : fallback.slopeOpacity,
-      terrain3d: terrain3dRaw == null ? fallback.terrain3d : terrain3dRaw,
-      terrainExaggeration: hasTerrainExaggeration ? terrainExaggerationRaw : fallback.terrainExaggeration,
-      testMode: testModeRaw == null ? fallback.testMode : testModeRaw,
-      bearing: hasBearing ? bearingRaw : fallback.bearing,
-      pitch: hasPitch ? pitchRaw : fallback.pitch
-    };
+    if (params.has('lng') && params.has('lat') && hasLng && hasLat) overrides.center = [lngRaw, latRaw];
+    if (params.has('zoom') && hasZoom) overrides.zoom = zoomRaw;
+    if (params.has('basemap') && basemapRaw && getCatalogEntry(basemapRaw)) overrides.basemap = basemapRaw;
+    if (params.has('mode') && validModes.has(modeRaw)) overrides.mode = modeRaw;
+    if (params.has('opacity') && hasOpacity) overrides.slopeOpacity = opacityRaw;
+    if (params.has('terrain') && terrain3dRaw != null) overrides.terrain3d = terrain3dRaw;
+    if (params.has('exaggeration') && hasTerrainExaggeration) overrides.terrainExaggeration = terrainExaggerationRaw;
+    if (params.has('test_mode') && testModeRaw != null) overrides.testMode = testModeRaw;
+    if (params.has('bearing') && hasBearing) overrides.bearing = bearingRaw;
+    if (params.has('pitch') && hasPitch) overrides.pitch = pitchRaw;
   }
 
-  return fallback;
+  return overrides;
 }
 
 export function syncViewToUrl(map, state) {

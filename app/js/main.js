@@ -13,7 +13,7 @@ import {
   applyTerrainState, applyModeState,
   basemapOpacityExpr, setGlobalStatePropertySafe, updateCursorInfoVisibility,
   setCursorInfo, showCursorTooltipAt, hideCursorTooltip,
-  getVisibleTriplesForMap, initSearch,
+  getDefaultViewState, getVisibleTriplesForMap, initSearch,
 } from './ui.js';
 
 import {
@@ -36,6 +36,8 @@ import { initTracks, getTracksState, resetForTest } from './tracks.js';
 import { initProfile, updateProfile, getProfileChart } from './profile.js';
 import { importFileContent } from './io.js';
 import { loadSettings, saveSettings, loadUserSources } from './persist.js';
+import { deriveInitialState, applyUrlOverrides } from './startup-state.js';
+import { discoverAndRegisterDesktopTileSources } from './desktop-tile-sources.js';
 import { initShortcuts, registerShortcut } from './shortcuts.js';
 import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
 import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection, getCurrentSelection } from './selection-tools.js';
@@ -44,7 +46,7 @@ import { initWebImport } from './web-import.js';
 import { initSavedDataPanel } from './saved-data.js';
 
 import { lonLatToTile, normalizeTileX, tileToLngLatBounds } from './utils.js';
-import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx, fetchAvailableSources, buildCatalogEntryFromTileJson } from './tauri-bridge.js';
+import { getDemTileUrl, isTauri, onGpxSyncEvents, resolveConflict, loadGpx } from './tauri-bridge.js';
 import { initPmtilesProtocol } from './pmtiles-protocol.js';
 
 // ---- State (reactive via Proxy) ----
@@ -168,10 +170,13 @@ if (savedUserSources) {
   }
 }
 
-const initialView = parseHashParams();
 const hasUrlState = window.location.hash.includes('=');
-const isTestMode = Boolean(initialView.testMode);
-const shouldAttemptInitialGeolocate = !isTestMode && !hasUrlState;
+const { initialView, isTestMode, shouldAttemptInitialGeolocate } = deriveInitialState({
+  persistedSettings: persisted,
+  urlOverrides: parseHashParams(),
+  defaultView: getDefaultViewState(),
+  hasUrlState,
+});
 if (initialView.basemap) {
   state.basemap = initialView.basemap;
   state.basemapStack = [initialView.basemap];
@@ -180,6 +185,10 @@ state.mode = initialView.mode;
 state.slopeOpacity = initialView.slopeOpacity;
 state.terrain3d = initialView.terrain3d;
 state.terrainExaggeration = initialView.terrainExaggeration;
+state.viewCenter = initialView.center;
+state.viewZoom = initialView.zoom;
+state.viewBearing = initialView.bearing;
+state.viewPitch = initialView.pitch;
 if (isTestMode) {
   applyTestModeState(state);
 }
@@ -217,6 +226,7 @@ if (persisted) {
     document.getElementById('profileSmoothing').value = String(state.profileSmoothing);
     document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
   }
+  if (persisted.showTileGrid != null) document.getElementById('showTileGrid').checked = state.showTileGrid;
 }
 if (isTestMode) {
   syncTestModeUi(state);
@@ -234,6 +244,15 @@ let _settingsSaveTimer = 0;
 function scheduleSettingsSave() {
   clearTimeout(_settingsSaveTimer);
   _settingsSaveTimer = setTimeout(() => saveSettings(state), 300);
+}
+
+function syncMapViewState() {
+  const center = map.getCenter();
+  state.viewCenter = [Number(center.lng.toFixed(6)), Number(center.lat.toFixed(6))];
+  state.viewZoom = Number(map.getZoom().toFixed(2));
+  state.viewBearing = Number(map.getBearing().toFixed(2));
+  state.viewPitch = Number(map.getPitch().toFixed(2));
+  syncViewToUrl(map, state);
 }
 
 // ---- Contour line source ----
@@ -494,7 +513,7 @@ const terrain3dControl = new Terrain3DControl(state, () => {
   if (!state.terrain3d && map.getPitch() > 0) {
     map.easeTo({ pitch: 0, duration: 500 });
   }
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -928,7 +947,7 @@ document.getElementById('mode').addEventListener('change', (e) => {
   state.mode = e.target.value;
   updateLegend(state, map);
   applyModeState(map, state);
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -941,7 +960,7 @@ document.getElementById('basemap').addEventListener('change', async (e) => {
   const contourCb = document.getElementById('showContours');
   if (contourCb) contourCb.checked = state.showContours;
   applyContourVisibility(map, state);
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -979,7 +998,7 @@ document.getElementById('slopeOpacity').addEventListener('input', (e) => {
   state.slopeOpacity = Number(e.target.value);
   document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
   applyModeState(map, state);
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -1029,7 +1048,7 @@ document.getElementById('terrain3d').addEventListener('change', (e) => {
   if (!state.terrain3d && map.getPitch() > 0) {
     map.easeTo({ pitch: 0, duration: 500 });
   }
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -1040,7 +1059,7 @@ document.getElementById('terrainExaggeration').addEventListener('input', (e) => 
   if (state.terrain3d) {
     applyTerrainState(map, state);
   }
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -1229,7 +1248,7 @@ function renderLayerOrderPanel() {
       document.getElementById('mode').value = state.mode;
       updateLegend(state, map);
       applyModeState(map, state);
-      syncViewToUrl(map, state);
+      syncMapViewState();
       map.triggerRepaint();
       scheduleSettingsSave();
     },
@@ -1487,7 +1506,7 @@ document.getElementById('basemap-primary')?.addEventListener('change', async (e)
   applyContourVisibility(map, state);
   renderLayerOrderPanel();
   renderAddLayerSelect();
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 });
@@ -1539,24 +1558,28 @@ map.on('load', async () => {
   applyContourVisibility(map, state);
   if (state.showTileGrid) updateDebugGridSource(map);
   renderLayerOrderPanel();
-  syncViewToUrl(map, state);
+  syncMapViewState();
   map.on('moveend', () => {
-    syncViewToUrl(map, state);
+    syncMapViewState();
     if (state.showTileGrid) updateDebugGridSource(map);
+    scheduleSettingsSave();
   });
   map.on('zoomend', () => {
-    syncViewToUrl(map, state);
+    syncMapViewState();
     if (state.showTileGrid) updateDebugGridSource(map);
     if (state.mode === 'slope+relief') {
       applyModeState(map, state);
       updateLegend(state, map);
     }
+    scheduleSettingsSave();
   });
   map.on('rotateend', () => {
-    syncViewToUrl(map, state);
+    syncMapViewState();
+    scheduleSettingsSave();
   });
   map.on('pitchend', () => {
-    syncViewToUrl(map, state);
+    syncMapViewState();
+    scheduleSettingsSave();
   });
   if (isTestMode) {
     applyTestModeMapState(map, state);
@@ -1672,20 +1695,30 @@ window.addEventListener('hashchange', async () => {
   if (hashNavInProgress) return;
   const p = parseHashParams();
   hashNavInProgress = true;
-  map.jumpTo({center: p.center, zoom: p.zoom});
-  const basemapId = p.basemap || 'osm';
-  state.basemap = basemapId;
-  state.basemapStack = [basemapId];
-  state.mode = p.mode;
-  state.slopeOpacity = p.slopeOpacity;
-  state.terrain3d = p.terrain3d;
-  state.terrainExaggeration = p.terrainExaggeration;
-  if (p.testMode) {
+
+  const overrides = applyUrlOverrides(state, p, {
+    center: [map.getCenter().lng, map.getCenter().lat],
+    zoom: map.getZoom(),
+    bearing: map.getBearing(),
+    pitch: map.getPitch(),
+  });
+
+  const { nextView, isTestMode: hashTestMode } = overrides;
+
+  map.jumpTo({
+    center: nextView.center,
+    zoom: nextView.zoom,
+    bearing: nextView.bearing,
+    pitch: nextView.pitch,
+  });
+
+  if (hashTestMode) {
     applyTestModeState(state);
   }
 
   document.getElementById('basemap').value = state.basemap;
-  { const bp = document.getElementById('basemap-primary'); if (bp) bp.value = state.basemap; }
+  const bp = document.getElementById('basemap-primary');
+  if (bp) bp.value = state.basemap;
   document.getElementById('mode').value = state.mode;
   document.getElementById('slopeOpacity').value = String(state.slopeOpacity);
   document.getElementById('slopeOpacityValue').textContent = state.slopeOpacity.toFixed(2);
@@ -1695,22 +1728,24 @@ window.addEventListener('hashchange', async () => {
   document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
   renderLayerOrderPanel();
   renderAddLayerSelect();
-  if (p.testMode) {
+
+  if (hashTestMode) {
     syncTestModeUi(state);
   }
 
   updateLegend(state, map);
-  map.setBearing(p.bearing);
-  map.setPitch(p.pitch);
   await setBasemap(map, state, state.basemap, true);
   applyAllOverlays(map, state);
   applyModeState(map, state);
   applyTerrainState(map, state);
-  if (p.testMode) {
+
+  if (hashTestMode) {
     applyTestModeMapState(map, state);
   }
+
   hashNavInProgress = false;
-  syncViewToUrl(map, state);
+  syncMapViewState();
+  scheduleSettingsSave();
   map.triggerRepaint();
 });
 
@@ -1721,20 +1756,13 @@ map.on('error', (e) => {
 // ---- Desktop: auto-discover tile sources via TileJSON ----
 
 if (isTauri()) {
-  fetchAvailableSources().then(sources => {
-    let registered = 0;
-    for (const tj of sources) {
-      if (tj.name === 'dem') continue; // DEM is handled internally
-      const entry = buildCatalogEntryFromTileJson(tj);
-      registerUserSource(entry);
-      registered++;
-    }
-    if (registered > 0) {
-      console.info(`[tile-sources] registered ${registered} custom map(s) from tile server`);
+  discoverAndRegisterDesktopTileSources({
+    refreshUi: () => {
       renderBasemapPrimary();
       renderAddLayerSelect();
       renderLayerOrderPanel();
-    }
+    },
+    logPrefix: '[tile-sources]'
   }).catch(e => console.warn('[tile-sources] discovery failed:', e));
 }
 

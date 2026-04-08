@@ -73,8 +73,10 @@ const SETTING_KEYS = [
   'basemap', 'basemapStack', 'basemapOpacities',
   'mode', 'slopeOpacity', 'basemapOpacity', 'hillshadeOpacity',
   'hillshadeMethod', 'terrain3d', 'terrainExaggeration', 'multiplyBlend',
-  'showContours', 'activeOverlays', 'layerOrder', 'layerSettings', 'bookmarks',
+  'showHillshade', 'showContours', 'showTileGrid',
+  'activeOverlays', 'layerOrder', 'layerSettings', 'bookmarks',
   'cursorInfoMode', 'pauseThreshold', 'profileSmoothing',
+  'viewCenter', 'viewZoom', 'viewBearing', 'viewPitch',
 ];
 
 export function saveSettings(state) {
@@ -118,6 +120,7 @@ export function clearAll() {
     localStorage.removeItem(SETTINGS_KEY);
     localStorage.removeItem(PROFILE_SETTINGS_KEY);
     localStorage.removeItem(WORKSPACE_KEY);
+    localStorage.removeItem(USER_SOURCES_KEY);
   } catch { /* ignore */ }
 }
 

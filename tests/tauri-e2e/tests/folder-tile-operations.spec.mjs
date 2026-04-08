@@ -158,6 +158,30 @@ describe('Folder and Tile Operations (Tauri)', () => {
       assert.strictEqual(result.fullPath, tilePath, 'fullPath should match test path');
     });
 
+    it('should prefer file.path over folder-relative entry.fullPath', async function () {
+      const tilePath = path.join(FIXTURES_DIR, 'tiles/dummy-z1-z3.mbtiles');
+      if (!fs.existsSync(tilePath)) {
+        this.skip();
+        return;
+      }
+
+      const result = await browser.executeAsync(async (testPath, done) => {
+        try {
+          const mod = await import('/app/js/io.js');
+          const resolved = mod.resolveDroppedTilePath(
+            { fullPath: '/dropped-folder/dummy-z1-z3.mbtiles' },
+            { path: testPath },
+          );
+          done({ ok: true, resolved });
+        } catch (e) {
+          done({ ok: false, error: String(e) });
+        }
+      }, tilePath);
+
+      assert.strictEqual(result.ok, true, 'Should execute without error');
+      assert.strictEqual(result.resolved, tilePath, 'Should prefer absolute file.path over entry.fullPath');
+    });
+
     it('should register dropped tile file via IPC', async function () {
       const tilePath = path.join(FIXTURES_DIR, 'tiles/dummy-z1-z3.mbtiles');
       if (!fs.existsSync(tilePath)) {

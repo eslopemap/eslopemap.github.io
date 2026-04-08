@@ -4,11 +4,13 @@ import {
   loadProfileSettings,
   loadSettings,
   loadTracks,
+  loadUserSources,
   loadWaypoints,
   loadWorkspace,
   saveProfileSettings,
   saveSettings,
   saveTracks,
+  saveUserSources,
   saveWaypoints,
   saveWorkspace,
 } from '../../app/js/persist.js';
@@ -84,6 +86,12 @@ describe('persist', () => {
       basemap: 'osm',
       mode: 'slope',
       terrain3d: true,
+      showHillshade: false,
+      showTileGrid: true,
+      viewCenter: [6.9, 45.8],
+      viewZoom: 11.25,
+      viewBearing: 22.5,
+      viewPitch: 35,
       unknownSetting: 'ignored',
     });
 
@@ -91,6 +99,12 @@ describe('persist', () => {
       basemap: 'osm',
       mode: 'slope',
       terrain3d: true,
+      showHillshade: false,
+      showTileGrid: true,
+      viewCenter: [6.9, 45.8],
+      viewZoom: 11.25,
+      viewBearing: 22.5,
+      viewPitch: 35,
     });
   });
 
@@ -203,6 +217,7 @@ describe('persist', () => {
     saveSettings({ basemap: 'osm' });
     saveProfileSettings({ xAxis: 'distance' });
     saveWorkspace({ children: [] });
+    saveUserSources([{ id: 'tilejson-demo', label: 'Demo', userDefined: true }]);
 
     clearAll();
 
@@ -211,6 +226,7 @@ describe('persist', () => {
     expect(loadSettings()).toBeNull();
     expect(loadProfileSettings()).toBeNull();
     expect(loadWorkspace()).toBeNull();
+    expect(loadUserSources()).toEqual([]);
   });
 
   it('clearTracks removes only tracks/waypoints/workspace', () => {
