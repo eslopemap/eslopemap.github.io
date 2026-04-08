@@ -106,6 +106,12 @@
     <div class="row" id="mobile-mode-row" style="display:none">
       <label><input id="mobileModeDesktop" type="checkbox" /> Mobile editing mode (desktop)</label>
     </div>
+
+    <button id="debug-layers-toggle" type="button"><span class="arrow">&#9654;</span> MapLibre layers</button>
+    <div id="debug-layers-section" class="collapsed">
+      <button id="debug-layers-refresh" type="button" style="font-size:11px; margin:2px 0 4px;">Refresh</button>
+      <pre id="debug-layers-output" style="font-size:10px; max-height:300px; overflow:auto; white-space:pre; margin:0; padding:4px; background:rgba(0,0,0,0.04); border-radius:3px;"></pre>
+    </div>
   </div>
 
   <div id="layer-order-panel" class="panel-surface panel-padded">

@@ -527,6 +527,33 @@ layerAdvancedToggle.addEventListener('click', () => {
   layerAdvancedToggle.querySelector('.arrow').classList.toggle('open', open);
 });
 
+// ---- Debug: MapLibre layers panel ----
+function refreshDebugLayers() {
+  const output = document.getElementById('debug-layers-output');
+  if (!output) return;
+  const layers = map.getStyle()?.layers || [];
+  const lines = layers.map((l, i) => {
+    const vis = l.layout?.visibility || 'visible';
+    const src = l.source || '—';
+    const flag = vis === 'visible' ? '●' : '○';
+    return `${String(i).padStart(2)} ${flag} ${l.type.padEnd(16)} ${l.id.padEnd(38)} src: ${src}`;
+  });
+  lines.push(`\nTotal: ${layers.length} layers`);
+  output.textContent = lines.join('\n');
+}
+
+const debugLayersToggle = document.getElementById('debug-layers-toggle');
+const debugLayersSection = document.getElementById('debug-layers-section');
+if (debugLayersToggle && debugLayersSection) {
+  debugLayersToggle.addEventListener('click', () => {
+    const isOpen = !debugLayersSection.classList.contains('collapsed');
+    debugLayersSection.classList.toggle('collapsed', isOpen);
+    debugLayersToggle.querySelector('.arrow')?.classList.toggle('open', !isOpen);
+    if (!isOpen) refreshDebugLayers();
+  });
+  document.getElementById('debug-layers-refresh')?.addEventListener('click', refreshDebugLayers);
+}
+
 map.on('dragstart', () => {
   setControlsCollapsed(true);
   document.getElementById('layer-order-panel')?.classList.remove('visible');
@@ -1065,12 +1092,13 @@ function renderAddLayerSelect() {
   const inStack = new Set(state.basemapStack || []);
   const activeOvl = new Set(state.activeOverlays || []);
 
-  // Basemaps group
+  // Basemaps group (built-in only; user-defined appear under Custom maps)
   const bmGroup = document.createElement('optgroup');
   bmGroup.label = 'Basemaps';
   let bmCount = 0;
   for (const entry of getBasemaps()) {
     if (entry.id === 'none') continue; // 'none' not useful as extra layer
+    if (entry.userDefined) continue;   // shown in Custom maps group
     if (inStack.has(entry.id)) continue; // already in stack
     const opt = document.createElement('option');
     opt.value = `basemap:${entry.id}`;
@@ -1684,7 +1712,11 @@ if (isTauri()) {
     }
     if (registered > 0) {
       console.info(`[tile-sources] registered ${registered} custom map(s) from tile server`);
+      // Add the new sources/layers to the live map
+      ensureCatalogRuntimeLayers(map);
+      renderBasemapPrimary();
       renderAddLayerSelect();
+      renderLayerOrderPanel();
     }
   }).catch(e => console.warn('[tile-sources] discovery failed:', e));
 }
@@ -1752,6 +1784,12 @@ Object.defineProperties(window, {
   resetForTest:        { get() { return resetForTest; } },
   layerRegistry:       { get() { return _layerRegistryProxy; } },
   renderAddLayerSelect: { get() { return renderAddLayerSelect; } },
+  refreshTileLayers:   { get() { return () => {
+    ensureCatalogRuntimeLayers(map);
+    renderBasemapPrimary();
+    renderAddLayerSelect();
+    renderLayerOrderPanel();
+  }; } },
 });
 
 

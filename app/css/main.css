@@ -169,7 +169,7 @@
     }
     #controls.collapsed { display: none; }
 
-    #advanced-toggle, #layer-advanced-toggle {
+    #advanced-toggle, #layer-advanced-toggle, #debug-layers-toggle {
       display: flex;
       align-items: center;
       gap: 4px;
@@ -183,11 +183,13 @@
       width: 100%;
       color: inherit;
     }
-    #advanced-toggle:hover, #layer-advanced-toggle:hover { opacity: 1; }
-    #advanced-toggle .arrow, #layer-advanced-toggle .arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
-    #advanced-toggle .arrow.open, #layer-advanced-toggle .arrow.open { transform: rotate(90deg); }
+    #advanced-toggle:hover, #layer-advanced-toggle:hover, #debug-layers-toggle:hover { opacity: 1; }
+    #advanced-toggle .arrow, #layer-advanced-toggle .arrow, #debug-layers-toggle .arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; }
+    #advanced-toggle .arrow.open, #layer-advanced-toggle .arrow.open, #debug-layers-toggle .arrow.open { transform: rotate(90deg); }
     #advanced-section, #layer-advanced-section { display: none; }
     #advanced-section.open, #layer-advanced-section.open { display: block; }
+    #debug-layers-section.collapsed { display: none; }
+    #debug-layers-section { display: block; }
 
     #legend {
       position: absolute;

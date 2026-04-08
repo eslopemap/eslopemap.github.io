@@ -768,9 +768,9 @@ async function openFolderTauri() {
       }
     }
     
-    // Refresh the Add layer dropdown if tiles were added
-    if (tileCount > 0 && typeof window.renderAddLayerSelect === 'function') {
-      window.renderAddLayerSelect();
+    // Refresh the map layers and UI if tiles were added
+    if (tileCount > 0 && typeof window.refreshTileLayers === 'function') {
+      window.refreshTileLayers();
     }
   } catch (e) {
     console.warn('[io] Tile scan failed:', e);
@@ -917,9 +917,9 @@ async function handleTileFile(name, path) {
       window.layerRegistry.registerUserSource(entry);
       console.info(`[tile-drop] registered '${cleanName}' as layer`);
       
-      // Refresh the Add layer dropdown
-      if (typeof window.renderAddLayerSelect === 'function') {
-        window.renderAddLayerSelect();
+      // Add to map and refresh UI
+      if (typeof window.refreshTileLayers === 'function') {
+        window.refreshTileLayers();
       }
     }
   } else {
