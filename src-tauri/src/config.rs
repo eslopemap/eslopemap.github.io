@@ -143,6 +143,25 @@ pub fn resolve_cache_dir(cfg: &AppConfig) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/tmp/slopemapper/tiles"))
 }
 
+/// Save config to the default location.
+pub fn save_config(cfg: &AppConfig) -> Result<(), String> {
+    let Some(path) = effective_config_file_path() else {
+        return Err("no config dir available".to_string());
+    };
+    save_config_to(cfg, &path)
+}
+
+/// Save config to a specific path.
+pub fn save_config_to(cfg: &AppConfig, path: &Path) -> Result<(), String> {
+    let contents = toml::to_string_pretty(cfg).map_err(|e| format!("serialize: {e}"))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
+    }
+    std::fs::write(path, contents).map_err(|e| format!("write: {e}"))?;
+    println!("[config] saved to {}", path.display());
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

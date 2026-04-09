@@ -246,6 +246,13 @@ impl TileCache {
         }
     }
 
+    /// Update the maximum cache size in bytes.
+    pub fn set_max_size(&self, max_bytes: u64) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.max_bytes = max_bytes;
+        println!("[tile-cache] max size updated to {} MB", max_bytes / (1024 * 1024));
+    }
+
     /// Get cache stats.
     pub fn stats(&self) -> CacheStats {
         let root = self.root();

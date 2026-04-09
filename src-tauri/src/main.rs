@@ -313,6 +313,23 @@ fn inject_cached_tile(
     Ok(path.to_string_lossy().to_string())
 }
 
+/// Update the tile cache maximum size (in MB) at runtime and persist to config.
+#[tauri::command]
+fn set_cache_max_size(state: State<'_, ManagedState>, max_size_mb: u64) -> Result<(), String> {
+    let app_state = state.lock().map_err(|e| e.to_string())?;
+    let max_bytes = max_size_mb * 1024 * 1024;
+    app_state.tile_cache.set_max_size(max_bytes);
+
+    // Persist to config file
+    let mut cfg = config::load_config();
+    cfg.cache.max_size_mb = max_size_mb;
+    config::save_config(&cfg)?;
+
+    // Trigger eviction if over new limit
+    app_state.tile_cache.evict_if_needed();
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // DEM upstream URL
 // ---------------------------------------------------------------------------
@@ -419,6 +436,7 @@ fn main() {
             get_cache_stats,
             clear_tile_cache,
             inject_cached_tile,
+            set_cache_max_size,
         ])
         .setup(move |app| {
             // Inject the desktop bootstrap globals into the webview

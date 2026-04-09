@@ -239,6 +239,16 @@ export async function clearTileCache() {
   return invoke('clear_tile_cache');
 }
 
+/**
+ * Update the server-side tile cache maximum size (in MB) and persist to config.
+ * @param {number} maxSizeMb - new max cache size in megabytes
+ * @returns {Promise<void>}
+ */
+export async function setTileCacheMaxSize(maxSizeMb) {
+  if (!isTauri()) return;
+  return invoke('set_cache_max_size', { maxSizeMb });
+}
+
 // ---------------------------------------------------------------------------
 // Event listeners (desktop only)
 // ---------------------------------------------------------------------------

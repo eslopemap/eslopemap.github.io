@@ -5,7 +5,7 @@ import {
   getTrackStats, getSettingsStats, getAllStats,
   clearAll, clearTracks, clearSettings,
 } from './persist.js';
-import { isTauri, getCacheStats, clearTileCache } from './tauri-bridge.js';
+import { isTauri, getCacheStats, clearTileCache, setTileCacheMaxSize } from './tauri-bridge.js';
 
 // ---- Helpers ----
 
@@ -145,12 +145,37 @@ async function refreshPanel() {
   if (isTauri()) {
     const stats = await getCacheStats();
     if (stats) {
-      container.appendChild(buildRow('Server tile cache', {
+      const row = buildRow('Server tile cache', {
         path: stats.root,
         size: formatBytes(stats.total_size_bytes),
-        detail: `${stats.file_count} tiles (max ${formatBytes(stats.max_size_bytes)})`,
+        detail: `${stats.file_count} tiles`,
         onClear: clearTileCache,
-      }));
+      });
+      // Editable max-size control
+      const maxSizeCtrl = document.createElement('div');
+      maxSizeCtrl.className = 'saved-data-max-size';
+      const label = document.createElement('span');
+      label.textContent = 'Max: ';
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '10';
+      input.max = '10000';
+      input.step = '10';
+      input.value = String(Math.round(stats.max_size_bytes / (1024 * 1024)));
+      input.style.width = '5em';
+      input.title = 'Maximum cache size in MB';
+      const unitLabel = document.createElement('span');
+      unitLabel.textContent = ' MB';
+      input.addEventListener('change', async () => {
+        const mb = Math.max(10, Number(input.value) || 100);
+        input.value = String(mb);
+        await setTileCacheMaxSize(mb);
+        showToast(`Cache max size set to ${mb} MB`);
+        await refreshPanel();
+      });
+      maxSizeCtrl.append(label, input, unitLabel);
+      row.querySelector('.saved-data-info').appendChild(maxSizeCtrl);
+      container.appendChild(row);
     }
   }
 
