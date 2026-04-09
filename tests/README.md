@@ -7,6 +7,8 @@
 just test-unit
 # JS unit tests with coverage report
 npm run test:coverage
+# Full merged coverage report across Vitest, Playwright, Rust, and Tauri e2e
+npm run test:coverage:full
 
 # Tauri E2E
 just test-tauri-e2e
@@ -91,7 +93,7 @@ The DEM tile test injects fixture tiles into the disk cache via the `inject_cach
 
 | File | Tests | What it covers |
 |---|---|---|
-| `config-persistence.spec.mjs` | 8 | Desktop config read/write commands, validation, persistence across app reload |
+| `config-persistence.spec.mjs` | 9 | Desktop config read/write commands, validation, persistence across app reload |
 | `custom-tile-serving.spec.mjs` | 2 | Local MBTiles / PMTiles registration, TileJSON exposure, rendering in the desktop UI |
 | `dem-tile-serving.spec.mjs` | 9 | DEM cache injection, desktop config exposure, tile serving, upstream fallback, DEM-only rendering |
 | `folder-tile-operations.spec.mjs` | 7 | Folder scan payloads, GPX/tile discovery, drag-drop path handling, registration, invalid-path resilience |
@@ -99,7 +101,7 @@ The DEM tile test injects fixture tiles into the disk cache via the `inject_cach
 Helpers:
 - `tests/tauri-e2e/tests/helpers.mjs` — Tauri IPC bridge, error capture hooks, screenshot utility
 
-Current WDIO inventory: **26 tests across 4 spec files**.
+Current WDIO inventory: **27 tests across 4 spec files**.
 
 Key differences from Playwright E2E:
 - **Real Tauri runtime** — tests run inside WKWebView with actual Tauri IPC, tile server, etc.
@@ -112,6 +114,7 @@ Strategic notes for desktop map tests:
 - **Use `basemap=none` for DEM-only screenshots** — this avoids accidental internet-backed OSM layers and keeps desktop DEM screenshots deterministic.
 - **Wait on real map readiness, not arbitrary sleeps** — check map/style/canvas readiness, and for DEM rendering also require the relevant analysis layer visibility plus a pixel-content probe.
 - **Keep Tauri DEM baselines semantically strict** — the empty-state baseline should remain pure white with `None (primary)`, while the cache-backed rendering baseline should show DEM-only slope/relief output without any raster/vector basemap labels.
+- To update screenshot when a real change is made, use UPDATE_SNAPSHOTS=1 just test-tauri-e2e
 
 ## Rust Unit Tests (cargo test)
 
@@ -153,6 +156,7 @@ npm run test:coverage
 Outputs:
 - **Text summary** to stdout
 - **LCOV report** to `coverage/lcov.info` (for CI integration)
+- **Istanbul JSON** to `coverage/coverage-final.json` (for merged reporting)
 
 Coverage targets `app/js/**/*.js`, excluding `app/vendor/**`.
 
@@ -178,7 +182,60 @@ cargo install cargo-llvm-cov
 cd src-tauri && cargo llvm-cov --text
 ```
 
+Merged-report-compatible run:
+
+```bash
+npm run test:rust:coverage
+```
+
+Output:
+- `coverage/rust-lcov.info`
+
 Runs in CI via `taiki-e/install-action@cargo-llvm-cov`. Covers `gpx_sync`, `tile_server`, and command handlers.
+
+### Desktop behavioral coverage — Tauri WebDriver e2e summary
+
+```bash
+npm run test:tauri-e2e:coverage
+```
+
+This suite does not produce JS line coverage. Instead it produces a behavioral desktop summary that inventories:
+- executed Tauri WebDriver spec files
+- total desktop tests
+- Tauri IPC commands exercised
+- browser fetch endpoints touched during the desktop run
+
+Outputs:
+- `coverage/tauri-e2e-summary.json`
+- `coverage/tauri-e2e-summary.md`
+
+### Full 4-suite coverage report
+
+```bash
+npm run test:coverage:full
+```
+
+This orchestrates:
+1. `npm run test:coverage`
+2. `npm run test:e2e:coverage`
+3. `npm run test:rust:coverage`
+4. `npm run test:tauri-e2e:coverage`
+5. `npm run coverage:report:full`
+
+The final report merges:
+- Vitest JS coverage
+- Playwright JS coverage
+- Rust LCOV coverage
+- Tauri desktop behavioral coverage
+
+Final artifacts:
+- `coverage/full-js-coverage.json`
+- `coverage/full-js.lcov`
+- `coverage/full-js-lcov-report/index.html`
+- `coverage/full-coverage-report.md`
+- `coverage/rust-lcov.info`
+- `coverage/tauri-e2e-summary.json`
+- `coverage/tauri-e2e-summary.md`
 
 ## CI/CD
 
@@ -210,5 +267,10 @@ Produces: `.dmg` (macOS), `.deb`/`.AppImage` (Linux), `.msi`/`.exe` (Windows).
 # Equivalent to the CI pipeline
 npm run test:coverage          # JS unit tests + coverage
 npm run test:e2e:coverage      # Playwright e2e + V8 JS coverage
-(cd src-tauri && cargo test)   # Rust backend tests
+npm run test:rust:coverage     # Rust backend LCOV coverage
+npm run test:tauri-e2e:coverage # Tauri desktop behavioral coverage summary
+npm run coverage:report:full   # Consolidated merged report build
+
+# Full local end-to-end coverage run
+npm run test:coverage:full
 ```
