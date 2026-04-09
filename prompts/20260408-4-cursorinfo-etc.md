@@ -42,6 +42,6 @@ at
 
 review the code changes, be critical
 - there are some inconsistencies, eg I expect 'system layers' (Hillshade / Contour / Analysis) to be always shown in the 'Layer order', just with visibility toggled or not. the old checkboxes can be removed
-- rename 'Mode' to 'Terrain Analysis Mode' for consistency. sync the Mode visibility state with the dropdown empty value, both ways.
+- rename 'Mode' to 'Terrain analysis mode' for consistency. sync the Mode visibility state with the dropdown empty value, both ways.
 - the test is too verbose
 - then proceed with the testing and finish the task.

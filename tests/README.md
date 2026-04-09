@@ -4,19 +4,21 @@
 
 ```bash
 # JS unit tests (fast, no browser)
-npm run test:unit
-
+just test-unit
 # JS unit tests with coverage report
 npm run test:coverage
 
+# Tauri E2E
+just test-tauri-e2e
+
 # Playwright e2e tests (browser, needs chromium)
-npm test
+just test-e2e
 
 # Rust unit tests (desktop backend)
-cd src-tauri && cargo test
+just test-rust
 
 # All checks (CI equivalent)
-npm run test:unit && npm test && (cd src-tauri && cargo test)
+just test-all
 ```
 
 ## JS Unit Tests (Vitest)

@@ -32,7 +32,7 @@
 - **DEM tile grid** — debug overlay toggle for visible DEM tile coverage
 
 ## Track Editor
-- **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories; in Tauri mode, dropped folders are scanned in bulk via `scanAndRegisterDesktopTileFolder` for tile sources
+- **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
 - **Single-file  and Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
 - **Workspace tree** — hierarchical tree view in the track panel showing folder → file → track → segment/route/waypoint nodes with disclosure toggles and type icons (📁📄🛤️🧭📍)
 - **Context menu** — right-click, long-press, the row kebab (⋮), or the persistent top-right actions button opens the relevant context menu for the selected item; file nodes expose `New track` and `Export GPX`, while track and route nodes expose edit/profile/geometry actions plus `Export GPX`
@@ -54,7 +54,6 @@
 - **Insert preview** — dashed line shows where the next point will connect: from last point (append) or between neighbouring vertices (insert-after mode)
 - **Track stats** — total distance (km), elevation gain (↑), loss (↓), point count, average slope, and max slope for the active track
 - **Elevation enrichment** — all track points (imported and drawn) are enriched from the same DEM source and re-enriched when new DEM tiles load
-- **Cursor DEM fallback** — `queryLoadedElevationAtLngLat` tries `dem-hd` first then falls back to `dem-terrain`, so cursor info works even when only one source has tiles loaded
 - **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
 - **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
 - **Shift/Ctrl/Meta+click delete** — remove individual track vertices (edit mode only)
@@ -89,13 +88,13 @@
 
 ## UX
 - **Settings toggle** — top-left `🌍 Settings` button with auto-collapse when you start dragging the map
-- **Elevation & slope display** — configurable via dropdown: `At cursor` (floating tooltip near pointer, default on desktop), `Corner` (fixed in legend panel, default on mobile), `No` (hidden)
+- **Elevation & slope display** — configurable via dropdown: `At cursor` (floating tooltip near pointer, default on desktop), `Corner` (fixed in legend panel, default on mobile), `No` (hidden). Tries to reuse maplibre's internal cached DEM tiles.
 - **Mobile center crosshair** — a small '+' crosshair is always shown at the center of the screen on mobile, continuously updating the corner elevation & slope info as the map moves. During track editing, the crosshair becomes larger and blue.
 - **Mobile tap crosshair** — tapping the map on mobile shows a crosshair at tap location with elevation/slope info; disappears on pan
 - **Track panel header layout** — when open, the header stays sticky while the tree scrolls so the workspace actions remain visible
 - **Panel styling** — controls, legend, profile, and the open track panel share the same translucent blurred panel surface
 - **Bottom-right controls** — native MapLibre bottom-right stack with navigation, geolocate, ruler, and attribution
-- **Legend behavior** — dynamic color ramp for the current mode; in `Mode: none`, the legend collapses to cursor info only
+- **Legend behavior** — dynamic color ramp for the current mode; in `Terrain analysis mode: ''`, the legend collapses to cursor info only
 - **Search** — Nominatim geocoding with collapsible search box
 - **Ctrl/Cmd+drag** — tilt and rotate the map (same as right-click drag)
 - **Toast notifications** — ephemeral messages for track editing hints (mobile mode, rect-delete count, editing stopped on double-click)

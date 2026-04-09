@@ -1175,7 +1175,7 @@ function renderLayerOrderPanel() {
       if (catalogId === '_analysis') {
         const analysisVisible = !!state.mode && state.mode !== 'none';
         container.appendChild(buildSystemLayerRow({
-          label: 'Terrain Analysis Mode',
+          label: 'Terrain analysis',
           visible: analysisVisible,
           opacity: state.slopeOpacity,
           onToggle: (show) => {

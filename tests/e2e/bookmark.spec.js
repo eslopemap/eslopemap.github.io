@@ -121,7 +121,7 @@ test.describe('Bookmarks', () => {
     await page.waitForTimeout(200);
 
     const layerNames = await page.locator('#layer-order-list .layer-order-name').allTextContents();
-    expect(layerNames).toContain('Terrain Analysis Mode');
+    expect(layerNames).toContain('Terrain analysis');
     expect(layerNames).toContain('Hillshade');
     expect(layerNames).toContain('OpenSkiMap');
     // System layers always present even when hidden

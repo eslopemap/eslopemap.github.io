@@ -10,15 +10,15 @@ Based on [app/index.html](cci:7://file:///Users/eoubrayrie/code/MAPS/slopedothtm
 
 ```text
 +--------------------------------------------------------------------------------------------------+
-| [Settings] [Profile] [Tracks] [Help] [🔍]    [✎] [⬚]    [+ 🔗 📄 📁 ⋮ ▣ …]                    |
-|  #bar-left (panel toggles + help + search)  #bar-center   #bar-right (track-tool-row)            |
-| +----------------+                                                    +--------------------+     |
-| | Settings panel |                                                    |    Tracks panel    |     |
-| |                |                                                    |                    |     |
-| |                |                                                    |                    |     |
-| |                |                        [Draw crosshair]            |                    |     |
-| |                |                        [Cursor tooltip]            |                    |     |
-| +----------------+                                                    +--------------------+     |
+| [Layers] [Settings] [Profile] [Tracks] [Help] [🔍]    [✎] [⬚]    [+ 🔗 📄 📁 ⋮ ▣ …]              |
+|  #bar-left (panel toggles + help + search)           #bar-center   #bar-right (track-tool-row)   |
+| +---------------+----------------+                                           +--------------------+
+| | Layers panel  | Settings panel |                                           |    Tracks panel    |
+| |               |                |                                           |                    |
+| |               |                |                                           |                    |
+| |               |                |               [Draw crosshair]            |                    |
+| |               |                |               [Cursor tooltip]            |                    |
+| +---------------+----------------+                                           +--------------------+
 |                                                                                                  |
 |                                          [Mobile crosshair]                                      |
 |                                                                                                  |
@@ -33,17 +33,24 @@ Based on [app/index.html](cci:7://file:///Users/eoubrayrie/code/MAPS/slopedothtm
 +--------------------------------------------------------------------------------------------------+
 
 Mobile (≤640px): #controls-wrapper moves to bottom, labels hidden, search/help hidden.
-Panels (#controls, #track-panel-shell) stay at top-left/top-right respectively.
+Panels (#layer-order-panel, #controls, #track-panel-shell) stay at top-left/top-right respectively.
 ```
 
 ## Legend
 
 - **Panel toggles** (`#panel-toggles`) — inside `#bar-left`
-  - Three unified toggle buttons: Settings, Profile, Tracks.
+  - Four unified toggle buttons: Layers, Settings, Profile, Tracks.
   - Active state uses `#4a90d9` blue highlight.
 
-- **Settings panel** (`#controls`) — positioned below `#bar-left`
-  - Mode, overlays, 3D terrain, advanced display/profile settings. Basemap selection via the unified Add layer dropdown + Layers panel.
+- **Layers panel** (`#layer-order-panel`) — positioned below `#bar-left`, left of Settings panel
+  - Add layer dropdown for basemaps and overlays.
+  - Layer order list with drag-and-drop reordering.
+  - Layer settings (basemap opacity, terrain analysis mode, overlay opacity).
+  - Bookmarks for saving/loading layer configurations.
+
+- **Settings panel** (`#controls`) — positioned below `#bar-left`, right of Layers panel
+  - Elevation & slope display mode, pause threshold, profile smoothing.
+  - DEM tile grid toggle, saved data management, mobile mode toggle.
 
 - **Search** widget (`#search-box`) — inside `#bar-left`
   - Search button, expanding input, and results dropdown for place search.
@@ -77,8 +84,11 @@ Panels (#controls, #track-panel-shell) stay at top-left/top-right respectively.
 
 ## Toggled panels
 
+- **Layers toggle** (`#layer-order-toggle`) — in `#panel-toggles`
+  - Opens/collapses the Layers panel. Active by default. Active class highlights blue.
+
 - **Settings toggle** (`#settings-controls-toggle`) — in `#panel-toggles`
-  - Opens/collapses the left settings panel. Active class highlights blue.
+  - Opens/collapses the Settings panel. Active class highlights blue.
 
 - **Profile toggle** (`#profile-toggle-btn`) — in `#panel-toggles`
   - Shows/hides the bottom profile panel.
@@ -106,10 +116,10 @@ Panels (#controls, #track-panel-shell) stay at top-left/top-right respectively.
 
 ## Placement summary
   - Top bar (`#controls-wrapper`): full-width flex bar with 3 zones
-    - Left (`#bar-left`): panel toggles (Settings | Profile | Tracks), Help link, search
+    - Left (`#bar-left`): panel toggles (Layers | Settings | Profile | Tracks), Help link, search
     - Center (`#bar-center`): edit/rect-select buttons
     - Right (`#bar-right`): track tool row (new, import, actions, ops)
-  - Below top-left: settings panel (`#controls`)
+  - Below top-left: Layers panel (`#layer-order-panel`) and Settings panel (`#controls`)
   - Below top-right: track panel (`#track-panel-shell`)
   - Bottom-left: legend
   - Bottom-right: MapLibre controls
