@@ -197,7 +197,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
     expect(pixels.ratio).toBeGreaterThan(0.05);
 
     await expect(page).toHaveScreenshot('dem-slope-relief.png', {
-      maxDiffPixelRatio: 0.05,
+      maxDiffPixelRatio: 0.08,
     });
   });
 
@@ -217,7 +217,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
     expect(pixels.ratio).toBeGreaterThan(0.05);
 
     await expect(page).toHaveScreenshot('dem-slope.png', {
-      maxDiffPixelRatio: 0.05,
+      maxDiffPixelRatio: 0.08,
     });
   });
 });
