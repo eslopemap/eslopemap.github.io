@@ -6,6 +6,7 @@ import {
   clearAll, clearTracks, clearSettings,
 } from './persist.js';
 import { isTauri, getCacheStats, clearTileCache, setTileCacheMaxSize } from './tauri-bridge.js';
+import { getUserSources, unregisterUserSource } from './layer-registry.js';
 
 // ---- Helpers ----
 
@@ -179,7 +180,41 @@ async function refreshPanel() {
     }
   }
 
-  // 3. GPX tracks & waypoints
+  // 3. Custom user sources (if any)
+  const userSources = getUserSources();
+  if (userSources.length > 0) {
+    const heading = document.createElement('div');
+    heading.className = 'saved-data-section-heading';
+    heading.innerHTML = `<strong>Custom sources</strong> <span style="opacity:0.6">(${userSources.length})</span>`;
+    container.appendChild(heading);
+    for (const src of userSources) {
+      const row = document.createElement('div');
+      row.className = 'saved-data-row saved-data-source-row';
+      const info = document.createElement('div');
+      info.className = 'saved-data-info';
+      const nameEl = document.createElement('span');
+      nameEl.textContent = src.label || src.id;
+      nameEl.title = src.id;
+      info.appendChild(nameEl);
+      row.appendChild(info);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'saved-data-clear-btn';
+      delBtn.textContent = 'Remove';
+      delBtn.title = `Remove custom source: ${src.label || src.id}`;
+      delBtn.addEventListener('click', async () => {
+        if (!confirm(`Remove custom source "${src.label || src.id}"?`)) return;
+        unregisterUserSource(src.id);
+        showToast(`Removed ${src.label || src.id}`);
+        await refreshPanel();
+      });
+      row.appendChild(delBtn);
+      container.appendChild(row);
+    }
+  }
+
+  // 4. GPX tracks & waypoints
   const trackStats = getTrackStats();
   container.appendChild(buildRow('GPX tracks', {
     path: 'localStorage (slope:tracks, slope:waypoints, slope:workspace)',
@@ -189,7 +224,7 @@ async function refreshPanel() {
     clearLabel: 'Clear & reload',
   }));
 
-  // 4. Settings
+  // 5. Settings
   const settingsStats = getSettingsStats();
   container.appendChild(buildRow('Settings', {
     path: 'localStorage (slope:settings, slope:profile-settings)',
@@ -198,7 +233,7 @@ async function refreshPanel() {
     clearLabel: 'Reset & reload',
   }));
 
-  // 5. All browser data
+  // 6. All browser data
   const allStats = getAllStats();
   container.appendChild(buildRow('All browser data', {
     path: `localStorage (${allStats.keyCount} slope:* keys)`,
