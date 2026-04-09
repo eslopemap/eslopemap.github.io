@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck — helpers.js custom fixtures aren't typed
 // E2e tests for the merged GeoJSON source system (Strategy B) and import guards.
 const { test: base, expect } = require('@playwright/test');
 const {

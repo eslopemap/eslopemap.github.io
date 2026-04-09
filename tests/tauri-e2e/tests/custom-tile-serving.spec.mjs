@@ -23,10 +23,7 @@ async function waitForCustomMapOption(browser, value, timeout = 20000) {
     await browser.waitUntil(
         async () => browser.execute((expectedValue) => {
             const select = document.getElementById('add-layer');
-            const primary = document.getElementById('basemap-primary');
-            const addLayerHasOption = Array.from(select?.options || []).some(option => option.value === expectedValue);
-            const primaryHasOption = Array.from(primary?.options || []).some(option => option.value === expectedValue.replace(/^basemap:/, ''));
-            return addLayerHasOption || primaryHasOption;
+            return Array.from(select?.options || []).some(option => option.value === expectedValue);
         }, value),
         { timeout, timeoutMsg: `Custom map option ${value} not found in add-layer select` }
     );
@@ -36,10 +33,10 @@ async function waitForCustomMapLabel(browser, label, timeout = 20000) {
     await browser.waitUntil(
         async () => browser.execute((expectedLabel) => {
             const select = document.getElementById('add-layer');
-            const primary = document.getElementById('basemap-primary');
+            const layerOrder = document.getElementById('layer-order-list');
             const addLayerHasLabel = Array.from(select?.options || []).some(option => option.textContent === expectedLabel);
-            const primaryHasLabel = Array.from(primary?.options || []).some(option => option.textContent === expectedLabel);
-            return addLayerHasLabel || primaryHasLabel;
+            const layerOrderHasLabel = layerOrder?.textContent?.includes(expectedLabel) || false;
+            return addLayerHasLabel || layerOrderHasLabel;
         }, label),
         { timeout, timeoutMsg: `Custom map label ${label} not found in UI controls` }
     );
@@ -73,33 +70,6 @@ async function selectAddLayerOptionByLabel(browser, label) {
     return result;
 }
 
-async function selectPrimaryBasemap(browser, value) {
-    const result = await browser.execute((selectedValue) => {
-        const select = document.getElementById('basemap-primary');
-        if (!select) return { ok: false, error: '#basemap-primary not found' };
-        const option = Array.from(select.options).find(opt => opt.value === selectedValue);
-        if (!option) return { ok: false, error: `Primary basemap option not found: ${selectedValue}` };
-        select.value = selectedValue;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        return { ok: true, label: option.textContent };
-    }, value);
-    assert.strictEqual(result.ok, true, result.error || 'Selecting primary basemap should succeed');
-    return result.label;
-}
-
-async function selectPrimaryBasemapByLabel(browser, label) {
-    const result = await browser.execute((expectedLabel) => {
-        const select = document.getElementById('basemap-primary');
-        if (!select) return { ok: false, error: '#basemap-primary not found' };
-        const option = Array.from(select.options).find(opt => opt.textContent === expectedLabel);
-        if (!option) return { ok: false, error: `Primary basemap option not found for label: ${expectedLabel}` };
-        select.value = option.value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        return { ok: true, label: option.textContent, value: option.value };
-    }, label);
-    assert.strictEqual(result.ok, true, result.error || 'Selecting primary basemap by label should succeed');
-    return result;
-}
 
 async function seedPersistedCustomSource(browser, tileJson) {
     await browser.execute((tj) => {
@@ -247,27 +217,22 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         const uiStateBefore = await browser.execute((displayName) => {
             const select = document.getElementById('add-layer');
             const options = Array.from(select?.options || []).filter(opt => opt.textContent === displayName);
-            const basemapPrimary = document.getElementById('basemap-primary');
-            const primaryOption = Array.from(basemapPrimary?.options || []).find(opt => opt.textContent === displayName);
+            const layerOrderText = document.getElementById('layer-order-list')?.textContent || '';
             return {
                 addLayerLabels: options.map(opt => opt.textContent || ''),
                 addLayerValues: options.map(opt => opt.value || ''),
-                primaryOptionLabel: primaryOption?.textContent || null,
-                primaryValue: basemapPrimary?.value || null,
-                primarySelectedLabel: basemapPrimary?.selectedOptions?.[0]?.textContent || null,
-                layerOrderText: document.getElementById('layer-order-list')?.textContent || '',
+                layerOrderText,
+                alreadyActive: layerOrderText.includes(displayName),
             };
         }, DISPLAY_NAME);
 
         assert.ok(
-            uiStateBefore.addLayerLabels.length > 0 || uiStateBefore.primaryOptionLabel === DISPLAY_NAME,
-            `Custom map should appear in the UI with the metadata label, got add-layer=${uiStateBefore.addLayerLabels.join(',')} primary=${uiStateBefore.primaryOptionLabel}`,
+            uiStateBefore.addLayerLabels.length > 0 || uiStateBefore.alreadyActive,
+            `Custom map should appear in the UI with the metadata label, got add-layer=${uiStateBefore.addLayerLabels.join(',')} layerOrder=${uiStateBefore.alreadyActive}`,
         );
 
-        if (uiStateBefore.primarySelectedLabel === DISPLAY_NAME) {
-            console.log('[test] custom source already active as primary basemap');
-        } else if (uiStateBefore.primaryOptionLabel === DISPLAY_NAME) {
-            await selectPrimaryBasemapByLabel(browser, DISPLAY_NAME);
+        if (uiStateBefore.alreadyActive) {
+            console.log('[test] custom source already active in layer order');
         } else {
             await selectAddLayerOptionByLabel(browser, DISPLAY_NAME);
         }
@@ -275,8 +240,7 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         await browser.waitUntil(
             async () => browser.execute((displayName) => {
                 const layerOrderText = document.getElementById('layer-order-list')?.textContent || '';
-                const primarySelectedLabel = document.getElementById('basemap-primary')?.selectedOptions?.[0]?.textContent || '';
-                return layerOrderText.includes(displayName) || primarySelectedLabel === displayName;
+                return layerOrderText.includes(displayName);
             }, DISPLAY_NAME),
             { timeout: 20000, timeoutMsg: 'Custom map did not become active in the UI' }
         );

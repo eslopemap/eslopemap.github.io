@@ -209,6 +209,7 @@ export function parseHashParams() {
     const latRaw = Number(params.get('lat'));
     const zoomRaw = Number(params.get('zoom'));
     const basemapRaw = (params.get('basemap') || '').trim();
+    const basemapParts = basemapRaw ? basemapRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
     const modeRaw = (params.get('mode') || '').trim();
     const opacityRaw = Number(params.get('opacity'));
     const terrain3dRaw = parseBooleanParam(params.get('terrain'));
@@ -228,7 +229,13 @@ export function parseHashParams() {
 
     if (params.has('lng') && params.has('lat') && hasLng && hasLat) overrides.center = [lngRaw, latRaw];
     if (params.has('zoom') && hasZoom) overrides.zoom = zoomRaw;
-    if (params.has('basemap') && basemapRaw && getCatalogEntry(basemapRaw)) overrides.basemap = basemapRaw;
+    if (params.has('basemap') && basemapParts.length > 0) {
+      const validParts = basemapParts.filter(id => getCatalogEntry(id));
+      if (validParts.length > 0) {
+        overrides.basemap = validParts[0];
+        overrides.basemapStack = validParts;
+      }
+    }
     if (params.has('mode') && validModes.has(modeRaw)) overrides.mode = modeRaw;
     if (params.has('opacity') && hasOpacity) overrides.slopeOpacity = opacityRaw;
     if (params.has('terrain') && terrain3dRaw != null) overrides.terrain3d = terrain3dRaw;
@@ -251,7 +258,8 @@ export function syncViewToUrl(map, state) {
   params.set('lng', center.lng.toFixed(6));
   params.set('lat', center.lat.toFixed(6));
   params.set('zoom', zoom.toFixed(2));
-  params.set('basemap', state.basemap);
+  const stack = state.basemapStack || [];
+  if (stack.length > 0) params.set('basemap', stack.join(','));
   params.set('mode', state.mode);
   params.set('opacity', state.slopeOpacity.toFixed(2));
   params.set('terrain', state.terrain3d ? '1' : '0');

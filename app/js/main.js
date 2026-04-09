@@ -128,8 +128,6 @@ function applyTestModeState(state) {
 }
 
 function syncTestModeUi(state) {
-  document.getElementById('basemap').value = state.basemap;
-  const bp = document.getElementById('basemap-primary'); if (bp) bp.value = state.basemap;
   document.getElementById('mode').value = state.mode;
   document.getElementById('terrain3d').checked = state.terrain3d;
   document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
@@ -188,8 +186,6 @@ state.viewPitch = initialView.pitch;
 if (isTestMode) {
   applyTestModeState(state);
 }
-document.getElementById('basemap').value = state.basemap;
-{ const bp = document.getElementById('basemap-primary'); if (bp) bp.value = state.basemap; }
 document.getElementById('mode').value = state.mode;
 document.getElementById('terrain3d').checked = state.terrain3d;
 document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
@@ -941,16 +937,6 @@ document.getElementById('mode').addEventListener('change', (e) => {
   scheduleSettingsSave();
 });
 
-document.getElementById('basemap').addEventListener('change', async (e) => {
-  await setBasemap(map, state, e.target.value, true);
-  // Auto-toggle contours for OSM
-  const shouldShowContours = (state.basemap === 'osm');
-  if (state.basemap !== 'none') state.showContours = shouldShowContours;
-  applyContourVisibility(map, state);
-  syncMapViewState();
-  map.triggerRepaint();
-  scheduleSettingsSave();
-});
 
 document.getElementById('basemapOpacity').addEventListener('input', (e) => {
   state.basemapOpacity = Number(e.target.value);
@@ -1060,22 +1046,6 @@ updateCursorInfoVisibility(state);
 
 // ---- Dynamic layer UI ----
 
-/** Populate the primary basemap <select> */
-function renderBasemapPrimary() {
-  const sel = document.getElementById('basemap-primary');
-  if (!sel) return;
-  sel.innerHTML = '';
-  for (const entry of getBasemaps()) {
-    const opt = document.createElement('option');
-    opt.value = entry.id;
-    opt.textContent = entry.label;
-    sel.appendChild(opt);
-  }
-  sel.value = state.basemap || 'osm';
-  // Sync hidden backward-compat select
-  const hidden = document.getElementById('basemap');
-  if (hidden) hidden.value = state.basemap;
-}
 
 /** Populate unified "Add layer" dropdown with optgroups for basemaps + overlays */
 function renderAddLayerSelect() {
@@ -1135,18 +1105,6 @@ function renderAddLayerSelect() {
   }
 }
 
-/** Legacy: populate hidden basemap <select> from catalog */
-function renderBasemapSelect() {
-  const sel = document.getElementById('basemap');
-  sel.innerHTML = '';
-  for (const entry of getBasemaps()) {
-    const opt = document.createElement('option');
-    opt.value = entry.id;
-    opt.textContent = entry.label;
-    sel.appendChild(opt);
-  }
-  sel.value = state.basemap;
-}
 
 /** Sync overlay state in UI (overlays now managed via Layers panel + Add layer dropdown) */
 function syncOverlayCheckboxes(_st) {
@@ -1155,7 +1113,6 @@ function syncOverlayCheckboxes(_st) {
 
 /** Consolidate all layer UI refreshes into a single function to avoid glitchiness */
 function refreshAllLayerUI() {
-  renderBasemapPrimary();
   renderAddLayerSelect();
   syncOverlayCheckboxes(state);
   renderLayerOrderPanel();
@@ -1297,9 +1254,11 @@ function renderLayerOrderPanel() {
       scheduleSettingsSave();
     });
 
+    const isPrimary = isBasemap && catalogId === (state.basemapStack || [])[0];
     const nameSpan = document.createElement('span');
     nameSpan.className = 'layer-order-name';
-    nameSpan.textContent = entry.label;
+    nameSpan.textContent = isPrimary ? `${entry.label} (primary)` : entry.label;
+    if (isPrimary) nameSpan.style.fontWeight = 'bold';
 
     // Opacity: for basemaps, read from basemapOpacities; for overlays, from layerSettings
     const currentOpacity = isBasemap
@@ -1346,7 +1305,6 @@ function renderLayerOrderPanel() {
       removeLayer(map, state, catalogId);
       renderLayerOrderPanel();
       renderAddLayerSelect();
-      renderBasemapPrimary();
       syncOverlayCheckboxes(state);
       map.triggerRepaint();
       scheduleSettingsSave();
@@ -1475,28 +1433,8 @@ layerOrderToggleBtn?.addEventListener('click', () => {
 });
 
 // Initial render of dynamic UI
-renderBasemapSelect();
-renderBasemapPrimary();
 renderAddLayerSelect();
 renderBookmarkList();
-
-// Wire primary basemap selector
-document.getElementById('basemap-primary')?.addEventListener('change', async (e) => {
-  const id = e.target.value;
-  // Replace the first basemap in the stack (or set as the only one)
-  const currentStack = state.basemapStack || [];
-  const newStack = id === 'none' ? currentStack.slice(1) : [id, ...currentStack.slice(1)];
-  await setBasemapStack(map, state, newStack);
-  // Auto-toggle contours for OSM
-  const shouldShowContours = (state.basemap === 'osm');
-  if (state.basemap !== 'none') state.showContours = shouldShowContours;
-  applyContourVisibility(map, state);
-  renderLayerOrderPanel();
-  renderAddLayerSelect();
-  syncMapViewState();
-  map.triggerRepaint();
-  scheduleSettingsSave();
-});
 
 // Wire unified "Add layer" dropdown
 document.getElementById('add-layer')?.addEventListener('change', async (e) => {
@@ -1515,7 +1453,6 @@ document.getElementById('add-layer')?.addEventListener('change', async (e) => {
   syncLayerOrder(state);
   renderLayerOrderPanel();
   renderAddLayerSelect();
-  renderBasemapPrimary();
   map.triggerRepaint();
   scheduleSettingsSave();
 
@@ -1703,9 +1640,6 @@ window.addEventListener('hashchange', async () => {
     applyTestModeState(state);
   }
 
-  document.getElementById('basemap').value = state.basemap;
-  const bp = document.getElementById('basemap-primary');
-  if (bp) bp.value = state.basemap;
   document.getElementById('mode').value = state.mode;
   document.getElementById('terrain3d').checked = state.terrain3d;
   document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
@@ -1741,7 +1675,6 @@ map.on('error', (e) => {
 // ---- Desktop: auto-discover tile sources via TileJSON ----
 
 const refreshTileLayers = () => {
-  renderBasemapPrimary();
   renderAddLayerSelect();
   renderLayerOrderPanel();
 };

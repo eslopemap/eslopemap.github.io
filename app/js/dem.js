@@ -1,6 +1,8 @@
 // Elevation sampling from DEM tiles.
 
-import { DEM_HD_SOURCE_ID, DEM_MAX_Z } from './constants.js';
+import { DEM_HD_SOURCE_ID, DEM_TERRAIN_SOURCE_ID, DEM_MAX_Z } from './constants.js';
+
+const DEM_SOURCE_IDS = [DEM_HD_SOURCE_ID, DEM_TERRAIN_SOURCE_ID];
 
 // ---- Elevation sampling ----
 
@@ -27,8 +29,16 @@ export function sampleElevationFromDEMData(dem, fx, fy) {
 }
 
 export function queryLoadedElevationAtLngLat(map, lngLat) {
+  for (const sourceId of DEM_SOURCE_IDS) {
+    const result = queryElevationFromSource(map, lngLat, sourceId);
+    if (result) return result;
+  }
+  return null;
+}
+
+function queryElevationFromSource(map, lngLat, sourceId) {
   const style = map && map.style;
-  const tileManager = style && style.tileManagers && style.tileManagers[DEM_HD_SOURCE_ID];
+  const tileManager = style && style.tileManagers && style.tileManagers[sourceId];
   if (!tileManager || !tileManager.getRenderableIds || !tileManager.getTileByID) return null;
 
   const tilesByCanonical = new Map();
@@ -38,6 +48,8 @@ export function queryLoadedElevationAtLngLat(map, lngLat) {
     const c = tile.tileID.canonical;
     tilesByCanonical.set(`${c.z}/${c.x}/${c.y}`, tile);
   }
+
+  if (tilesByCanonical.size === 0) return null;
 
   const lat = Math.max(-85.051129, Math.min(85.051129, lngLat.lat));
   const lngWrapped = ((lngLat.lng + 180) % 360 + 360) % 360 - 180;

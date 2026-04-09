@@ -61,7 +61,10 @@ export function applyUrlOverrides(state, overrides, currentView) {
     pitch: patch.pitch ?? activeView.pitch,
   };
 
-  if (patch.basemap) {
+  if (patch.basemapStack && patch.basemapStack.length > 0) {
+    state.basemap = patch.basemapStack[0];
+    state.basemapStack = patch.basemapStack;
+  } else if (patch.basemap) {
     state.basemap = patch.basemap;
     state.basemapStack = [patch.basemap];
   }

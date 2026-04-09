@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck — helpers.js custom fixtures aren't typed
 const { test: base, expect } = require('@playwright/test');
 const {
   getTrackCount, getTrackInfo,

@@ -224,8 +224,6 @@ export async function getMapDebugSnapshot(browser) {
             debugText,
             layers,
             sources,
-            basemapPrimary: document.getElementById('basemap-primary')?.value || null,
-            basemapPrimaryLabel: document.getElementById('basemap-primary')?.selectedOptions?.[0]?.textContent || null,
         };
     });
 }

@@ -803,17 +803,7 @@ async function handleTileFile(name, path) {
   });
 
   if (!catalogId) return;
-
-  const primary = document.getElementById('basemap-primary');
-  if (!primary) return;
-  const option = Array.from(primary.options).find(opt => opt.value === catalogId);
-  if (!option) {
-    console.warn(`[tile-drop] primary basemap option not found for ${catalogId}`);
-    return;
-  }
-
-  primary.value = catalogId;
-  primary.dispatchEvent(new Event('change', { bubbles: true }));
+  console.info(`[tile-drop] registered ${name} as layer '${catalogId}' — available in Add layer dropdown`);
 }
 
 /** Tier 3: Read directory entries from drag & drop */

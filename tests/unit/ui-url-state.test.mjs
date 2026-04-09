@@ -102,8 +102,27 @@ describe('ui URL state parsing', () => {
 
     expect(parseHashParams()).toEqual({
       basemap: 'osm',
+      basemapStack: ['osm'],
       bearing: 22.5,
       pitch: 40,
+    });
+  });
+
+  it('parses comma-separated basemap stack from URL hash', () => {
+    installWindow('#basemap=osm,otm');
+
+    expect(parseHashParams()).toEqual({
+      basemap: 'osm',
+      basemapStack: ['osm', 'otm'],
+    });
+  });
+
+  it('filters invalid basemap ids from comma list', () => {
+    installWindow('#basemap=osm,missing,otm');
+
+    expect(parseHashParams()).toEqual({
+      basemap: 'osm',
+      basemapStack: ['osm', 'otm'],
     });
   });
 });

@@ -2,36 +2,21 @@
 
 **Source:** `prompts/20260408-4-cursorinfo-etc.md`  
 **Date:** 2025-04-08  
-**Scope:** ~12 tasks spanning JS frontend, Rust backend, tests, and UX.
+**Scope:** tasks spanning JS frontend, Rust backend, tests, and UX.
+
+Previous state
+
+FEATURES.md
+reports/20260409-unify-persist-bookmark-report.md
+
+
+## Task 4 - Silence TS lint noise
+
+`@ts-nocheck` directive was added in bookmark.spec.js (untyped JS with custom Playwright fixtures), check other tests in e2e and tauri-e2e where it makes sense.
 
 ---
 
-## Task 1 — Remove redundant Hillshade checkbox & opacity from Settings
-
-**Problem:** The hillshade checkbox (`#showHillshade`) and opacity slider (`#hillshadeOpacity` + method dropdown) in the collapsed "Layer settings" section duplicate functionality already exposed in the Layers panel (`renderLayerOrderPanel` builds a "Hillshade" system row with visibility toggle + opacity slider).
-
-**Current state:**
-- `app/index.html:135` — `<input id="showHillshade">` checkbox in Layer panel (kept — it's a quick toggle)
-- `app/index.html:163-177` — `#hillshadeOpacity` slider + `#hillshadeMethod` dropdown inside `#layer-advanced-section`
-- `main.js:1265-1283` — `buildSystemLayerRow('Hillshade', …)` in the Layers panel already controls `showHillshade`, `hillshadeOpacity`, and repaints
-
-**Change:**
-- Remove the `#hillshadeOpacity` slider row and `#hillshadeMethod` dropdown from `#layer-advanced-section` in `index.html`.
-- In the Layers panel "Hillshade" system row, add a small method selector (dropdown or icon-button) inline next to the opacity slider, so advanced users can still switch methods.
-- Remove the event listeners in `main.js:980-995` for the old sliders (or redirect them to the Layer panel widget).
-- Keep `state.showHillshade` / `state.hillshadeOpacity` / `state.hillshadeMethod` and their persistence unchanged.
-
-**UX sketch:**
-```
-[👁] Hillshade  [===slider===]  [igor ▾]  ✕
-```
-
-**Persistence/cache/bookmark impact:** None — state keys unchanged.  
-**Multi-stack impact:** None.
-
----
-
-## Task 2 — Remove legacy Basemap dropdown from Settings
+## Task 5 — Remove legacy Basemap dropdown from Settings
 
 **Problem:** The old `<select id="basemap">` (now hidden) and `<select id="basemap-primary">` in the Layers panel are redundant with the "Add layer" dropdown which supports multi-basemap stacking. The primary basemap selector still encourages single-basemap thinking.
 
@@ -58,57 +43,6 @@
 
 **Persistence/cache/bookmark impact:** Migration path from single `basemap` → `basemapStack` already exists in `migrateSettings`. Keep it. Remove `basemap` from URL hash writes, keep reads.  
 **Multi-stack impact:** This *is* the multi-stack cleanup.
-
----
-
----
-
-## Task 5 — Fix bookmark edit name (broken)
-
-**Problem:** The prompt says "the bookmark edit name is broken."
-
-**Analysis of `main.js:1438-1450`:**
-```js
-editBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const newName = window.prompt('Bookmark name:', bm.name);
-  if (newName != null && newName.trim()) {
-    renameBookmark(state, bm.id, newName.trim());
-    renderBookmarkList();
-    scheduleSettingsSave();
-  }
-});
-```
-
-And `layer-engine.js:448-453`:
-```js
-export function renameBookmark(state, bookmarkId, newName) {
-  const bookmarks = [...(state.bookmarks || [])];
-  const bm = bookmarks.find(b => b.id === bookmarkId);
-  if (bm) bm.name = newName;
-  state.bookmarks = bookmarks;
-}
-```
-
-**Likely bug:** The spread `[...(state.bookmarks || [])]` creates a shallow copy of the array, but `bm` is still a reference to the *original* object inside the Proxy. Mutating `bm.name` changes the original, but `state.bookmarks = bookmarks` sets the array to a new reference containing the *same* objects. The Proxy `set` trap fires (`old !== value` is true because the array ref changed), but the bookmark object inside was mutated *before* the assignment. If the Proxy or any downstream consumer compares by deep equality or caches the old value, the rename may appear to not take effect until the next re-render.
-
-**Actually more likely:** The `bm` found by `.find()` is a reference from the *new* spread array (shallow copy copies references). So `bm.name = newName` works on the object in `bookmarks`. Then `state.bookmarks = bookmarks` triggers the Proxy. This should work… unless `renderBookmarkList()` reads `state.bookmarks` before the Proxy set completes (synchronous, so unlikely).
-
-**Debug approach:** Add `console.log` before/after rename to verify. Test with actual UI. The bug may be that `window.prompt` returns `null` on Cancel but also on empty string — the `newName.trim()` check rejects empty names, which is correct but maybe the user expects to clear the name? Or perhaps the issue is the `e.stopPropagation()` preventing the click from bubbling, but the `editBtn` is inside the `row` which has its own click handler for `applyBookmark` — and `stopPropagation` prevents the apply from firing. This seems correct.
-
-**Alternative hypothesis:** The `✎` button click may be getting swallowed by the parent `nameBtn` click handler (which calls `applyBookmark`). Looking at the DOM: `row.append(nameBtn, editBtn, delBtn)` — they're siblings, not nested. So click on `editBtn` shouldn't trigger `nameBtn`. BUT if the buttons are styled to overlap or if the row itself has a click handler…
-
-**Fix strategy:** Investigate in browser. If the `window.prompt` blocks and the bookmark gets applied (race), wrap in `setTimeout`. More likely: use inline editing (contentEditable or input field) instead of `window.prompt` for a better UX that avoids browser-blocking dialogs. This also avoids the prompt being blocked by some browsers.
-
-**Change:**
-- Replace `window.prompt` with inline `<input>` editing (double-click bookmark name or click ✎):
-  - Replace `nameBtn` text with an `<input>` pre-filled with the name
-  - Enter commits, Escape cancels
-  - Blur commits
-- This matches the track rename UX pattern already in the app.
-
-**Persistence/cache/bookmark impact:** Fixes bookmark persistence.  
-**Multi-stack impact:** None.
 
 ---
 
@@ -301,25 +235,14 @@ Each task above includes a mini-assessment. Summary:
 | **Bookmarks** | T3 (virtual layers in bookmarks), T4 (restore fix), T5 (rename fix) |
 | **Multi-stack (web+tauri)** | T7 (folder drop), T8 (cache UI), T9 (delete sources) — all Tauri-only with web fallbacks |
 
+## Task 13 - Update doc
+
+check git log -30 to see what changed
+Update FEATURES.md, UI/md, and user-doc
+
 ---
-
-## Execution order
-
-| Priority | Task | Effort | Dependencies |
-|---|---|---|---|
-| 1 | T5 — Fix bookmark rename | S | None |
-| 2 | T6 — Cursor info DEM fallback | S | None |
-| 3 | T4 — Fix bookmark restore + E2E test | M | None (T5 helpful) |
-| 4 | T1 — Remove redundant hillshade UI | S | None |
-| 5 | T2 — Remove legacy basemap dropdown | M | None |
-| 6 | T7 — Folder drop → folder registration | S | Tauri only |
-| 7 | T10 — Cargo warnings check | S | None |
-| 8 | T8 — Cache size from UI | M | Tauri only |
-| 9 | T9 — Delete custom sources UI | M | Tauri only |
-| 10 | T3 — Unified layer state (design + impl) | L | T1, T2 done first |
-| 11 | T11 — Test suite green check | Ongoing | After each task |
-| 12 | T12 — Final cross-cutting review | S | All tasks done |
 
 **S** = small (~1h), **M** = medium (~2-4h), **L** = large (~1 day)
 
+single report : reports/20260409-cursorinfo-etc-report.md
 Git commits: one per task, prefixed `feat:` / `fix:` / `chore:`.
