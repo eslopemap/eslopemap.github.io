@@ -152,6 +152,43 @@ describe('user source registry', () => {
     expect(registry.getCatalogEntry('user-dup').label).toBe('V2');
   });
 
+  it('persistUserSources only saves browser-persistence entries', async () => {
+    const persist = await import('../../app/js/persist.js');
+    const saveSpy = vi.spyOn(persist, 'saveUserSources');
+
+    // Register a browser source
+    registry.registerUserSource({
+      id: 'user-browser', label: 'Browser', category: 'basemap',
+      region: null, defaultView: null, sources: {}, layers: [],
+      persistence: 'browser',
+    });
+    expect(saveSpy).toHaveBeenCalled();
+    const lastCall1 = saveSpy.mock.calls[saveSpy.mock.calls.length - 1][0];
+    expect(lastCall1).toHaveLength(1);
+    expect(lastCall1[0].id).toBe('user-browser');
+
+    // Register a desktop-runtime source — should NOT be included in save
+    registry.registerUserSource({
+      id: 'user-runtime', label: 'Runtime', category: 'basemap',
+      region: null, defaultView: null, sources: {}, layers: [],
+      persistence: 'desktop-runtime',
+    });
+    const lastCall2 = saveSpy.mock.calls[saveSpy.mock.calls.length - 1][0];
+    // Only the browser source should be saved, not the desktop-runtime one
+    expect(lastCall2).toHaveLength(1);
+    expect(lastCall2[0].id).toBe('user-browser');
+
+    // Register a desktop-config source — should also NOT be saved to browser
+    registry.registerUserSource({
+      id: 'user-config', label: 'Config', category: 'basemap',
+      region: null, defaultView: null, sources: {}, layers: [],
+      persistence: 'desktop-config',
+    });
+    const lastCall3 = saveSpy.mock.calls[saveSpy.mock.calls.length - 1][0];
+    expect(lastCall3).toHaveLength(1);
+    expect(lastCall3[0].id).toBe('user-browser');
+  });
+
   it('user sources do not shadow built-in entries', () => {
     // Built-in 'osm' should still exist
     expect(registry.getCatalogEntry('osm')).toBeTruthy();

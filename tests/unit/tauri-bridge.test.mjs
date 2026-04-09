@@ -9,6 +9,7 @@ import {
   pickAndWatchFolder, listFolderGpx, loadGpx, markDirty,
   saveGpxFile, acceptChange, resolveConflict, getSnapshot,
   addTileSource, listTileSources, removeTileSource,
+  getConfigValue, setConfigValue,
 } from '../../app/js/tauri-bridge.js';
 
 function clearGlobals() {
@@ -61,6 +62,14 @@ describe('tauri-bridge in web mode (default)', () => {
     expect(await listTileSources()).toEqual([]);
     await expect(addTileSource('dem', '/tmp/dem.mbtiles')).rejects.toThrow('requires Tauri');
     await expect(removeTileSource('dem')).rejects.toThrow('requires Tauri');
+  });
+
+  it('getConfigValue returns null in web mode', async () => {
+    expect(await getConfigValue('cache.max_size_mb')).toBeNull();
+  });
+
+  it('setConfigValue returns the value passthrough in web mode', async () => {
+    expect(await setConfigValue('cache.max_size_mb', 200)).toBe(200);
   });
 });
 
@@ -162,5 +171,15 @@ describe('tauri-bridge in desktop mode', () => {
     expect(invokeLog).toEqual([
       { cmd: 'remove_tile_source', args: { name: 'dem' } },
     ]);
+  });
+
+  it('getConfigValue invokes correct command', async () => {
+    await getConfigValue('sources.folders');
+    expect(invokeLog.some(l => l.cmd === 'get_config_value' && l.args.key === 'sources.folders')).toBe(true);
+  });
+
+  it('setConfigValue invokes correct command', async () => {
+    await setConfigValue('cache.max_size_mb', 500);
+    expect(invokeLog.some(l => l.cmd === 'set_config_value' && l.args.key === 'cache.max_size_mb' && l.args.value === 500)).toBe(true);
   });
 });

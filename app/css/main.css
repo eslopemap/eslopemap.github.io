@@ -1087,10 +1087,17 @@
     .basemap-row { margin-bottom: 4px; }
     .basemap-row select { width: 100%; }
     .add-layer-row select { width: 100%; font-size: 12px; }
+    .add-layer-row button {
+      margin-top: 6px;
+      width: 100%;
+      font-size: 12px;
+      padding: 6px 8px;
+    }
 
     /* ---- 3D terrain toggle button ---- */
     .terrain3d-ctrl {
-      border-radius: 999px !important;
+      margin-top: 6px;
+      display: flex;
       overflow: hidden;
     }
     .terrain3d-ctrl button {

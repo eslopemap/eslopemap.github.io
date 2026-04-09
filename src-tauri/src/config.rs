@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 // ---------------------------------------------------------------------------
 // Public config types
@@ -36,6 +37,10 @@ pub struct CacheConfig {
 pub struct SourcesConfig {
     /// Folders to scan for .mbtiles/.pmtiles files on startup.
     pub folders: Vec<String>,
+    /// Individual .mbtiles/.pmtiles files to register on startup.
+    pub files: Vec<String>,
+    /// Custom TileJSON descriptors exposed directly to the UI.
+    pub custom_tilejsons: Vec<Value>,
 }
 
 impl Default for CacheConfig {
@@ -159,6 +164,8 @@ mod tests {
         assert_eq!(cfg.cache.max_size_mb, 100);
         assert!(cfg.cache.path.is_empty());
         assert!(cfg.sources.folders.is_empty());
+        assert!(cfg.sources.files.is_empty());
+        assert!(cfg.sources.custom_tilejsons.is_empty());
     }
 
     #[test]
@@ -221,6 +228,8 @@ folders = ["/home/user/maps", "/data/tiles"]
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.sources.folders.len(), 2);
         assert_eq!(cfg.sources.folders[0], "/home/user/maps");
+        assert!(cfg.sources.files.is_empty());
+        assert!(cfg.sources.custom_tilejsons.is_empty());
     }
 
     #[test]
@@ -231,9 +240,13 @@ max_size_mb = 200
 
 [sources]
 folders = ["/tiles"]
+files = ["/tiles/local.mbtiles"]
+custom_tilejsons = [{ id = "example", name = "Example", tiles = ["https://example.test/{z}/{x}/{y}.png"] }]
 "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.cache.max_size_mb, 200);
         assert_eq!(cfg.sources.folders, vec!["/tiles"]);
+        assert_eq!(cfg.sources.files, vec!["/tiles/local.mbtiles"]);
+        assert_eq!(cfg.sources.custom_tilejsons.len(), 1);
     }
 }

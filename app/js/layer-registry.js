@@ -406,6 +406,10 @@ export const LAYER_CATALOG = [
 /** @type {CatalogEntry[]} */
 const _userSources = [];
 
+function persistUserSources() {
+  saveUserSources(_userSources.filter(entry => entry?.persistence === 'browser'));
+}
+
 /**
  * Register a user-defined tile source as a catalog entry.
  * If an entry with the same id already exists it is replaced.
@@ -416,13 +420,13 @@ export function registerUserSource(entry) {
   unregisterUserSource(entry.id);
   _userSources.push({ ...entry, userDefined: true });
   _rebuildIndex();
-  saveUserSources(_userSources);
+  persistUserSources();
 }
 
 /** Remove a user source by id. Returns true if found. */
 export function unregisterUserSource(id) {
   const idx = _userSources.findIndex(e => e.id === id);
-  if (idx >= 0) { _userSources.splice(idx, 1); _rebuildIndex(); saveUserSources(_userSources); return true; }
+  if (idx >= 0) { _userSources.splice(idx, 1); _rebuildIndex(); persistUserSources(); return true; }
   return false;
 }
 
@@ -430,7 +434,7 @@ export function unregisterUserSource(id) {
 export function clearUserSources() {
   _userSources.length = 0;
   _rebuildIndex();
-  saveUserSources(_userSources);
+  persistUserSources();
 }
 
 /** Read-only snapshot of current user sources. */

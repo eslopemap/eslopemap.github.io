@@ -16,7 +16,10 @@ export function registerDiscoveredTileJsonSources(tileJsonSources) {
   let registeredCount = 0;
   for (const tj of tileJsonSources ?? []) {
     if (!tj || tj.name === 'dem') continue;
-    registerUserSource(buildCatalogEntryFromTileJson(tj));
+    registerUserSource({
+      ...buildCatalogEntryFromTileJson(tj),
+      persistence: 'desktop-runtime'
+    });
     registeredCount += 1;
   }
   return registeredCount;
@@ -61,7 +64,7 @@ export async function registerDesktopTileSource(name, path, options = {}) {
   }
 
   const entry = buildCatalogEntryFromTileJson(tj);
-  registerUserSource(entry);
+  registerUserSource({ ...entry, persistence: 'desktop-runtime' });
   console.info(`${logPrefix} registered '${cleanName}' as layer`);
   refreshUi?.();
   return entry.id;

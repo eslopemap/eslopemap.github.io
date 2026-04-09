@@ -114,6 +114,16 @@ export async function getDesktopConfig() {
   return invoke('get_desktop_config');
 }
 
+export async function getConfigValue(key) {
+  if (!isTauri()) return null;
+  return invoke('get_config_value', { key });
+}
+
+export async function setConfigValue(key, value) {
+  if (!isTauri()) return value;
+  return invoke('set_config_value', { key, value });
+}
+
 // ---------------------------------------------------------------------------
 // Tile source management (desktop only)
 // ---------------------------------------------------------------------------
@@ -246,7 +256,7 @@ export async function clearTileCache() {
  */
 export async function setTileCacheMaxSize(maxSizeMb) {
   if (!isTauri()) return;
-  return invoke('set_cache_max_size', { maxSizeMb });
+  return setConfigValue('cache.max_size_mb', maxSizeMb);
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,8 @@ import {
   clearAll, clearTracks, clearSettings,
 } from './persist.js';
 import { isTauri, getCacheStats, clearTileCache, setTileCacheMaxSize } from './tauri-bridge.js';
-import { getUserSources, unregisterUserSource } from './layer-registry.js';
+import { getUserSources } from './layer-registry.js';
+import { removeCustomTileSource } from './custom-tile-sources.js';
 
 // ---- Helpers ----
 
@@ -181,7 +182,7 @@ async function refreshPanel() {
   }
 
   // 3. Custom user sources (if any)
-  const userSources = getUserSources();
+  const userSources = getUserSources().filter(src => src?.persistence !== 'desktop-runtime');
   if (userSources.length > 0) {
     const heading = document.createElement('div');
     heading.className = 'saved-data-section-heading';
@@ -205,7 +206,7 @@ async function refreshPanel() {
       delBtn.title = `Remove custom source: ${src.label || src.id}`;
       delBtn.addEventListener('click', async () => {
         if (!confirm(`Remove custom source "${src.label || src.id}"?`)) return;
-        unregisterUserSource(src.id);
+        await removeCustomTileSource(src.id);
         showToast(`Removed ${src.label || src.id}`);
         await refreshPanel();
       });

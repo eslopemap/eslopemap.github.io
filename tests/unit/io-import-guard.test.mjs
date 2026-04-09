@@ -1,5 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { importFileContent, parseGeoJSON } from '../../app/js/io.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// io.js now imports custom-tile-sources.js → layer-registry.js → constants.js → utils.js
+// which needs document.createElement('canvas') at module init.
+const context = {
+  clearRect() {},
+  fillRect() {},
+  getImageData() { return { data: new Uint8ClampedArray([255, 255, 255, 255]) }; },
+  set fillStyle(v) { this._fs = v; },
+  get fillStyle() { return this._fs; },
+};
+if (!globalThis.document) {
+  globalThis.document = {
+    createElement(tagName) {
+      if (tagName === 'canvas') return { width: 0, height: 0, getContext() { return context; } };
+      return {};
+    },
+    getElementById() { return null; },
+  };
+}
+
+const { importFileContent, parseGeoJSON } = await import('../../app/js/io.js');
 
 // importFileContent depends on tracksFns being wired via initIO,
 // but we can test the guard and parseGeoJSON directly.
@@ -47,6 +67,28 @@ describe('importFileContent — extension guard', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(() => importFileContent('data.csv', 'lat,lon\n45,6')).not.toThrow();
     expect(warn).toHaveBeenCalledWith('Unsupported file type, skipping:', 'data.csv');
+  });
+
+  it('accepts .tilejson files (does not warn)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tileJson = JSON.stringify({
+      tilejson: '3.0.0',
+      tiles: ['https://example.test/{z}/{x}/{y}.png'],
+      name: 'Test',
+    });
+    // importFileContent is now async; it should not warn for .tilejson
+    await importFileContent('test.tilejson', tileJson);
+    expect(warn).not.toHaveBeenCalledWith('Unsupported file type, skipping:', 'test.tilejson');
+  });
+
+  it('accepts .json files that look like TileJSON', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tileJson = JSON.stringify({
+      tiles: ['https://example.test/{z}/{x}/{y}.png'],
+      name: 'FromJson',
+    });
+    await importFileContent('source.json', tileJson);
+    expect(warn).not.toHaveBeenCalledWith('Unsupported file type, skipping:', 'source.json');
   });
 });
 

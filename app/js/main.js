@@ -38,6 +38,7 @@ import { importFileContent } from './io.js';
 import { loadSettings, saveSettings, loadUserSources } from './persist.js';
 import { deriveInitialState, applyUrlOverrides } from './startup-state.js';
 import { discoverAndRegisterDesktopTileSources } from './desktop-tile-sources.js';
+import { addCustomTileSource, loadPersistedCustomTileSources } from './custom-tile-sources.js';
 import { initShortcuts, registerShortcut } from './shortcuts.js';
 import { openInfoEditor, openCurrentContextMenu } from './gpx-tree.js';
 import { initSelectionTools, toggleRectangleMode, isRectangleModeActive, setRectangleMode, setActionPreview, clearSelection, getCurrentSelection } from './selection-tools.js';
@@ -157,10 +158,12 @@ if (persisted) {
 }
 
 // Load custom user layers
-const savedUserSources = loadUserSources();
-if (savedUserSources) {
-  for (const src of savedUserSources) {
-    registerUserSource(src);
+if (!isTauri()) {
+  const savedUserSources = loadUserSources();
+  if (savedUserSources) {
+    for (const src of savedUserSources) {
+      registerUserSource({ ...src, persistence: src.persistence || 'browser' });
+    }
   }
 }
 
@@ -228,6 +231,14 @@ let _settingsSaveTimer = 0;
 function scheduleSettingsSave() {
   clearTimeout(_settingsSaveTimer);
   _settingsSaveTimer = setTimeout(() => saveSettings(state), 300);
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 2000);
 }
 
 function syncMapViewState() {
@@ -1026,6 +1037,25 @@ document.getElementById('profileSmoothing').addEventListener('input', (e) => {
 
 initSavedDataPanel();
 
+const addCustomTileBtn = document.getElementById('add-custom-tile-btn');
+if (addCustomTileBtn) {
+  addCustomTileBtn.addEventListener('click', async () => {
+    const value = window.prompt('Paste a TileJSON URL');
+    const url = value ? value.trim() : '';
+    if (!url) return;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const tileJson = await response.json();
+      await addCustomTileSource(tileJson, { refreshUi: refreshTileLayers });
+      showToast(`Added custom source from ${url}`);
+    } catch (error) {
+      console.warn('[custom-tile-source] failed to add TileJSON URL:', error);
+      showToast('Failed to add custom TileJSON source');
+    }
+  });
+}
+
 // Allow Cmd+drag (Mac) to act like Ctrl+drag for rotate/pitch
 map.getCanvas().addEventListener('mousedown', (e) => {
   if (e.metaKey && !e.ctrlKey && e.button === 0) {
@@ -1680,6 +1710,9 @@ const refreshTileLayers = () => {
 };
 
 if (isTauri()) {
+  loadPersistedCustomTileSources()
+    .then(() => refreshTileLayers())
+    .catch(e => console.warn('[custom-tile-source] restore failed:', e));
   discoverAndRegisterDesktopTileSources({
     refreshUi: refreshTileLayers,
     logPrefix: '[tile-sources]'

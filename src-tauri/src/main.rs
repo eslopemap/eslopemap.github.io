@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use gpx_sync::{
     new_shared_manager, start_watcher, FileState, FolderSnapshot, SharedSyncManager,
 };
+use serde_json::Value;
 use tile_cache::{CachedUpstreamSource, SharedCachedSources, TileCache};
 use tile_server::{SharedTileSources, TileSourceEntry, TileSourceKind, ScannedTileSource, detect_source_kind, scan_tile_folder as do_scan_tile_folder};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,42 @@ struct AppState {
 }
 
 type ManagedState = Mutex<AppState>;
+
+fn get_config_value_by_key(cfg: &config::AppConfig, key: &str) -> Result<Value, String> {
+    match key {
+        "cache.max_size_mb" => Ok(serde_json::json!(cfg.cache.max_size_mb)),
+        "sources.folders" => Ok(serde_json::json!(cfg.sources.folders)),
+        "sources.files" => Ok(serde_json::json!(cfg.sources.files)),
+        "sources.custom_tilejsons" => Ok(serde_json::json!(cfg.sources.custom_tilejsons)),
+        _ => Err(format!("Unsupported config key: {key}")),
+    }
+}
+
+fn set_config_value_by_key(cfg: &mut config::AppConfig, key: &str, value: Value) -> Result<(), String> {
+    match key {
+        "cache.max_size_mb" => {
+            cfg.cache.max_size_mb = serde_json::from_value(value)
+                .map_err(|e| format!("invalid cache.max_size_mb: {e}"))?;
+            Ok(())
+        }
+        "sources.folders" => {
+            cfg.sources.folders = serde_json::from_value(value)
+                .map_err(|e| format!("invalid sources.folders: {e}"))?;
+            Ok(())
+        }
+        "sources.files" => {
+            cfg.sources.files = serde_json::from_value(value)
+                .map_err(|e| format!("invalid sources.files: {e}"))?;
+            Ok(())
+        }
+        "sources.custom_tilejsons" => {
+            cfg.sources.custom_tilejsons = serde_json::from_value(value)
+                .map_err(|e| format!("invalid sources.custom_tilejsons: {e}"))?;
+            Ok(())
+        }
+        _ => Err(format!("Unsupported config key: {key}")),
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Tauri commands — GPX sync
@@ -184,6 +221,13 @@ fn add_tile_source(
     sources.push(entry.clone());
     println!("[tile-server] added source '{}' ({:?}) -> {}", entry.name, entry.kind, entry.path.display());
 
+    let mut cfg = config::load_config();
+    let persisted_path = entry.path.to_string_lossy().to_string();
+    if !cfg.sources.files.iter().any(|existing| existing == &persisted_path) {
+        cfg.sources.files.push(persisted_path);
+        config::save_config(&cfg)?;
+    }
+
     Ok(entry)
 }
 
@@ -198,11 +242,21 @@ fn list_tile_sources(state: State<'_, ManagedState>) -> Result<Vec<TileSourceEnt
 fn remove_tile_source(state: State<'_, ManagedState>, name: String) -> Result<bool, String> {
     let app_state = state.lock().map_err(|e| e.to_string())?;
     let mut sources = app_state.tile_sources.lock().map_err(|e| e.to_string())?;
+    let removed_entry = sources.iter().find(|e| e.name == name).cloned();
     let before = sources.len();
     sources.retain(|e| e.name != name);
     let removed = sources.len() < before;
     if removed {
         println!("[tile-server] removed source '{name}'");
+        if let Some(entry) = removed_entry {
+            let persisted_path = entry.path.to_string_lossy().to_string();
+            let mut cfg = config::load_config();
+            let original_len = cfg.sources.files.len();
+            cfg.sources.files.retain(|existing| existing != &persisted_path);
+            if cfg.sources.files.len() != original_len {
+                config::save_config(&cfg)?;
+            }
+        }
     }
     Ok(removed)
 }
@@ -229,6 +283,12 @@ fn scan_tile_folder(
         sources.retain(|e| e.name != entry.name);
         sources.push(entry);
         println!("[tile-server] auto-registered '{}' ({:?}) from scan", s.name, s.kind);
+    }
+
+    let mut cfg = config::load_config();
+    if !cfg.sources.folders.iter().any(|existing| existing == &folder_path) {
+        cfg.sources.folders.push(folder_path);
+        config::save_config(&cfg)?;
     }
 
     Ok(scanned)
@@ -270,6 +330,27 @@ fn get_desktop_config(state: State<'_, ManagedState>) -> Result<DesktopConfig, S
         cache_root: app_state.tile_cache.root().to_string_lossy().to_string(),
         cached_source_names,
     })
+}
+
+#[tauri::command]
+fn get_config_value(key: String) -> Result<Value, String> {
+    let cfg = config::load_config();
+    get_config_value_by_key(&cfg, &key)
+}
+
+#[tauri::command]
+fn set_config_value(state: State<'_, ManagedState>, key: String, value: Value) -> Result<Value, String> {
+    let mut cfg = config::load_config();
+    set_config_value_by_key(&mut cfg, &key, value)?;
+    config::save_config(&cfg)?;
+
+    if key == "cache.max_size_mb" {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state.tile_cache.set_max_size(cfg.cache.max_size_mb * 1024 * 1024);
+        app_state.tile_cache.evict_if_needed();
+    }
+
+    get_config_value_by_key(&cfg, &key)
 }
 
 // ---------------------------------------------------------------------------
@@ -316,17 +397,7 @@ fn inject_cached_tile(
 /// Update the tile cache maximum size (in MB) at runtime and persist to config.
 #[tauri::command]
 fn set_cache_max_size(state: State<'_, ManagedState>, max_size_mb: u64) -> Result<(), String> {
-    let app_state = state.lock().map_err(|e| e.to_string())?;
-    let max_bytes = max_size_mb * 1024 * 1024;
-    app_state.tile_cache.set_max_size(max_bytes);
-
-    // Persist to config file
-    let mut cfg = config::load_config();
-    cfg.cache.max_size_mb = max_size_mb;
-    config::save_config(&cfg)?;
-
-    // Trigger eviction if over new limit
-    app_state.tile_cache.evict_if_needed();
+    set_config_value(state, "cache.max_size_mb".to_string(), serde_json::json!(max_size_mb))?;
     Ok(())
 }
 
@@ -387,6 +458,31 @@ fn main() {
         }
     }
 
+    for file in &app_config.sources.files {
+        let path = PathBuf::from(file);
+        if !path.is_file() {
+            eprintln!("[startup] configured source file not found: {file}");
+            continue;
+        }
+        let Some(kind) = detect_source_kind(&path) else {
+            eprintln!("[startup] configured source file has unsupported type: {file}");
+            continue;
+        };
+        let name = path.file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let entry = TileSourceEntry {
+            name: name.clone(),
+            path: path.clone(),
+            kind,
+        };
+        let mut sources = tile_sources.lock().unwrap();
+        sources.retain(|existing| existing.name != entry.name);
+        sources.push(entry);
+        println!("[startup] registered '{}' ({:?}) from file {}", name, kind, file);
+    }
+
     // Cached upstream sources (fetched from internet, cached on disk)
     let cached_sources: SharedCachedSources = std::sync::Arc::new(Mutex::new(vec![
         CachedUpstreamSource {
@@ -429,6 +525,8 @@ fn main() {
             resolve_conflict,
             get_snapshot,
             get_desktop_config,
+            get_config_value,
+            set_config_value,
             add_tile_source,
             list_tile_sources,
             remove_tile_source,
@@ -461,4 +559,107 @@ window.addEventListener('unhandledrejection', function(e) {{
         })
         .run(tauri::generate_context!())
         .expect("error while running Slope desktop");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn get_config_value_cache_max_size() {
+        let mut cfg = config::AppConfig::default();
+        cfg.cache.max_size_mb = 500;
+        let val = get_config_value_by_key(&cfg, "cache.max_size_mb").unwrap();
+        assert_eq!(val, json!(500));
+    }
+
+    #[test]
+    fn get_config_value_sources_folders() {
+        let mut cfg = config::AppConfig::default();
+        cfg.sources.folders = vec!["/tiles".to_string()];
+        let val = get_config_value_by_key(&cfg, "sources.folders").unwrap();
+        assert_eq!(val, json!(["/tiles"]));
+    }
+
+    #[test]
+    fn get_config_value_sources_files() {
+        let mut cfg = config::AppConfig::default();
+        cfg.sources.files = vec!["/a.mbtiles".to_string(), "/b.pmtiles".to_string()];
+        let val = get_config_value_by_key(&cfg, "sources.files").unwrap();
+        assert_eq!(val, json!(["/a.mbtiles", "/b.pmtiles"]));
+    }
+
+    #[test]
+    fn get_config_value_custom_tilejsons() {
+        let mut cfg = config::AppConfig::default();
+        cfg.sources.custom_tilejsons = vec![json!({"id": "test", "tiles": ["https://example.test/{z}/{x}/{y}.png"]})];
+        let val = get_config_value_by_key(&cfg, "sources.custom_tilejsons").unwrap();
+        assert_eq!(val.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn get_config_value_unsupported_key() {
+        let cfg = config::AppConfig::default();
+        let err = get_config_value_by_key(&cfg, "nonexistent.key").unwrap_err();
+        assert!(err.contains("Unsupported config key"));
+    }
+
+    #[test]
+    fn set_config_value_cache_max_size() {
+        let mut cfg = config::AppConfig::default();
+        set_config_value_by_key(&mut cfg, "cache.max_size_mb", json!(250)).unwrap();
+        assert_eq!(cfg.cache.max_size_mb, 250);
+    }
+
+    #[test]
+    fn set_config_value_sources_folders() {
+        let mut cfg = config::AppConfig::default();
+        set_config_value_by_key(&mut cfg, "sources.folders", json!(["/a", "/b"])).unwrap();
+        assert_eq!(cfg.sources.folders, vec!["/a", "/b"]);
+    }
+
+    #[test]
+    fn set_config_value_sources_files() {
+        let mut cfg = config::AppConfig::default();
+        set_config_value_by_key(&mut cfg, "sources.files", json!(["/x.mbtiles"])).unwrap();
+        assert_eq!(cfg.sources.files, vec!["/x.mbtiles"]);
+    }
+
+    #[test]
+    fn set_config_value_custom_tilejsons() {
+        let mut cfg = config::AppConfig::default();
+        let tilejsons = json!([{"id": "tj1", "tiles": ["https://example.test/{z}/{x}/{y}.png"]}]);
+        set_config_value_by_key(&mut cfg, "sources.custom_tilejsons", tilejsons).unwrap();
+        assert_eq!(cfg.sources.custom_tilejsons.len(), 1);
+    }
+
+    #[test]
+    fn set_config_value_invalid_type() {
+        let mut cfg = config::AppConfig::default();
+        let err = set_config_value_by_key(&mut cfg, "cache.max_size_mb", json!("not a number")).unwrap_err();
+        assert!(err.contains("invalid cache.max_size_mb"));
+    }
+
+    #[test]
+    fn set_config_value_unsupported_key() {
+        let mut cfg = config::AppConfig::default();
+        let err = set_config_value_by_key(&mut cfg, "bad.key", json!(42)).unwrap_err();
+        assert!(err.contains("Unsupported config key"));
+    }
+
+    #[test]
+    fn roundtrip_config_value() {
+        let mut cfg = config::AppConfig::default();
+        set_config_value_by_key(&mut cfg, "cache.max_size_mb", json!(300)).unwrap();
+        set_config_value_by_key(&mut cfg, "sources.folders", json!(["/maps"])).unwrap();
+        set_config_value_by_key(&mut cfg, "sources.files", json!(["/f.mbtiles"])).unwrap();
+        let tilejsons = json!([{"id": "x", "tiles": ["https://example.test/{z}/{x}/{y}.png"]}]);
+        set_config_value_by_key(&mut cfg, "sources.custom_tilejsons", tilejsons).unwrap();
+
+        assert_eq!(get_config_value_by_key(&cfg, "cache.max_size_mb").unwrap(), json!(300));
+        assert_eq!(get_config_value_by_key(&cfg, "sources.folders").unwrap(), json!(["/maps"]));
+        assert_eq!(get_config_value_by_key(&cfg, "sources.files").unwrap(), json!(["/f.mbtiles"]));
+        assert_eq!(get_config_value_by_key(&cfg, "sources.custom_tilejsons").unwrap().as_array().unwrap().len(), 1);
+    }
 }

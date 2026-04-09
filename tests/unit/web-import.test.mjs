@@ -1,4 +1,22 @@
-import { mercatorToLonLat, convertC2cToGpx } from '../../app/js/web-import.js';
+// web-import.js → io.js transitively imports modules that call document.createElement('canvas') at init.
+const context = {
+  clearRect() {},
+  fillRect() {},
+  getImageData() { return { data: new Uint8ClampedArray([255, 255, 255, 255]) }; },
+  set fillStyle(v) { this._fs = v; },
+  get fillStyle() { return this._fs; },
+};
+if (!globalThis.document) {
+  globalThis.document = {
+    createElement(tagName) {
+      if (tagName === 'canvas') return { width: 0, height: 0, getContext() { return context; } };
+      return {};
+    },
+    getElementById() { return null; },
+  };
+}
+
+const { mercatorToLonLat, convertC2cToGpx } = await import('../../app/js/web-import.js');
 
 // ---- mercatorToLonLat ----
 

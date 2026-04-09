@@ -4,6 +4,7 @@
 import { parseGPX as gpxjsParse, stringifyGPX } from '@we-gold/gpxjs';
 import { downloadFile } from './utils.js';
 import { isTauri, pickAndWatchFolder, loadGpx, saveGpxFile } from './tauri-bridge.js';
+import { addCustomTileSource, isTileJsonLike } from './custom-tile-sources.js';
 
 let tracksFns = {};  // wired at init
 
@@ -154,14 +155,32 @@ export function parseGeoJSON(text) {
 
 // ---- Import dispatch ----
 
-const IMPORT_EXTENSIONS = /\.(gpx|geojson|json)$/i;
+const IMPORT_EXTENSIONS = /\.(gpx|geojson|json|tilejson)$/i;
 
-export function importFileContent(filename, text) {
+export async function importFileContent(filename, text) {
   if (!IMPORT_EXTENSIONS.test(filename)) {
     console.warn('Unsupported file type, skipping:', filename);
     return;
   }
   const baseName = filename.replace(/\.[^.]+$/, '');
+
+  if (/\.(json|tilejson)$/i.test(filename)) {
+    try {
+      const parsed = JSON.parse(text);
+      if (isTileJsonLike(parsed)) {
+        const normalized = {
+          ...parsed,
+          id: parsed.id || parsed.name || baseName,
+          name: parsed.name || parsed.id || baseName,
+        };
+        await addCustomTileSource(normalized, {
+          refreshUi: typeof window.refreshTileLayers === 'function' ? window.refreshTileLayers : null,
+        });
+        return;
+      }
+    } catch {
+    }
+  }
 
   if (filename.endsWith('.gpx')) {
     const result = parseGPXTracks(text, baseName);
@@ -596,7 +615,7 @@ export function initIO(deps) {
     // Try directory entries first (webkitGetAsEntry)
     const items = e.dataTransfer.items;
     if (items && items.length) {
-      const entries = [];
+      const entries = Array.from(items)
       for (const item of items) {
         const entry = item.webkitGetAsEntry?.();
         if (entry) entries.push(entry);
@@ -625,7 +644,7 @@ export function initIO(deps) {
     for (const file of e.dataTransfer.files) {
       if (FILE_PATTERN.test(file.name)) {
         const reader = new FileReader();
-        reader.onload = () => importFileContent(file.name, reader.result);
+        reader.onload = () => void importFileContent(file.name, reader.result);
         reader.readAsText(file);
       } else if (TILE_PATTERN.test(file.name)) {
         const path = resolveDroppedTilePath(null, file);
@@ -672,7 +691,7 @@ export function initIO(deps) {
 
 // ---- Directory support (progressive) ----
 
-const FILE_PATTERN = /\.(gpx|geojson|json)$/i;
+const FILE_PATTERN = /\.(gpx|geojson|json|tilejson)$/i;
 const TILE_PATTERN = /\.(mbtiles|pmtiles)$/i;
 
 /**
@@ -696,7 +715,7 @@ async function openDirectoryPicker() {
     if (handle.kind === 'file' && FILE_PATTERN.test(name)) {
       const file = await handle.getFile();
       const text = await file.text();
-      importFileContent(name, text);
+      await importFileContent(name, text);
     }
   }
 }
@@ -707,7 +726,7 @@ function openDirectoryInput() {
   input.type = 'file';
   input.webkitdirectory = true;
   input.multiple = true;
-  input.accept = '.gpx,.geojson,.json';
+  input.accept = '.gpx,.geojson,.json,.tilejson';
   input.addEventListener('change', () => {
     for (const file of input.files) {
       if (FILE_PATTERN.test(file.name)) {
@@ -723,7 +742,7 @@ function openFile() {
   const input = document.createElement('input');
   input.type = 'file';
   input.multiple = true;
-  input.accept = '.gpx,.geojson,.json';
+  input.accept = '.gpx,.geojson,.json,.tilejson';
   input.addEventListener('change', () => {
     for (const file of input.files) {
       if (FILE_PATTERN.test(file.name)) {
@@ -777,7 +796,7 @@ async function openFolderTauri() {
     try {
       const content = await loadGpx(fileState.path);
       const name = fileState.path.split('/').pop() || 'track.gpx';
-      importFileContent(name, content);
+      await importFileContent(name, content);
     } catch (e) {
       console.warn('[io] Failed to load GPX:', fileState.path, e);
     }
@@ -855,8 +874,8 @@ async function readDirectoryEntriesGpxOnly(dirEntry) {
 function readFileEntry(entry) {
   return new Promise((resolve) => {
     entry.file((file) => {
-      file.text().then(text => {
-        importFileContent(file.name, text);
+      file.text().then(async (text) => {
+        await importFileContent(file.name, text);
         resolve();
       });
     });
