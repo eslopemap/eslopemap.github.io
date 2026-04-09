@@ -76,13 +76,13 @@ Config: `tests/tauri-e2e/wdio.conf.mjs` — runs against the real Tauri desktop 
 
 ```bash
 # Prerequisites: build the debug binary with webdriver feature
-cd src-tauri && cargo build --features webdriver
+cargo build --manifest-path src-tauri/Cargo.toml --features webdriver
 
 # Install wdio deps (first time only)
-cd tests/tauri-e2e && npm install
+npm install --prefix tests/tauri-e2e
 
 # Run tests
-npm run test:tauri-e2e
+npm --prefix tests/tauri-e2e run test:tauri-e2e
 ```
 
 Uses `tauri-plugin-webdriver` (behind `--features webdriver`) which embeds a W3C WebDriver server on port 4445 inside the app. Tests launch the binary, connect via WebdriverIO, and interact with the real desktop UI.
@@ -91,15 +91,27 @@ The DEM tile test injects fixture tiles into the disk cache via the `inject_cach
 
 | File | Tests | What it covers |
 |---|---|---|
-| `dem-tile-serving.spec.mjs` | 8 | DEM tile cache injection, cache stats, cached tile serving (200), upstream fallback |
+| `config-persistence.spec.mjs` | 8 | Desktop config read/write commands, validation, persistence across app reload |
+| `custom-tile-serving.spec.mjs` | 2 | Local MBTiles / PMTiles registration, TileJSON exposure, rendering in the desktop UI |
+| `dem-tile-serving.spec.mjs` | 9 | DEM cache injection, desktop config exposure, tile serving, upstream fallback, DEM-only rendering |
+| `folder-tile-operations.spec.mjs` | 7 | Folder scan payloads, GPX/tile discovery, drag-drop path handling, registration, invalid-path resilience |
 
 Helpers:
 - `tests/tauri-e2e/tests/helpers.mjs` — Tauri IPC bridge, error capture hooks, screenshot utility
 
+Current WDIO inventory: **26 tests across 4 spec files**.
+
 Key differences from Playwright E2E:
 - **Real Tauri runtime** — tests run inside WKWebView with actual Tauri IPC, tile server, etc.
 - **WKWebView content world** — WebDriver JS runs in an isolated world; use `window.__TAURI_INTERNALS__` for IPC
-- **No test_mode** — tests exercise the full app including DEM loading
+- **Mixed startup modes** — use `#test_mode=true` only for deterministic UI-only states; use normal mode for any assertion that must exercise DEM loading or terrain-analysis rendering
+
+Strategic notes for desktop map tests:
+- **Prefer hash-set + refresh for navigation** — in Tauri WebDriver, setting `window.location.hash`, pausing briefly, then calling `browser.refresh()` is more reliable than `browser.url(...)` when persisted local state must survive and startup overrides must be applied through the real boot path.
+- **`test_mode` disables DEM-oriented behavior** — do not use it for hillshade, contours, terrain-analysis, or screenshot baselines that are supposed to prove DEM rendering.
+- **Use `basemap=none` for DEM-only screenshots** — this avoids accidental internet-backed OSM layers and keeps desktop DEM screenshots deterministic.
+- **Wait on real map readiness, not arbitrary sleeps** — check map/style/canvas readiness, and for DEM rendering also require the relevant analysis layer visibility plus a pixel-content probe.
+- **Keep Tauri DEM baselines semantically strict** — the empty-state baseline should remain pure white with `None (primary)`, while the cache-backed rendering baseline should show DEM-only slope/relief output without any raster/vector basemap labels.
 
 ## Rust Unit Tests (cargo test)
 
