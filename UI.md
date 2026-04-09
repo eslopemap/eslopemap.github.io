@@ -43,7 +43,7 @@ Panels (#controls, #track-panel-shell) stay at top-left/top-right respectively.
   - Active state uses `#4a90d9` blue highlight.
 
 - **Settings panel** (`#controls`) — positioned below `#bar-left`
-  - Mode, basemap, overlays, 3D terrain, advanced display/profile settings.
+  - Mode, overlays, 3D terrain, advanced display/profile settings. Basemap selection via the unified Add layer dropdown + Layers panel.
 
 - **Search** widget (`#search-box`) — inside `#bar-left`
   - Search button, expanding input, and results dropdown for place search.

@@ -22,9 +22,32 @@ Plan: `plans/20260408-PLAN-CURSORINFO-ETC.md`
 - **Tauri e2e tests**: updated `custom-tile-serving.spec.mjs` and `helpers.mjs` to remove basemap-primary references.
 - **Unit tests**: updated `ui-url-state.test.mjs` for comma-separated basemap parsing.
 
-## Task 7 — Folder drop (Tauri) 🔲
-## Task 8 — Server tile cache size from UI 🔲
-## Task 9 — Delete custom sources from UI 🔲
-## Task 10 — Cargo build warnings check 🔲
-## Task 11 — Test suites pass 🔲
-## Task 13 — Update docs 🔲
+## Task 7 — Folder drop (Tauri) ✅
+- In Tauri mode, dropping a directory now calls `scanAndRegisterDesktopTileFolder` for bulk tile registration.
+- Added `readDirectoryEntriesGpxOnly` for processing GPX/GeoJSON files separately from tiles.
+
+## Task 8 — Server tile cache size from UI ✅
+- **Rust**: added `TileCache::set_max_size()` method and `set_cache_max_size` Tauri command.
+- **config.rs**: added `save_config()` / `save_config_to()` for persisting config changes to `slopemapper.toml`.
+- **tauri-bridge.js**: added `setTileCacheMaxSize(maxSizeMb)`.
+- **saved-data.js**: server tile cache row now has an editable number input for max size (MB).
+
+## Task 9 — Delete custom sources from UI ✅
+- **saved-data.js**: added "Custom sources" section listing all user-defined sources with per-source Remove buttons.
+- Calls `unregisterUserSource()` on delete, which removes from registry and localStorage.
+
+## Task 10 — Cargo build warnings check ✅
+- Fixed 2 clippy `derivable_impls` warnings in `config.rs` (replaced manual `Default` impls with `#[derive(Default)]`).
+- **CI**: added clippy step + `RUSTFLAGS="-D warnings"` to the `rust-tests` job.
+- **Justfile**: added `clippy` recipe.
+
+## Task 11 — Test suites pass ✅
+- **JS unit**: 133 passed (18 files)
+- **Playwright e2e**: 78 passed
+- **Rust**: 53 passed
+- Zero regressions.
+
+## Task 13 — Update docs ✅
+- **FEATURES.md**: removed "Primary basemap selector" entry, updated URL hash to mention comma-separated basemapStack, added cursor DEM fallback, folder drop, cache size editing, custom source deletion entries, updated Settings panel description.
+- **UI.md**: updated Settings panel to reflect basemap selection via Add layer + Layers panel.
+- **Report**: this file.

@@ -15,13 +15,12 @@
 - **Declarative layer catalog** — single `LAYER_CATALOG` array in `layer-registry.js` defines all basemaps and overlays with sources, layers, regions, and default views
 - **User tile sources** — `registerUserSource()` / `unregisterUserSource()` allow runtime addition of `.mbtiles`/`.pmtiles` tile sources; `buildCatalogEntryFromTileSource()` auto-generates catalog entries from tile server URLs
 - **Multi-basemap stack** — `basemapStack[]` state allows stacking multiple basemaps with independent per-basemap opacity via `basemapOpacities{}`; `setBasemapStack()` handles style-backed and catalog basemaps
-- **Unified Layers panel** — all active layers (basemaps + overlays) shown in a single panel with visibility toggle, opacity slider, remove button, and drag-and-drop reorder; basemaps shown bold
+- **Unified Layers panel** — all active layers (basemaps + overlays) shown in a single panel with visibility toggle, opacity slider, remove button, and drag-and-drop reorder; primary basemap shown bold with "(primary)" label
 - **Add layer dropdown** — single structured `<select>` with `<optgroup>`s for Basemaps and Overlays; replaces separate basemap-stack and overlay controls
-- **Primary basemap selector** — dedicated `<select>` for choosing the main basemap, separate from additional layer stacking
 - **Auto-open Layers panel** — Layers panel auto-shows when adding a layer via the dropdown
 - **Built-in basemaps**: OSM (default), OTM, IGN plan (FR), SwissTopo vector, SwissTopo raster, IGN topo (FR), IGN ortho (FR), Kartverket topo (NO), None
 - **Auto fly-to** — selecting a regional basemap outside its supported area recenters the view
-- **URL persistence** — center, zoom, basemap, mode, opacity, terrain state, bearing, and pitch are encoded in the URL hash
+- **URL persistence** — center, zoom, basemap stack (comma-separated), mode, opacity, terrain state, bearing, and pitch are encoded in the URL hash; single-basemap URLs remain backward-compatible
 - **Settings migration** — `migrateSettings()` handles legacy `basemap` string → `basemapStack[]` and legacy overlay booleans → `activeOverlays[]`
 
 ## Overlays
@@ -33,7 +32,7 @@
 - **DEM tile grid** — debug overlay toggle for visible DEM tile coverage
 
 ## Track Editor
-- **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories
+- **Drag & drop import** — GPX (tracks, segments, routes, waypoints with names) and GeoJSON files, with visual drop overlay; also supports dropping directories; in Tauri mode, dropped folders are scanned in bulk via `scanAndRegisterDesktopTileFolder` for tile sources
 - **Single-file  and Directory import** — progressive support: File System Access API (Chrome/Edge) for read+write, `<input webkitdirectory>` fallback for read-only, drag & drop directory via `webkitGetAsEntry`
 - **Workspace tree** — hierarchical tree view in the track panel showing folder → file → track → segment/route/waypoint nodes with disclosure toggles and type icons (📁📄🛤️🧭📍)
 - **Context menu** — right-click, long-press, the row kebab (⋮), or the persistent top-right actions button opens the relevant context menu for the selected item; file nodes expose `New track` and `Export GPX`, while track and route nodes expose edit/profile/geometry actions plus `Export GPX`
@@ -55,6 +54,7 @@
 - **Insert preview** — dashed line shows where the next point will connect: from last point (append) or between neighbouring vertices (insert-after mode)
 - **Track stats** — total distance (km), elevation gain (↑), loss (↓), point count, average slope, and max slope for the active track
 - **Elevation enrichment** — all track points (imported and drawn) are enriched from the same DEM source and re-enriched when new DEM tiles load
+- **Cursor DEM fallback** — `queryLoadedElevationAtLngLat` tries `dem-hd` first then falls back to `dem-terrain`, so cursor info works even when only one source has tiles loaded
 - **Track markers** — green start / red end dots; mid-point vertices shown only in edit mode
 - **Smart hover-insert (desktop)** — when cursor is near the track line between vertices, a single grey marker appears at the closest point; clicking and dragging inserts a new vertex
 - **Shift/Ctrl/Meta+click delete** — remove individual track vertices (edit mode only)
@@ -74,7 +74,7 @@
 - **GPX timestamps** — `<time>` elements parsed from GPX and stored as epoch-ms in `coords[3]`; preserved in export; enables speed/pace computation and time-based profile x-axis
 - **Two-level nesting** — multi-segment GPX tracks import as grouped tracks; panel shows collapsible group header with aggregate stats and nested segments (group names also editable on double-click)
 - **localStorage persistence** — tracks and settings auto-save to localStorage with 300ms debounce; restored on page reload
-- **Saved data panel** — collapsible panel in Settings showing storage usage per category (local tile cache, server tile cache, GPX tracks, settings, all browser data) with size info, storage paths, and per-category clear buttons; works in both web and desktop modes
+- **Saved data panel** — collapsible panel in Settings showing storage usage per category (local tile cache, server tile cache with editable max-size, custom user sources with per-source Remove buttons, GPX tracks, settings, all browser data) with size info, storage paths, and per-category clear buttons; works in both web and desktop modes
 
 ## Profile
 - **Elevation profile** — bottom panel showing configurable data curves vs distance or time, with dynamic Y-axes
@@ -111,7 +111,7 @@
 - **Local tile server** — built-in HTTP tile server on port 14321 serving `.mbtiles` (via rusqlite) and `.pmtiles` (via HTTP Range serving) as `{z}/{x}/{y}` tiles
 - **Tile source management** — `addTileSource()` / `removeTileSource()` / `listTileSources()` IPC commands; sources auto-registered into the JS layer catalog
 - **Tile source discovery** — `scanTileFolder()` scans a directory for `.mbtiles`/`.pmtiles` files, reads MBTiles metadata (name, format, bounds, center, zoom range, description), and auto-registers all found sources
-- **DEM tile cache** — disk-backed LRU cache at OS cache dir (`~/Library/Caches/slopemapper/tiles/` on macOS), upstream fetch from `tiles.mapterhorn.com` with configurable max size (default 100 MB)
+- **DEM tile cache** — disk-backed LRU cache at OS cache dir (`~/Library/Caches/slopemapper/tiles/` on macOS), upstream fetch from `tiles.mapterhorn.com` with configurable max size (default 100 MB, editable)
 - **TileJSON endpoints** — `/tilejson` lists all available sources, `/tilejson/{source}` returns a [TileJSON 3.0.0](https://github.com/mapbox/tilejson-spec) document for each registered source (MBTiles metadata → TileJSON)
 - **Config file** — `slopemapper.toml` at OS config dir; `[cache] max_size_mb`, `[sources] folders = [...]` for auto-scan at startup
 - **Custom maps in Add layer** — discovered TileJSON sources appear in a "Custom maps" optgroup in the Add layer dropdown
@@ -123,13 +123,13 @@
 - **css/main.css** — all styles including track group nesting, workspace tree, context menu, Info editor, left edit rail
 - **js/main.js** — entry point: creates map, imports all modules, wires settings event handlers, persistence, shortcuts, left rail, exposes window getters for tests
 - **js/constants.js** — pure data/config: DEM constants, analysis color ramps, basemap config, parsing/legend CSS helpers
-- **js/dem.js** — Elevation sampling from loaded DEM tiles (cursor elevation & slope)
+- **js/dem.js** — Elevation sampling from loaded DEM tiles (cursor elevation & slope); tries `dem-hd` then `dem-terrain` sources
 - **js/ui.js** — basemap/contour/terrain apply functions, legend, cursor tooltip, URL hash parsing/sync, Nominatim search
 - **js/tracks.js** — track data model, CRUD, map sources/layers, stats, panel UI (with group rendering), waypoint layer, tree integration
 - **js/track-edit.js** — interactive track editing: vertex click/drag, insert popup, hover-insert, mobile editing, keyboard shortcuts, undo stack, draw/undo buttons
 - **js/io.js** — import/export (GPX via gpxjs with timestamp preservation, GeoJSON), drag-drop, directory import/export, file generation; calls `onFileBatchImported` for tree sync
 - **js/persist.js** — localStorage persistence for tracks, settings, profile display settings, and workspace tree; granular clear and size stats per category
-- **js/saved-data.js** — Saved Data panel: shows storage usage per category with clear buttons, CacheStorage stats (web), Tauri tile cache stats (desktop)
+- **js/saved-data.js** — Saved Data panel: shows storage usage per category with clear buttons, CacheStorage stats (web), Tauri tile cache stats with editable max-size (desktop), custom user sources with per-source Remove buttons
 - **js/profile.js** — Chart.js elevation profile with speed, pause detection, display settings menu, multiple x-axis modes
 - **js/track-ops.js** — pure FEAT2 operation layer for normalized selection spans, route conversion, simplify, split, merge, densify, and consequence descriptions
 - **js/selection-tools.js** — rectangle selection controller with touch/desktop drag handling, enclosing-span resolution, and anchored hint popup
@@ -200,7 +200,7 @@
 - On mobile: a permanent center crosshair (`#draw-crosshair`) always shows elevation & slope in the `#cursor-info` corner display, updated on `map.move`. A `#mobile-crosshair` also appears at tap points with the tooltip. Cursor info defaults to `corner` mode on mobile.
 
 ### Settings panel
-Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, OpenSkiMap overlay, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. The debug color-relief layer is suppressed while 3D terrain is active.
+Contains dropdowns and sliders for: Mode, Hillshade opacity, Hillshade method, Analysis opacity, Show contour lines, Show DEM tile grid, **Elevation & slope** (cursor/corner/no), Multiply blend, Enable 3D terrain + exaggeration. Basemap selection is via the unified Add layer dropdown + Layers panel. The debug color-relief layer is suppressed while 3D terrain is active.
 
 ### Track editor — state model
 - `tracks[]` — array of `{id, name, color, coords, _statsCache, groupId, groupName, segmentLabel}`.
@@ -300,7 +300,7 @@ Contains dropdowns and sliders for: Mode, Basemap, Basemap opacity, Hillshade op
 - Profile closes automatically when switching away from a 2-point track. Re-openable via the "Profile" button.
 
 ### URL hash sync
-- `syncViewToUrl` writes `lng, lat, zoom, basemap, mode, opacity, terrain, exaggeration, bearing, pitch` to the hash on every `moveend`, `zoomend`, `rotateend`, `pitchend`.
+- `syncViewToUrl` writes `lng, lat, zoom, basemap` (comma-separated basemapStack)`, mode, opacity, terrain, exaggeration, bearing, pitch` to the hash on every `moveend`, `zoomend`, `rotateend`, `pitchend`.
 - `hashchange` event reads the hash back and updates map + state + UI controls.
 
 ### GPX / GeoJSON import
