@@ -486,9 +486,10 @@ export function getAllBasemapLayerIds() {
  * Generate an auto-name for a bookmark from current basemap + overlays.
  * Format: "<Basemap> + <Overlay> [+ N others]"
  */
-export function generateBookmarkName(basemapId, overlayIds) {
-  const basemap = _byId.get(basemapId);
-  const basemapLabel = basemap ? basemap.label : basemapId;
+export function generateBookmarkName(basemapStack, overlayIds) {
+  const primaryBasemapId = basemapStack?.[0] || 'none';
+  const basemap = _byId.get(primaryBasemapId);
+  const basemapLabel = basemap ? basemap.label : primaryBasemapId;
 
   if (!overlayIds || overlayIds.length === 0) {
     return basemapLabel;

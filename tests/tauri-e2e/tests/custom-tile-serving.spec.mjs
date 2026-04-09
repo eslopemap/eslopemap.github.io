@@ -10,12 +10,16 @@ import {
     assertNoCapturedErrors,
     getMapDebugSnapshot,
     takeScreenshot,
+    takeCroppedScreenshot,
+    assertScreenshotMatch,
 } from './helpers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.resolve(__dirname, '../../fixtures/tiles');
 const MBTILES_PATH = path.join(FIXTURES_DIR, 'dummy-z1-z3.mbtiles');
+const PMTILES_PATH = path.join(FIXTURES_DIR, 'dummy-z1-z3.pmtiles');
 const SOURCE_NAME = 'custom-mbtiles';
+const PMTILES_SOURCE_NAME = 'custom-pmtiles';
 const CATALOG_ID = `tilejson-${SOURCE_NAME}`;
 const DISPLAY_NAME = 'dummy-z1-z3';
 
@@ -109,7 +113,6 @@ async function seedPersistedCustomSource(browser, tileJson) {
         localStorage.setItem('slope:user-sources', JSON.stringify(filteredSources));
 
         const settings = JSON.parse(localStorage.getItem('slope:settings') || '{}');
-        settings.basemap = entryId;
         settings.basemapStack = [entryId];
         localStorage.setItem('slope:settings', JSON.stringify(settings));
     }, tileJson);
@@ -208,6 +211,11 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
 
         await seedPersistedCustomSource(browser, singleSourceResult.body);
 
+        // Set zoom=2 so only z1-z3 fixture tiles are requested (no internet needed)
+        await browser.execute(() => {
+            window.location.hash = 'test_mode=true&zoom=2&lng=0&lat=0';
+        });
+        await browser.pause(500);
         await browser.refresh();
         await waitForTauri(browser);
         await installErrorCapture(browser);
@@ -257,5 +265,79 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
 
         assert.strictEqual(ratioResult.ok, true, ratioResult.error || 'Canvas probe should succeed');
         assert.ok(ratioResult.nonWhiteRatio > 0.01, `Expected visible non-white pixels, got ratio ${ratioResult.nonWhiteRatio}`);
+
+        // Cropped map-center screenshot — only map content, no UI chrome
+        const croppedPath = await takeCroppedScreenshot(browser, '02-custom-mbtiles-map', { width: 400, height: 400 });
+        assertScreenshotMatch(croppedPath, '02-custom-mbtiles-map', { maxDiffRatio: 0.08 });
+    });
+
+    it('registers a local PMTiles source, activates it, and verifies map rendering', async () => {
+        if (!fs.existsSync(PMTILES_PATH)) {
+            throw new Error(`Missing PMTiles fixture: ${PMTILES_PATH}`);
+        }
+
+        await resetDesktopTestState(browser, { tileSourceNames: [PMTILES_SOURCE_NAME] });
+        await installErrorCapture(browser);
+
+        // Register the PMTiles source
+        await tauriInvoke(browser, 'add_tile_source', { name: PMTILES_SOURCE_NAME, path: PMTILES_PATH });
+
+        const listedSources = await tauriInvoke(browser, 'list_tile_sources');
+        const listed = listedSources.find(source => source.name === PMTILES_SOURCE_NAME);
+        assert.ok(listed, 'PMTiles source should be present in Tauri tile registry');
+
+        // Get TileJSON for the PMTiles source
+        const config = await tauriInvoke(browser, 'get_desktop_config');
+        const singleSourceResult = await browser.executeAsync((baseUrl, sourceName, done) => {
+            fetch(`${baseUrl}/tilejson/${sourceName}`)
+                .then(async (res) => done({ ok: true, status: res.status, body: await res.json() }))
+                .catch((e) => done({ ok: false, error: String(e) }));
+        }, config.tile_base_url, PMTILES_SOURCE_NAME);
+
+        assert.strictEqual(singleSourceResult.ok, true, singleSourceResult.error || 'PMTiles TileJSON should succeed');
+        assert.strictEqual(singleSourceResult.status, 200, 'PMTiles TileJSON should return 200');
+
+        // Seed the user source into localStorage and reload at z2 (within fixture range z1-z3)
+        await seedPersistedCustomSource(browser, singleSourceResult.body);
+        await browser.execute(() => {
+            window.location.hash = 'test_mode=true&zoom=2&lng=0&lat=0';
+        });
+        await browser.pause(500);
+        await browser.refresh();
+        await waitForTauri(browser);
+        await installErrorCapture(browser);
+
+        // PMTiles TileJSON uses the registered source name as display name
+        const pmDisplayName = singleSourceResult.body.name || PMTILES_SOURCE_NAME;
+        console.log(`[test] PMTiles display name: ${pmDisplayName}`);
+        await waitForCustomMapLabel(browser, pmDisplayName);
+
+        const uiState = await browser.execute((displayName) => {
+            const layerOrderText = document.getElementById('layer-order-list')?.textContent || '';
+            return { alreadyActive: layerOrderText.includes(displayName) };
+        }, pmDisplayName);
+
+        if (!uiState.alreadyActive) {
+            await selectAddLayerOptionByLabel(browser, pmDisplayName);
+        }
+
+        await browser.waitUntil(
+            async () => browser.execute((displayName) => {
+                const layerOrderText = document.getElementById('layer-order-list')?.textContent || '';
+                return layerOrderText.includes(displayName);
+            }, pmDisplayName),
+            { timeout: 20000, timeoutMsg: 'PMTiles custom map did not become active in the UI' }
+        );
+
+        await browser.pause(2000);
+
+        const ratioResult = await getCenterNonWhiteRatio(browser);
+        console.log(`[test] PMTiles center non-white ratio: ${JSON.stringify(ratioResult)}`);
+
+        assert.strictEqual(ratioResult.ok, true, ratioResult.error || 'Canvas probe should succeed');
+        assert.ok(ratioResult.nonWhiteRatio > 0.01, `Expected visible non-white pixels for PMTiles, got ratio ${ratioResult.nonWhiteRatio}`);
+
+        const croppedPath = await takeCroppedScreenshot(browser, '03-custom-pmtiles-map', { width: 400, height: 400 });
+        assertScreenshotMatch(croppedPath, '03-custom-pmtiles-map', { maxDiffRatio: 0.08 });
     });
 });

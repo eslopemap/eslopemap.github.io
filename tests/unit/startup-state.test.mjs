@@ -5,7 +5,7 @@ describe('startup-state helpers', () => {
   it('deriveInitialState merges persisted settings with explicit URL overrides', () => {
     const result = deriveInitialState({
       persistedSettings: {
-        basemap: 'osm',
+        basemapStack: ['osm'],
         mode: 'slope',
         slopeOpacity: 0.3,
         terrain3d: false,
@@ -23,7 +23,7 @@ describe('startup-state helpers', () => {
       defaultView: {
         center: [0, 0],
         zoom: 1,
-        basemap: null,
+        basemapStack: ['otm'],
         mode: 'slope+relief',
         slopeOpacity: 0.45,
         terrain3d: false,
@@ -38,7 +38,7 @@ describe('startup-state helpers', () => {
     expect(result.initialView).toEqual({
       center: [6.8, 45.9],
       zoom: 10.5,
-      basemap: 'osm',
+      basemapStack: ['osm'],
       mode: 'color-relief',
       slopeOpacity: 0.3,
       terrain3d: true,
@@ -54,12 +54,12 @@ describe('startup-state helpers', () => {
 
   it('deriveInitialState requests initial geolocation only with no url state, no test mode, and no persisted view', () => {
     const result = deriveInitialState({
-      persistedSettings: { basemap: 'osm' },
+      persistedSettings: { basemapStack: ['osm'] },
       urlOverrides: {},
       defaultView: {
         center: [6.8652, 45.8326],
         zoom: 12,
-        basemap: null,
+        basemapStack: ['osm'],
         mode: 'slope+relief',
         slopeOpacity: 0.45,
         terrain3d: false,
@@ -77,7 +77,6 @@ describe('startup-state helpers', () => {
 
   it('applyUrlOverrides updates state fields and returns the next view payload', () => {
     const state = {
-      basemap: 'osm',
       basemapStack: ['osm'],
       mode: 'slope',
       slopeOpacity: 0.4,
@@ -90,7 +89,7 @@ describe('startup-state helpers', () => {
     };
 
     const result = applyUrlOverrides(state, {
-      basemap: 'none',
+      basemapStack: ['none'],
       mode: 'aspect',
       slopeOpacity: 0.7,
       terrain3d: true,
@@ -108,7 +107,6 @@ describe('startup-state helpers', () => {
     });
 
     expect(state).toMatchObject({
-      basemap: 'none',
       basemapStack: ['none'],
       mode: 'aspect',
       slopeOpacity: 0.7,
@@ -128,5 +126,27 @@ describe('startup-state helpers', () => {
       },
       isTestMode: true,
     });
+  });
+
+  it('deriveInitialState migrates a legacy persisted basemap into basemapStack', () => {
+    const result = deriveInitialState({
+      persistedSettings: { basemap: 'osm' },
+      urlOverrides: {},
+      defaultView: {
+        center: [0, 0],
+        zoom: 1,
+        basemapStack: ['otm'],
+        mode: 'slope+relief',
+        slopeOpacity: 0.45,
+        terrain3d: false,
+        terrainExaggeration: 1.4,
+        testMode: false,
+        bearing: 0,
+        pitch: 0,
+      },
+      hasUrlState: false,
+    });
+
+    expect(result.initialView.basemapStack).toEqual(['osm']);
   });
 });

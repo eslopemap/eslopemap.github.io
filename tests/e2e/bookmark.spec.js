@@ -53,11 +53,11 @@ test.describe('Bookmarks', () => {
 
     await restoreBookmark(page);
 
-    const s = await getState(page, ['mode', 'slopeOpacity', 'activeOverlays', 'basemap', 'layerOrder']);
+    const s = await getState(page, ['mode', 'slopeOpacity', 'activeOverlays', 'basemapStack', 'layerOrder']);
     expect(s.mode).toBe('slope+relief');
     expect(s.slopeOpacity).toBe(0.7);
     expect(s.activeOverlays).toEqual(['openskimap']);
-    expect(s.basemap).toBe('osm');
+    expect(s.basemapStack).toEqual(['osm']);
     expect(s.layerOrder).toContain('_analysis');
     expect(s.layerOrder).toContain('openskimap');
   });

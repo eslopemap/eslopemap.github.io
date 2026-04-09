@@ -9,7 +9,7 @@ export function deriveInitialState({
   const fallbackView = defaultView ?? {
     center: [6.8652, 45.8326],
     zoom: 12,
-    basemap: null,
+    basemapStack: ['osm'],
     mode: 'slope+relief',
     slopeOpacity: 0.45,
     terrain3d: false,
@@ -26,7 +26,7 @@ export function deriveInitialState({
   const initialView = {
     center: hasPersistedView ? persisted.viewCenter : fallbackView.center,
     zoom: Number.isFinite(persisted?.viewZoom) ? persisted.viewZoom : fallbackView.zoom,
-    basemap: persisted?.basemap ?? fallbackView.basemap,
+    basemapStack: persisted?.basemapStack ?? (persisted?.basemap ? [persisted.basemap] : (fallbackView.basemapStack ?? ['osm'])),
     mode: persisted?.mode ?? fallbackView.mode,
     slopeOpacity: persisted?.slopeOpacity ?? fallbackView.slopeOpacity,
     terrain3d: persisted?.terrain3d ?? fallbackView.terrain3d,
@@ -61,12 +61,8 @@ export function applyUrlOverrides(state, overrides, currentView) {
     pitch: patch.pitch ?? activeView.pitch,
   };
 
-  if (patch.basemapStack && patch.basemapStack.length > 0) {
-    state.basemap = patch.basemapStack[0];
-    state.basemapStack = patch.basemapStack;
-  } else if (patch.basemap) {
-    state.basemap = patch.basemap;
-    state.basemapStack = [patch.basemap];
+  if ('basemapStack' in patch) {
+    state.basemapStack = [...patch.basemapStack];
   }
   if ('mode' in patch) state.mode = patch.mode;
   if ('slopeOpacity' in patch) state.slopeOpacity = patch.slopeOpacity;

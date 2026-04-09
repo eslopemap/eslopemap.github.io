@@ -57,7 +57,7 @@ describe('ui URL state parsing', () => {
     expect(getDefaultViewState()).toEqual({
       center: [6.8652, 45.8326],
       zoom: 12,
-      basemap: null,
+      basemapStack: ['osm'],
       mode: 'slope+relief',
       slopeOpacity: 0.45,
       terrain3d: false,
@@ -101,7 +101,6 @@ describe('ui URL state parsing', () => {
     installWindow('#basemap=osm&bearing=22.5&pitch=40');
 
     expect(parseHashParams()).toEqual({
-      basemap: 'osm',
       basemapStack: ['osm'],
       bearing: 22.5,
       pitch: 40,
@@ -112,7 +111,6 @@ describe('ui URL state parsing', () => {
     installWindow('#basemap=osm,otm');
 
     expect(parseHashParams()).toEqual({
-      basemap: 'osm',
       basemapStack: ['osm', 'otm'],
     });
   });
@@ -121,7 +119,6 @@ describe('ui URL state parsing', () => {
     installWindow('#basemap=osm,missing,otm');
 
     expect(parseHashParams()).toEqual({
-      basemap: 'osm',
       basemapStack: ['osm', 'otm'],
     });
   });

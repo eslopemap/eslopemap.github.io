@@ -188,7 +188,7 @@ export function getDefaultViewState() {
   return {
     center: [6.8652, 45.8326],
     zoom: 12,
-    basemap: null,
+    basemapStack: ['osm'],
     mode: 'slope+relief',
     slopeOpacity: 0.45,
     terrain3d: false,
@@ -229,10 +229,11 @@ export function parseHashParams() {
 
     if (params.has('lng') && params.has('lat') && hasLng && hasLat) overrides.center = [lngRaw, latRaw];
     if (params.has('zoom') && hasZoom) overrides.zoom = zoomRaw;
-    if (params.has('basemap') && basemapParts.length > 0) {
+    if (params.has('basemap') && basemapRaw === 'none') {
+      overrides.basemapStack = [];
+    } else if (params.has('basemap') && basemapParts.length > 0) {
       const validParts = basemapParts.filter(id => getCatalogEntry(id));
       if (validParts.length > 0) {
-        overrides.basemap = validParts[0];
         overrides.basemapStack = validParts;
       }
     }
@@ -259,7 +260,11 @@ export function syncViewToUrl(map, state) {
   params.set('lat', center.lat.toFixed(6));
   params.set('zoom', zoom.toFixed(2));
   const stack = state.basemapStack || [];
-  if (stack.length > 0) params.set('basemap', stack.join(','));
+  if (stack.length > 0) {
+    params.set('basemap', stack.join(','));
+  } else {
+    params.set('basemap', 'none');
+  }
   params.set('mode', state.mode);
   params.set('opacity', state.slopeOpacity.toFixed(2));
   params.set('terrain', state.terrain3d ? '1' : '0');

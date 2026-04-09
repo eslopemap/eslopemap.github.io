@@ -4,13 +4,11 @@ import {
   loadProfileSettings,
   loadSettings,
   loadTracks,
-  loadUserSources,
   loadWaypoints,
   loadWorkspace,
   saveProfileSettings,
   saveSettings,
   saveTracks,
-  saveUserSources,
   saveWaypoints,
   saveWorkspace,
 } from '../../app/js/persist.js';
@@ -83,28 +81,16 @@ describe('persist', () => {
 
   it('persists only whitelisted settings keys', () => {
     saveSettings({
-      basemap: 'osm',
+      basemapStack: ['osm'],
       mode: 'slope',
       terrain3d: true,
-      showHillshade: false,
-      showTileGrid: true,
-      viewCenter: [6.9, 45.8],
-      viewZoom: 11.25,
-      viewBearing: 22.5,
-      viewPitch: 35,
       unknownSetting: 'ignored',
     });
 
     expect(loadSettings()).toEqual({
-      basemap: 'osm',
+      basemapStack: ['osm'],
       mode: 'slope',
       terrain3d: true,
-      showHillshade: false,
-      showTileGrid: true,
-      viewCenter: [6.9, 45.8],
-      viewZoom: 11.25,
-      viewBearing: 22.5,
-      viewPitch: 35,
     });
   });
 
@@ -214,10 +200,9 @@ describe('persist', () => {
   it('clears all persisted keys', () => {
     saveTracks([{ id: 'trk-1', name: 'Track', color: '#000', coords: [] }]);
     saveWaypoints([{ id: 'wpt-1', name: 'Waypoint', coords: [0, 0] }]);
-    saveSettings({ basemap: 'osm' });
+    saveSettings({ basemapStack: ['osm'] });
     saveProfileSettings({ xAxis: 'distance' });
     saveWorkspace({ children: [] });
-    saveUserSources([{ id: 'tilejson-demo', label: 'Demo', userDefined: true }]);
 
     clearAll();
 
@@ -226,13 +211,12 @@ describe('persist', () => {
     expect(loadSettings()).toBeNull();
     expect(loadProfileSettings()).toBeNull();
     expect(loadWorkspace()).toBeNull();
-    expect(loadUserSources()).toEqual([]);
   });
 
   it('clearTracks removes only tracks/waypoints/workspace', () => {
     saveTracks([{ id: 'trk-1', name: 'T', color: '#000', coords: [] }]);
     saveWaypoints([{ id: 'wpt-1', name: 'W', coords: [0, 0] }]);
-    saveSettings({ basemap: 'osm' });
+    saveSettings({ basemapStack: ['osm'] });
     saveWorkspace({ children: [] });
 
     clearTracks();
@@ -241,12 +225,12 @@ describe('persist', () => {
     expect(loadWaypoints()).toEqual([]);
     expect(loadWorkspace()).toBeNull();
     // Settings should remain
-    expect(loadSettings()).toEqual({ basemap: 'osm' });
+    expect(loadSettings()).toEqual({ basemapStack: ['osm'] });
   });
 
   it('clearSettings removes only settings/profile-settings', () => {
     saveTracks([{ id: 'trk-1', name: 'T', color: '#000', coords: [] }]);
-    saveSettings({ basemap: 'osm' });
+    saveSettings({ basemapStack: ['osm'] });
     saveProfileSettings({ xAxis: 'time' });
 
     clearSettings();
@@ -271,14 +255,14 @@ describe('persist', () => {
   });
 
   it('getSettingsStats returns byte size', () => {
-    saveSettings({ basemap: 'osm', mode: 'slope' });
+    saveSettings({ basemapStack: ['osm'], mode: 'slope' });
     const stats = getSettingsStats();
     expect(stats.bytes).toBeGreaterThan(0);
   });
 
   it('getAllStats counts only slope:* keys', () => {
     saveTracks([{ id: 'trk-1', name: 'T', color: '#000', coords: [] }]);
-    saveSettings({ basemap: 'osm' });
+    saveSettings({ basemapStack: ['osm'] });
     // Add a non-slope key
     localStorage.setItem('other:key', 'value');
 

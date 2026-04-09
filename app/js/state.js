@@ -16,7 +16,6 @@ export function createStore(initial, onChange) {
 
 export const STATE_DEFAULTS = {
   mode: 'slope+relief',
-  basemap: 'osm',           // primary basemap (backward compat getter)
   basemapStack: ['osm'],     // ordered list of active basemaps (bottom→top)
   basemapOpacity: 1,         // global basemap opacity (legacy single-basemap)
   basemapOpacities: {},      // per-basemap opacity overrides: { [id]: number }

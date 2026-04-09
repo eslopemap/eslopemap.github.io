@@ -111,6 +111,27 @@ The Playwright suite now installs a shared `page.route('**/*', ...)` guard that:
 
 This makes web E2E deterministic even if a test or app regression accidentally reintroduces an internet-backed source.
 
+### 7. Removed legacy single-basemap runtime state
+
+Updated:
+- `app/js/state.js`
+- `app/js/ui.js`
+- `app/js/startup-state.js`
+- `app/js/main.js`
+- `app/js/layer-engine.js`
+- `app/js/layer-registry.js`
+- `app/js/persist.js`
+
+The app now treats `basemapStack` as the only authoritative basemap selection state.
+
+The old single-value `basemap` field was removed from:
+- runtime defaults,
+- startup/hash application,
+- bookmark creation,
+- persisted settings.
+
+Compatibility is retained only in migration paths when reading older saved settings or bookmarks.
+
 ## Test Results
 
 ### Confirmed during this pass
@@ -119,6 +140,10 @@ Focused Tauri DEM run now passes all readiness and runtime assertions; the only 
 
 Focused Playwright validation of the new offline-route guard also now reaches application/test assertions correctly.
 The shared guard no longer interferes with local app or fixture-server traffic.
+
+Focused basemap-state validation for the stack-only cleanup also passes:
+- `npx vitest run tests/unit/startup-state.test.mjs tests/unit/ui-url-state.test.mjs tests/unit/persist.test.mjs tests/unit/layer-engine.test.mjs`
+- `npx playwright test tests/e2e/bookmark.spec.js`
 
 At the time of this update, the remaining focused Playwright failure is limited to the existing `dem-color-relief.png` screenshot mismatch:
 - measured diff ratio: `0.06`
@@ -161,11 +186,21 @@ The Tauri DEM tests are valuable because they exercise the real desktop cache an
 - `app/js/ui.js`
 - `app/js/startup-state.js`
 - `app/js/main.js`
+- `app/js/state.js`
+- `app/js/layer-engine.js`
+- `app/js/layer-registry.js`
+- `app/js/persist.js`
 - `tests/e2e/helpers.js`
+- `tests/e2e/bookmark.spec.js`
 - `tests/e2e/dem-loading.spec.js`
 - `tests/e2e/tile-serving.spec.js`
 - `tests/tauri-e2e/tests/dem-tile-serving.spec.mjs`
+- `tests/tauri-e2e/tests/custom-tile-serving.spec.mjs`
 - `tests/README.md`
+- `tests/unit/startup-state.test.mjs`
+- `tests/unit/ui-url-state.test.mjs`
+- `tests/unit/persist.test.mjs`
+- `tests/unit/layer-engine.test.mjs`
 - `tests/tauri-e2e/snapshots/01-dem-tile-404.png`
 - `tests/tauri-e2e/snapshots/01-dem-tile-cache-working.png`
 

@@ -70,7 +70,7 @@ export function loadWaypoints() {
 // ---- Settings ----
 
 const SETTING_KEYS = [
-  'basemap', 'basemapStack', 'basemapOpacities',
+  'basemapStack', 'basemapOpacities',
   'mode', 'slopeOpacity', 'basemapOpacity', 'hillshadeOpacity',
   'hillshadeMethod', 'terrain3d', 'terrainExaggeration', 'multiplyBlend',
   'showHillshade', 'showContours', 'showTileGrid',

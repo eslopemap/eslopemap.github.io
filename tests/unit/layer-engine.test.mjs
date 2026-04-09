@@ -298,7 +298,7 @@ describe('layer-engine style basemaps', () => {
       map.__nativeBasemapLayerIds.set('swisstopo-vector', ['swiss-background', 'swiss-land', 'swiss-labels']);
     });
     const state = {
-      basemap: 'osm',
+      basemapStack: ['osm'],
       basemapOpacity: 0.6,
       activeOverlays: [],
       layerOrder: [],
@@ -380,7 +380,7 @@ describe('layer-engine style basemaps', () => {
       map.__nativeBasemapLayerIds.set('swisstopo-vector', ['swiss-background', 'swiss-land', 'swiss-labels']);
     });
     const state = {
-      basemap: 'swisstopo-vector',
+      basemapStack: ['swisstopo-vector'],
       basemapOpacity: 0.8,
       activeOverlays: [],
       layerOrder: [],

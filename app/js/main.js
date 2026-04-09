@@ -117,7 +117,6 @@ function ensureDebugGridLayer(map) {
 }
 
 function applyTestModeState(state) {
-  state.basemap = 'none';
   state.basemapStack = [];
   state.mode = '';
   state.showHillshade = false;
@@ -139,7 +138,7 @@ function syncTestModeUi(state) {
 function applyTestModeMapState(map, state) {
   applyHillshadeVisibility(map, state);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
-  void setBasemap(map, state, state.basemap);
+  void setBasemapStack(map, state, state.basemapStack || []);
   applyAllOverlays(map, state);
   applyModeState(map, state);
   applyContourVisibility(map, state);
@@ -174,10 +173,7 @@ const { initialView, isTestMode, shouldAttemptInitialGeolocate } = deriveInitial
   defaultView: getDefaultViewState(),
   hasUrlState,
 });
-if (initialView.basemap) {
-  state.basemap = initialView.basemap;
-  state.basemapStack = [initialView.basemap];
-}
+if (Array.isArray(initialView.basemapStack)) state.basemapStack = [...initialView.basemapStack];
 state.mode = initialView.mode;
 state.slopeOpacity = initialView.slopeOpacity;
 state.terrain3d = initialView.terrain3d;
@@ -618,7 +614,8 @@ map.__ensureBasemapStyle = async (catalogId) => {
 };
 
 map.on('style.load', () => {
-  const entry = getCatalogEntry(state.basemap);
+  const primaryBasemapId = state.basemapStack?.[0] || 'none';
+  const entry = getCatalogEntry(primaryBasemapId);
   if (entry?.styleUrl) {
     map.__nativeBasemapLayerIds.set(entry.id, (map.getStyle()?.layers || []).map(layer => layer.id));
   }
@@ -954,8 +951,9 @@ document.getElementById('basemapOpacity').addEventListener('input', (e) => {
   document.getElementById('basemapOpacityValue').textContent = state.basemapOpacity.toFixed(2);
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);
   // Native-style basemaps need explicit opacity scaling; catalog layers use global-state
-  if (map.__nativeBasemapLayerIds?.has(state.basemap)) {
-    applyLayerOpacity(map, state.basemap, state.basemapOpacity);
+  const primaryBasemapId = state.basemapStack?.[0] || 'none';
+  if (map.__nativeBasemapLayerIds?.has(primaryBasemapId)) {
+    applyLayerOpacity(map, primaryBasemapId, state.basemapOpacity);
   }
   map.triggerRepaint();
   scheduleSettingsSave();
@@ -1502,7 +1500,7 @@ map.on('load', async () => {
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
   ensureAppRuntimeLayers(map);
   tracksState.rehydrateTrackLayers();
-  await setBasemap(map, state, state.basemap);
+  await setBasemapStack(map, state, state.basemapStack || []);
   syncLayerOrder(state);
   applyAllOverlays(map, state);
   applyAllLayerSettings(map, state);
@@ -1683,7 +1681,7 @@ window.addEventListener('hashchange', async () => {
   }
 
   updateLegend(state, map);
-  await setBasemap(map, state, state.basemap, true);
+  await setBasemapStack(map, state, state.basemapStack || [], true);
   applyAllOverlays(map, state);
   applyModeState(map, state);
   applyTerrainState(map, state);

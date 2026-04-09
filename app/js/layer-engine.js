@@ -118,9 +118,6 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
   if (ids.length === 0) ids = ['none'];
   state.basemapStack = [...ids];
 
-  // Backward compatibility: keep state.basemap synced with primary (bottom) layer
-  state.basemap = state.basemapStack[0] || 'none';
-
   // Ensure visibility in layerSettings so it shows up if it was previously hidden
   const settings = { ...(state.layerSettings || {}) };
   let settingsChanged = false;
@@ -404,7 +401,8 @@ export function createBookmark(state) {
     ? crypto.randomUUID()
     : 'bm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
 
-  const name = generateBookmarkName(state.basemap, state.activeOverlays);
+  const basemapStack = [...(state.basemapStack || ['none'])];
+  const name = generateBookmarkName(basemapStack, state.activeOverlays);
 
   // Capture system layer state in layerSettings
   const layerSettings = JSON.parse(JSON.stringify(state.layerSettings || {}));
@@ -433,8 +431,7 @@ export function createBookmark(state) {
   const bookmark = {
     id,
     name,
-    basemap: state.basemap,
-    basemapStack: [...(state.basemapStack || [state.basemap])],
+    basemapStack,
     basemapOpacities: { ...(state.basemapOpacities || {}) },
     overlays: [...state.activeOverlays],
     layerOrder: [...(state.layerOrder || [])],
