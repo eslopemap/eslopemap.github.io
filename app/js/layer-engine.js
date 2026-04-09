@@ -246,13 +246,17 @@ export function applyAllOverlays(map, state) {
 
 /**
  * Ensure state.layerOrder contains exactly the active layer IDs:
- * basemapStack entries (bottom) + activeOverlays (top).
+ * basemapStack entries (bottom) + activeOverlays + virtual system layers (top).
  * Adds new layers at the end of their section, removes stale ones.
  */
 export function syncLayerOrder(state) {
   const basemaps = new Set(state.basemapStack || []);
   const overlays = new Set(state.activeOverlays);
-  const allActive = new Set([...basemaps, ...overlays]);
+  
+  // Virtual system layers: always present in layerOrder (visibility toggled separately)
+  const systemLayers = ['_hillshade', '_analysis', '_contours'];
+  
+  const allActive = new Set([...basemaps, ...overlays, ...systemLayers]);
 
   const current = (state.layerOrder || []).filter(id => allActive.has(id));
   // Add any active layers not yet in order
@@ -260,6 +264,9 @@ export function syncLayerOrder(state) {
     if (!current.includes(id)) current.push(id);
   }
   for (const id of state.activeOverlays) {
+    if (!current.includes(id)) current.push(id);
+  }
+  for (const id of systemLayers) {
     if (!current.includes(id)) current.push(id);
   }
   state.layerOrder = current;
@@ -399,6 +406,30 @@ export function createBookmark(state) {
 
   const name = generateBookmarkName(state.basemap, state.activeOverlays);
 
+  // Capture system layer state in layerSettings
+  const layerSettings = JSON.parse(JSON.stringify(state.layerSettings || {}));
+  
+  // Store analysis layer state
+  if (state.mode && state.mode !== 'none' && state.mode !== '') {
+    layerSettings._analysis = {
+      mode: state.mode,
+      opacity: state.slopeOpacity,
+    };
+  }
+  
+  // Store hillshade layer state
+  if (state.showHillshade) {
+    layerSettings._hillshade = {
+      opacity: state.hillshadeOpacity,
+      method: state.hillshadeMethod,
+    };
+  }
+  
+  // Store contours layer state
+  if (state.showContours) {
+    layerSettings._contours = { visible: true };
+  }
+
   const bookmark = {
     id,
     name,
@@ -407,7 +438,7 @@ export function createBookmark(state) {
     basemapOpacities: { ...(state.basemapOpacities || {}) },
     overlays: [...state.activeOverlays],
     layerOrder: [...(state.layerOrder || [])],
-    layerSettings: JSON.parse(JSON.stringify(state.layerSettings || {})),
+    layerSettings,
   };
 
   const bookmarks = [...(state.bookmarks || []), bookmark];
@@ -424,6 +455,30 @@ export async function applyBookmark(map, state, bookmark) {
   state.layerSettings = JSON.parse(JSON.stringify(bookmark.layerSettings || {}));
   state.basemapOpacities = { ...(bookmark.basemapOpacities || {}) };
 
+  // Restore system layer state from layerSettings
+  const settings = state.layerSettings;
+  
+  if (settings._analysis) {
+    state.mode = settings._analysis.mode || 'slope+relief';
+    state.slopeOpacity = settings._analysis.opacity ?? 0.45;
+  } else {
+    state.mode = '';
+  }
+  
+  if (settings._hillshade) {
+    state.showHillshade = true;
+    state.hillshadeOpacity = settings._hillshade.opacity ?? 0.10;
+    state.hillshadeMethod = settings._hillshade.method || 'igor';
+  } else {
+    state.showHillshade = false;
+  }
+  
+  if (settings._contours) {
+    state.showContours = true;
+  } else {
+    state.showContours = false;
+  }
+
   const stack = bookmark.basemapStack || (bookmark.basemap ? [bookmark.basemap] : []);
   await setBasemapStack(map, state, stack);
   applyAllOverlays(map, state);
@@ -433,6 +488,10 @@ export async function applyBookmark(map, state, bookmark) {
     const opacity = state.basemapOpacities?.[id];
     if (opacity != null) applyLayerOpacity(map, id, opacity);
   }
+  
+  // Sync layerOrder to include virtual system layers
+  syncLayerOrder(state);
+  // NOTE: caller must apply system layer UI state (applyModeState, applyHillshadeVisibility, etc.)
 }
 
 /**

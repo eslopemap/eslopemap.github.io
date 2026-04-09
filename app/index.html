@@ -120,25 +120,6 @@
       <select id="basemap-primary"></select>
     </div>
 
-    <div class="row">
-      <label for="mode"><strong>Mode</strong></label><br />
-      <select id="mode">
-        <option value=""></option>
-        <option value="slope+relief" selected>Slope + Color relief</option>
-        <option value="slope">Slope</option>
-        <option value="aspect">Aspect</option>
-        <option value="color-relief">Color relief</option>
-      </select>
-    </div>
-
-    <div class="row">
-      <label><input id="showHillshade" type="checkbox" checked /> Hillshade</label>
-    </div>
-
-    <div class="row">
-      <label><input id="showContours" type="checkbox" checked /> Contour lines</label>
-    </div>
-
     <div class="row add-layer-row">
       <select id="add-layer">
         <option value="">+ Add layer…</option>
@@ -156,13 +137,14 @@
       </div>
 
       <div class="row">
-        <label for="slopeOpacity"><strong>Analysis opacity</strong>: <span id="slopeOpacityValue">0.45</span></label><br />
-        <input id="slopeOpacity" type="range" min="0" max="1" step="0.01" value="0.45" />
-      </div>
-
-      <div class="row">
-        <label for="hillshadeOpacity"><strong>Hillshade opacity</strong>: <span id="hillshadeOpacityValue">0.10</span></label><br />
-        <input id="hillshadeOpacity" type="range" min="0" max="1" step="0.01" value="0.10" />
+        <label for="mode"><strong>Terrain Analysis Mode</strong></label><br />
+        <select id="mode">
+          <option value="">None</option>
+          <option value="slope+relief" selected>Slope + Color relief</option>
+          <option value="slope">Slope</option>
+          <option value="aspect">Aspect</option>
+          <option value="color-relief">Color relief</option>
+        </select>
       </div>
 
       <div class="row">

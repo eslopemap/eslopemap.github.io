@@ -305,7 +305,7 @@ describe('layer-engine style basemaps', () => {
       layerOrder: [],
     };
     syncLayerOrder(state);
-    expect(state.layerOrder).toEqual(['osm', 'swisstopo-raster', 'openskimap', 'swisstopo-ski-ch']);
+    expect(state.layerOrder).toEqual(['osm', 'swisstopo-raster', 'openskimap', 'swisstopo-ski-ch', '_hillshade', '_analysis', '_contours']);
   });
 
   it('syncLayerOrder preserves existing order', async () => {
@@ -317,7 +317,7 @@ describe('layer-engine style basemaps', () => {
     };
     syncLayerOrder(state);
     // Existing order preserved, all items still present
-    expect(state.layerOrder).toEqual(['swisstopo-ski-ch', 'osm', 'openskimap']);
+    expect(state.layerOrder).toEqual(['swisstopo-ski-ch', 'osm', 'openskimap', '_hillshade', '_analysis', '_contours']);
   });
 
   it('syncLayerOrder removes stale entries', async () => {
@@ -328,7 +328,7 @@ describe('layer-engine style basemaps', () => {
       layerOrder: ['osm', 'openskimap', 'swisstopo-ski-ch'],
     };
     syncLayerOrder(state);
-    expect(state.layerOrder).toEqual(['osm']);
+    expect(state.layerOrder).toEqual(['osm', '_hillshade', '_analysis', '_contours']);
   });
 
   it('updates opacity for already-loaded style-backed basemap layers', async () => {

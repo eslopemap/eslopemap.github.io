@@ -8,7 +8,7 @@ import { saveUserSources } from './persist.js';
  * @typedef {Object} CatalogEntry
  * @property {string} id - unique identifier
  * @property {string} label - UI display name
- * @property {'basemap'|'overlay'} category
+ * @property {'basemap'|'overlay'|'system'} category
  * @property {[number,number,number,number]|null} region - [w,s,e,n] bounding box or null for global
  * @property {{center:[number,number], zoom:number}|null} defaultView - fly-to when selected
  * @property {Object} sources - MapLibre source definitions keyed by source id
@@ -369,6 +369,35 @@ export const LAYER_CATALOG = [
         paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
       }
     ]
+  },
+
+  // ── Virtual System Layers ──────────────────────────────────────────
+  {
+    id: '_hillshade',
+    label: 'Hillshade',
+    category: 'system',
+    region: null,
+    defaultView: null,
+    sources: {},
+    layers: []
+  },
+  {
+    id: '_analysis',
+    label: 'Terrain analysis',
+    category: 'system',
+    region: null,
+    defaultView: null,
+    sources: {},
+    layers: []
+  },
+  {
+    id: '_contours',
+    label: 'Contours',
+    category: 'system',
+    region: null,
+    defaultView: null,
+    sources: {},
+    layers: []
   },
 ];
 
