@@ -88,6 +88,10 @@ npm-install:
 check:
     cd src-tauri && cargo check
 
+# Run clippy with warnings denied
+clippy:
+    cd src-tauri && cargo clippy -- -D warnings
+
 # Format Rust code
 fmt:
     cd src-tauri && cargo fmt

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Top-level configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
     pub cache: CacheConfig,
@@ -31,28 +31,11 @@ pub struct CacheConfig {
 }
 
 /// Tile source discovery settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SourcesConfig {
     /// Folders to scan for .mbtiles/.pmtiles files on startup.
     pub folders: Vec<String>,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            cache: CacheConfig::default(),
-            sources: SourcesConfig::default(),
-        }
-    }
-}
-
-impl Default for SourcesConfig {
-    fn default() -> Self {
-        Self {
-            folders: Vec::new(),
-        }
-    }
 }
 
 impl Default for CacheConfig {
