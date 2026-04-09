@@ -37,6 +37,17 @@ export const STATE_DEFAULTS = {
   profileSmoothing: 3,  // moving-average half-window radius (0 = off)
 };
 
+export const STATE_TEST_MODE = {
+  basemapStack: [],
+  mode: '',
+  showHillshade: false,
+  showContours: false,
+  activeOverlays: [],
+  layerOrder: [],
+  terrain3d: false,
+  hillshadeOpacity: 0,
+};
+
 // ---- Workspace tree UI state (not persisted in settings) ----
 
 export const TREE_STATE_DEFAULTS = {

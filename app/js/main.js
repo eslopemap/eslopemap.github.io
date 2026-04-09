@@ -5,7 +5,7 @@ import {
   DEM_TERRAIN_SOURCE_ID,
 } from './constants.js';
 
-import { createStore, STATE_DEFAULTS } from './state.js';
+import { createStore, STATE_DEFAULTS, STATE_TEST_MODE } from './state.js';
 
 import {
   parseHashParams, syncViewToUrl, updateLegend,
@@ -51,7 +51,27 @@ import { buildCatalogEntryFromTileJson, getDemTileUrl, isTauri, onGpxSyncEvents,
 import { initPmtilesProtocol } from './pmtiles-protocol.js';
 
 // ---- State (reactive via Proxy) ----
-const state = createStore(STATE_DEFAULTS);
+const state = createStore(STATE_DEFAULTS, handleStateChange);
+
+function syncPrimaryControlsFromState(state) {
+  document.getElementById('mode').value = state.mode;
+  document.getElementById('terrain3d').checked = state.terrain3d;
+  document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
+  document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
+  document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+  syncOverlayCheckboxes(state);
+}
+
+function handleStateChange(key) {
+  if (
+    key === 'mode'
+    || key === 'terrain3d'
+    || key === 'terrainExaggeration'
+    || key === 'activeOverlays'
+  ) {
+    syncPrimaryControlsFromState(state);
+  }
+}
 
 // ---- Debug grid ----
 
@@ -116,25 +136,6 @@ function ensureDebugGridLayer(map) {
   }
 }
 
-function applyTestModeState(state) {
-  state.basemapStack = [];
-  state.mode = '';
-  state.showHillshade = false;
-  state.showContours = false;
-  state.activeOverlays = [];
-  state.layerOrder = [];
-  state.terrain3d = false;
-  state.hillshadeOpacity = 0;
-}
-
-function syncTestModeUi(state) {
-  document.getElementById('mode').value = state.mode;
-  document.getElementById('terrain3d').checked = state.terrain3d;
-  document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
-  // Overlay checkboxes are dynamic — sync them
-  syncOverlayCheckboxes(state);
-}
-
 function applyTestModeMapState(map, state) {
   applyHillshadeVisibility(map, state);
   setGlobalStatePropertySafe(map, 'hillshadeOpacity', state.hillshadeOpacity);
@@ -183,13 +184,9 @@ state.viewZoom = initialView.zoom;
 state.viewBearing = initialView.bearing;
 state.viewPitch = initialView.pitch;
 if (isTestMode) {
-  applyTestModeState(state);
+  Object.assign(state, STATE_TEST_MODE);
 }
-document.getElementById('mode').value = state.mode;
-document.getElementById('terrain3d').checked = state.terrain3d;
-document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
-document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
-document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+syncPrimaryControlsFromState(state);
 // Sync additional persisted settings to UI
 if (persisted) {
   if (persisted.basemapOpacity != null) {
@@ -210,9 +207,6 @@ if (persisted) {
     document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
   }
   if (persisted.showTileGrid != null) document.getElementById('showTileGrid').checked = state.showTileGrid;
-}
-if (isTestMode) {
-  syncTestModeUi(state);
 }
 
 // On mobile, default to corner cursor-info mode (center crosshair acts as pointer)
@@ -1533,9 +1527,7 @@ map.on('load', async () => {
     syncMapViewState();
     scheduleSettingsSave();
   });
-  if (isTestMode) {
-    applyTestModeMapState(map, state);
-  }
+
   if (shouldAttemptInitialGeolocate) {
     window.setTimeout(() => {
       if (typeof geolocateControl.trigger === 'function') {
@@ -1665,20 +1657,12 @@ window.addEventListener('hashchange', async () => {
   });
 
   if (hashTestMode) {
-    applyTestModeState(state);
+    Object.assign(state, STATE_TEST_MODE);
   }
 
-  document.getElementById('mode').value = state.mode;
-  document.getElementById('terrain3d').checked = state.terrain3d;
-  document.getElementById('terrainExaggeration').value = String(state.terrainExaggeration);
-  document.getElementById('terrainExaggeration').disabled = !state.terrain3d;
-  document.getElementById('terrainExaggerationValue').textContent = state.terrainExaggeration.toFixed(2);
+  syncPrimaryControlsFromState(state);
   renderLayerOrderPanel();
   renderAddLayerSelect();
-
-  if (hashTestMode) {
-    syncTestModeUi(state);
-  }
 
   updateLegend(state, map);
   await setBasemapStack(map, state, state.basemapStack || [], true);

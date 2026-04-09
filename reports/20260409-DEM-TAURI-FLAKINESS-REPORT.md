@@ -132,6 +132,20 @@ The old single-value `basemap` field was removed from:
 
 Compatibility is retained only in migration paths when reading older saved settings or bookmarks.
 
+### 8. Replaced brittle test-mode state helpers with a shared preset
+
+Updated:
+- `app/js/state.js`
+- `app/js/main.js`
+
+The app now uses a dedicated `STATE_TEST_MODE` preset instead of the ad-hoc:
+- `applyTestModeState()`
+- `syncTestModeUi()`
+
+The reactive store already supported an `onChange` callback; this pass wires that existing mechanism in `main.js` for the primary controls that had previously been updated manually in multiple places.
+
+That reduces duplicated test-mode/UI synchronization logic while keeping the existing map-specific test-mode application path explicit.
+
 ## Test Results
 
 ### Confirmed during this pass
@@ -144,6 +158,10 @@ The shared guard no longer interferes with local app or fixture-server traffic.
 Focused basemap-state validation for the stack-only cleanup also passes:
 - `npx vitest run tests/unit/startup-state.test.mjs tests/unit/ui-url-state.test.mjs tests/unit/persist.test.mjs tests/unit/layer-engine.test.mjs`
 - `npx playwright test tests/e2e/bookmark.spec.js`
+
+Focused validation for the `STATE_TEST_MODE` cleanup also passes:
+- `npx vitest run tests/unit/startup-state.test.mjs tests/unit/ui-url-state.test.mjs`
+- `npx playwright test tests/e2e/bookmark.spec.js tests/e2e/persist.spec.js`
 
 At the time of this update, the remaining focused Playwright failure is limited to the existing `dem-color-relief.png` screenshot mismatch:
 - measured diff ratio: `0.06`
