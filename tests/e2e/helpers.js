@@ -14,8 +14,25 @@ const E2E_COVERAGE = process.env.E2E_COVERAGE === '1';
 const COVERAGE_DIR = path.join(__dirname, '..', '..', 'coverage', 'e2e-v8');
 let _covCounter = 0;
 
+const NON_LOCAL_HTTP_URL = /^https?:\/\/(?!(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)).+/i;
+
+async function installOfflineRouteGuard(page, options = {}) {
+  if (page.__offlineRouteGuardInstalled) return;
+  const allowedUrls = options.allowedUrls || [];
+  await page.route(NON_LOCAL_HTTP_URL, async (route) => {
+    const url = route.request().url();
+    if (allowedUrls.some(pattern => pattern.test(url))) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ status: 404, body: 'offline test guard' });
+  });
+  page.__offlineRouteGuardInstalled = true;
+ }
+
 const test = base.extend({
   mapPage: async ({ page }, use) => {
+    await installOfflineRouteGuard(page);
     if (E2E_COVERAGE) await page.coverage.startJSCoverage({ resetOnNavigation: false });
     await page.goto(APP_URL, { waitUntil: 'load' });
     await page.evaluate(() => localStorage.clear());
@@ -42,6 +59,7 @@ async function resetState(page) {
 }
 
 async function loadMapPage(page) {
+  await installOfflineRouteGuard(page);
   if (E2E_COVERAGE) await page.coverage.startJSCoverage({ resetOnNavigation: false });
   await page.goto(APP_URL, { waitUntil: 'load' });
   await page.evaluate(() => localStorage.clear());
@@ -166,6 +184,7 @@ async function deleteActiveTrackViaMenu(page) {
 
 module.exports = {
   APP_URL, MAP_READY_TIMEOUT_MS,
+  installOfflineRouteGuard,
   test, expect, clickMap, dblClickMap, clickDrawBtn, addPoints,
   evalInScope, getTrackCount, getEditingTrackId, getActiveTrackId,
   getActiveTrackPointCount, getTrackInfo, getSelectedVertexIndex,

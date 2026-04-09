@@ -4,6 +4,7 @@
 
 const { test: base, expect } = require('@playwright/test');
 const path = require('path');
+const { installOfflineRouteGuard } = require('./helpers');
 const { startTileServer, FIXTURES } = require('./tile-server-helper');
 const { expectCenterScreenshot } = require('./screenshot-utils');
 
@@ -47,6 +48,7 @@ async function loadWithUserSource(page, tileServerUrl, opts) {
   const { sourceName, sourceKind, hash } = opts;
   const url = `/app/index.html#${hash}`;
 
+  await installOfflineRouteGuard(page);
   await page.goto(url, { waitUntil: 'load' });
   await page.evaluate(() => localStorage.clear());
   await page.goto(url, { waitUntil: 'load' });
@@ -172,6 +174,7 @@ test.describe('Tile Serving (PMTiles)', () => {
 test.describe('User Catalog Integration', () => {
   test('registerUserSource makes entry available in catalog', async ({ page, tileServer }) => {
     const url = `/app/index.html#test_mode=true`;
+    await installOfflineRouteGuard(page);
     await page.goto(url, { waitUntil: 'load' });
     await page.evaluate(() => localStorage.clear());
     await page.goto(url, { waitUntil: 'load' });
@@ -236,6 +239,7 @@ test.describe('User Catalog Integration', () => {
 
   test('unregisterUserSource removes entry from catalog', async ({ page }) => {
     const url = `/app/index.html#test_mode=true`;
+    await installOfflineRouteGuard(page);
     await page.goto(url, { waitUntil: 'load' });
     await page.evaluate(() => localStorage.clear());
     await page.goto(url, { waitUntil: 'load' });

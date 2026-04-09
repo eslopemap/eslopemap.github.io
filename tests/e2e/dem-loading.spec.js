@@ -2,7 +2,7 @@
 // Uses synthetic Terrarium-encoded DEM tiles served via route interception.
 
 const { expect } = require('@playwright/test');
-const { test } = require('./helpers');
+const { test, installOfflineRouteGuard } = require('./helpers');
 const fs = require('fs');
 const path = require('path');
 
@@ -152,6 +152,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
   test.describe.configure({ timeout: 30_000 });
 
   test('color-relief mode shows elevation colors', async ({ page }) => {
+    await installOfflineRouteGuard(page);
     const served = await interceptDemTiles(page);
 
     await page.goto(NORMAL_URL, { waitUntil: 'load' });
@@ -182,6 +183,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
   });
 
   test('slope+relief mode shows slope colors over relief', async ({ page }) => {
+    await installOfflineRouteGuard(page);
     const served = await interceptDemTiles(page);
     const url = `/app/index.html#${BASE_HASH}&mode=slope%2Brelief`;
 
@@ -202,6 +204,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
   });
 
   test('slope mode shows slope colors', async ({ page }) => {
+    await installOfflineRouteGuard(page);
     const served = await interceptDemTiles(page);
     const url = `/app/index.html#${BASE_HASH}&mode=slope`;
 
