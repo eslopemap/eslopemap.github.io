@@ -603,8 +603,20 @@ export function initIO(deps) {
       }
       if (entries.some(en => en.isDirectory)) {
         for (const entry of entries) {
-          if (entry.isDirectory) await readDirectoryEntries(entry);
-          else if (entry.isFile) await readFileEntry(entry);
+          if (entry.isDirectory) {
+            if (isTauri()) {
+              // Tauri: scan folder for tiles in bulk, then recurse for GPX/GeoJSON only
+              const folderPath = entry.fullPath || entry.name;
+              const { scanAndRegisterDesktopTileFolder } = await import('./desktop-tile-sources.js');
+              await scanAndRegisterDesktopTileFolder(folderPath, {
+                refreshUi: typeof window.refreshTileLayers === 'function' ? window.refreshTileLayers : null,
+                logPrefix: '[tile-drop]'
+              });
+              await readDirectoryEntriesGpxOnly(entry);
+            } else {
+              await readDirectoryEntries(entry);
+            }
+          } else if (entry.isFile) await readFileEntry(entry);
         }
         return;
       }
@@ -821,6 +833,21 @@ async function readDirectoryEntries(dirEntry) {
       }
     } else if (entry.isDirectory) {
       await readDirectoryEntries(entry);
+    }
+  }
+}
+
+/** Read directory entries but only process GPX/GeoJSON files (tiles handled via folder scan) */
+async function readDirectoryEntriesGpxOnly(dirEntry) {
+  const reader = dirEntry.createReader();
+  const entries = await new Promise((resolve) => {
+    reader.readEntries(resolve);
+  });
+  for (const entry of entries) {
+    if (entry.isFile && FILE_PATTERN.test(entry.name)) {
+      await readFileEntry(entry);
+    } else if (entry.isDirectory) {
+      await readDirectoryEntriesGpxOnly(entry);
     }
   }
 }
