@@ -5,6 +5,7 @@
 // while tracks.js keeps data model, CRUD, rendering, stats, and panel UI.
 
 import { showCursorTooltipAt, hideCursorTooltip } from './ui.js';
+import { createUndoStack } from './undo-stack.js';
 
 let map, state;
 let updateProfileFn = () => {};
@@ -30,43 +31,39 @@ const isLocalhost = location.hostname === 'localhost' || location.hostname === '
 let mobileFriendlyMode = isMobile;
 
 // DOM refs (resolved at init)
-let drawBtn, undoBtn, mobileHint, drawCrosshair, toastEl;
+let drawBtn, undoBtn, redoBtn, mobileHint, drawCrosshair, toastEl;
 
 // ---- Undo stack ----
-// Stores snapshots of {trackId, coords (deep copy), selectedVertexIndex, insertAfterIdx}
-const undoStack = [];
-const MAX_UNDO = 50;
+const trackHistory = createUndoStack({
+  findTrack: (trackId) => tracksFns.findTrack(trackId),
+  onSnapshotApplied: (track) => tracksFns.onTrackCoordsChanged(track),
+  getSelectedVertexIndex: () => selectedVertexIndex,
+  setSelectedVertexIndex: (value) => { selectedVertexIndex = value; },
+  getInsertAfterIdx: () => insertAfterIdx,
+  setInsertAfterIdx: (value) => { insertAfterIdx = value; },
+});
 
 function pushUndo(trackId) {
-  const t = tracksFns.findTrack(trackId);
-  if (!t) return;
-  undoStack.push({
-    trackId,
-    coords: t.coords.map(c => c.slice()),
-    selectedVertexIndex,
-    insertAfterIdx,
-  });
-  if (undoStack.length > MAX_UNDO) undoStack.splice(0, undoStack.length - MAX_UNDO);
+  trackHistory.push(trackId);
 }
 
-function popUndo() {
-  if (!undoStack.length) return false;
-  const snap = undoStack.pop();
-  const t = tracksFns.findTrack(snap.trackId);
-  if (!t) return false;
-  t.coords = snap.coords;
-  selectedVertexIndex = snap.selectedVertexIndex;
-  insertAfterIdx = snap.insertAfterIdx;
-  tracksFns.onTrackCoordsChanged(t);
+function popUndo(options) {
+  const ok = trackHistory.undo(options);
   syncUndoBtn();
-  return true;
+  return ok;
+}
+
+function popRedo(options) {
+  const ok = trackHistory.redo(options);
+  syncUndoBtn();
+  return ok;
 }
 
 function clearUndoStack() {
-  undoStack.length = 0;
+  trackHistory.clear();
 }
 
-
+// ---- Toasts ----
 
 let toastTimer = 0;
 function showToast(msg, durationMs) {
@@ -114,7 +111,7 @@ function updateInsertPopup() {
           mobileSelectedVertex = null;
           mobileHint.classList.remove('visible');
           map.dragPan.enable();
-          popUndo();  // restore vertex to original position before drag
+          popUndo({ suppressRedo: true });
           selectedVertexIndex = vtxIdx;
           insertAfterIdx = vtxIdx;
         } else {
@@ -262,11 +259,28 @@ function syncUndoBtn() {
   const t = tracksFns.getActiveTrack();
   const show = t && t.coords.length > 0 && isTrackEditing(t.id);
   undoBtn.style.display = show ? '' : 'none';
-  undoBtn.disabled = undoStack.length === 0;
+  redoBtn.style.display = show ? '' : 'none';
+  undoBtn.disabled = trackHistory.undoStack.length === 0;
+  redoBtn.disabled = trackHistory.redoStack.length === 0;
 
   tracksFns.updateVertexHighlight(editingTrackId, selectedVertexIndex);
   updateInsertPopup();
   updateInsertPreview();
+}
+
+function isTypingTarget(target) {
+  return target?.tagName === 'INPUT'
+    || target?.tagName === 'TEXTAREA'
+    || target?.isContentEditable;
+}
+
+function isUndoShortcut(e) {
+  return (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z';
+}
+
+function isRedoShortcut(e) {
+  return (e.ctrlKey || e.metaKey)
+    && ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y');
 }
 
 function deleteCurrentVertex() {
@@ -402,7 +416,14 @@ export function resetMobileFriendlyMode() {
 }
 
 // Exported for unit testing only
-export const _testUndo = { pushUndo, popUndo, clearUndoStack, get undoStack() { return undoStack; } };
+export const _testUndo = {
+  pushUndo,
+  popUndo,
+  popRedo,
+  clearUndoStack,
+  get undoStack() { return trackHistory.undoStack; },
+  get redoStack() { return trackHistory.redoStack; },
+};
 
 // ---- Init: wire up all editing event listeners ----
 
@@ -414,6 +435,7 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
   drawBtn = document.getElementById('draw-btn');
   undoBtn = document.getElementById('undo-btn');
+  redoBtn = document.getElementById('redo-btn');
   mobileHint = document.getElementById('mobile-move-hint');
   toastEl = document.getElementById('toast');
   drawCrosshair = document.getElementById('draw-crosshair');
@@ -434,6 +456,10 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
 
   undoBtn.addEventListener('click', () => {
     popUndo();
+  });
+
+  redoBtn.addEventListener('click', () => {
+    popRedo();
   });
 
   mobileModeCheckbox?.addEventListener('change', () => {
@@ -470,10 +496,17 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
           t.coords.splice(hit.index, 1);
           if (selectedVertexIndex != null) {
             if (hit.index < selectedVertexIndex) selectedVertexIndex--;
-            else if (hit.index === selectedVertexIndex) selectedVertexIndex = null;
+            else if (hit.index === selectedVertexIndex) {
+              selectedVertexIndex = t.coords.length > 0
+                ? Math.min(selectedVertexIndex, t.coords.length - 1)
+                : null;
+            }
           }
           if (insertAfterIdx != null) {
-            if (hit.index <= insertAfterIdx) insertAfterIdx = Math.max(0, insertAfterIdx - 1);
+            if (hit.index <= insertAfterIdx) {
+              insertAfterIdx = Math.max(0, insertAfterIdx - 1);
+            }
+            if (t.coords.length === 0) insertAfterIdx = null;
           }
           tracksFns.onTrackCoordsChanged(t);
           if (t.coords.length === 0) tracksFns.deleteTrack(t.id);
@@ -561,13 +594,19 @@ export function initTrackEdit(mapRef, stateRef, updateProfile, fns) {
     if (e.key === 'Escape' && editingTrackId) exitEditMode();
     if (e.key === 'Escape' && mobileSelectedVertex) cancelMobileMove();
     if ((e.key === 'Delete' || e.key === 'Backspace') && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (isTypingTarget(e.target)) return;
       e.preventDefault();
       deleteCurrentVertex();
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
+    if (isUndoShortcut(e) && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
+      if (isTypingTarget(e.target)) return;
       e.preventDefault();
       popUndo();
+    }
+    if (isRedoShortcut(e) && isTrackEditing(tracksFns.getActiveTrack()?.id)) {
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      popRedo();
     }
   });
 

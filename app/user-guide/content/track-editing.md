@@ -18,6 +18,7 @@ While editing, you can:
 
 - drag an existing vertex to reposition it,
 - click a vertex to select it,
+- use the toolbar `Undo` and `Redo` buttons to step backward or forward through the current edit session,
 - use the small `+` popup near the selected vertex to insert the next point after it,
 - delete a vertex with modifier-click or with `Delete` and `Backspace`.
 
@@ -51,9 +52,11 @@ Available operations include:
 | `Ctrl/Cmd+L` | Toggle the workspace panel |
 | `Ctrl/Cmd+I` | Open the info editor for the active item |
 | `Ctrl/Cmd+Z` | Undo the last geometry change |
+| `Ctrl/Cmd+Y` | Redo the most recently undone geometry change |
+| `Ctrl/Cmd+Shift+Z` | Alternative redo shortcut |
 
 ## Tips for stable editing
 
 - Keep one track active while editing to avoid applying geometry operations to the wrong item.
-- Use undo before leaving edit mode if a move or delete looks wrong.
+- Use undo and redo before leaving edit mode if a move, insert, or delete looks wrong.
 - Open the profile while editing if you want terrain context for the currently selected line.

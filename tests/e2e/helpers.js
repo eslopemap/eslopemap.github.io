@@ -141,6 +141,10 @@ async function getActiveTrackPointCount(page) {
   return evalInScope(page, "(function(){ var t = tracks.find(function(tr){return tr.id===activeTrackId}); return t ? t.coords.length : 0; })()");
 }
 
+async function getActiveTrackCoords(page) {
+  return evalInScope(page, "(function(){ var t = tracks.find(function(tr){return tr.id===activeTrackId}); return t ? t.coords.map(function(coord){ return coord.slice(); }) : []; })()");
+}
+
 async function getTrackInfo(page, index = 0) {
   return page.evaluate((idx) => {
     const t = (0, eval)('tracks')[idx];
@@ -192,6 +196,48 @@ async function clickEditBtn(page) {
   await page.locator('#rail-edit-btn').click({ force: true });
 }
 
+async function fireMapMouseEvent(page, type, x, y, options = {}) {
+  await page.evaluate(([eventType, cx, cy, opts]) => {
+    const map = (0, eval)('map');
+    const point = { x: cx, y: cy };
+    const lngLat = map.unproject(point);
+    const originalEvent = new MouseEvent(eventType, {
+      button: opts.button ?? 0,
+      clientX: cx,
+      clientY: cy,
+      shiftKey: Boolean(opts.shiftKey),
+      ctrlKey: Boolean(opts.ctrlKey),
+      metaKey: Boolean(opts.metaKey),
+      bubbles: true,
+      cancelable: true,
+    });
+    map.fire(eventType, {
+      point,
+      lngLat,
+      originalEvent,
+      preventDefault() {},
+    });
+    if (eventType === 'mouseup') {
+      window.dispatchEvent(new MouseEvent('mouseup', {
+        button: opts.button ?? 0,
+        clientX: cx,
+        clientY: cy,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }
+  }, [type, x, y, options]);
+}
+
+async function dragMapPoint(page, from, to) {
+  await fireMapMouseEvent(page, 'mousedown', from.x, from.y);
+  await page.waitForTimeout(50);
+  await fireMapMouseEvent(page, 'mousemove', to.x, to.y);
+  await page.waitForTimeout(50);
+  await fireMapMouseEvent(page, 'mouseup', to.x, to.y);
+  await page.waitForTimeout(100);
+}
+
 async function deleteActiveTrackViaMenu(page) {
   await page.locator('.tree-row.active .tree-kebab').click();
   await page.locator('.ctx-item', { hasText: 'Delete' }).click();
@@ -202,8 +248,8 @@ module.exports = {
   installOfflineRouteGuard,
   test, expect, clickMap, dblClickMap, clickDrawBtn, addPoints,
   evalInScope, getTrackCount, getEditingTrackId, getActiveTrackId,
-  getActiveTrackPointCount, getTrackInfo, getSelectedVertexIndex,
+  getActiveTrackPointCount, getActiveTrackCoords, getTrackInfo, getSelectedVertexIndex,
   getInsertAfterIdx, drawTrackAndFinish, importFile,
-  clickEditBtn, deleteActiveTrackViaMenu,
+  clickEditBtn, fireMapMouseEvent, dragMapPoint, deleteActiveTrackViaMenu,
   resetState, loadMapPage,
 };

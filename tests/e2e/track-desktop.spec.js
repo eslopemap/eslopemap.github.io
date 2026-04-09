@@ -2,10 +2,20 @@
 const { test: base, expect } = require('@playwright/test');
 const {
   clickMap, dblClickMap, clickDrawBtn, addPoints,
-  getTrackCount, getEditingTrackId, getActiveTrackPointCount,
-  getTrackInfo, drawTrackAndFinish, clickEditBtn, deleteActiveTrackViaMenu,
+  getTrackCount, getEditingTrackId, getActiveTrackPointCount, getActiveTrackCoords,
+  getTrackInfo, drawTrackAndFinish, clickEditBtn, fireMapMouseEvent, dragMapPoint, deleteActiveTrackViaMenu,
   resetState, loadMapPage,
 } = require('./helpers');
+
+/**
+ * @param {number[]} actual
+ * @param {number[]} expected
+ * @param {number} [precision]
+ */
+function expectLngLatClose(actual, expected, precision = 5) {
+  expect(actual[0]).toBeCloseTo(expected[0], precision);
+  expect(actual[1]).toBeCloseTo(expected[1], precision);
+}
 
 base.describe('Desktop Track Editor', () => {
   /** @type {import('@playwright/test').Page} */
@@ -20,7 +30,7 @@ base.describe('Desktop Track Editor', () => {
 
   base.beforeEach(async () => { await resetState(page); });
 
-  base.test('Create new track -- click draw, add 3 points, dblclick to finish', async () => {
+  base('Create new track -- click draw, add 3 points, dblclick to finish', async () => {
     await clickDrawBtn(page);
     await expect(page.locator('#draw-btn.active')).toBeVisible();
     await addPoints(page, 3);
@@ -35,7 +45,7 @@ base.describe('Desktop Track Editor', () => {
     expect(await getActiveTrackPointCount(page)).toBeGreaterThanOrEqual(3);
   });
 
-  base.test('Create new track -- finish with Escape', async () => {
+  base('Create new track -- finish with Escape', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 4);
     await page.keyboard.press('Escape');
@@ -45,7 +55,7 @@ base.describe('Desktop Track Editor', () => {
     expect(await getActiveTrackPointCount(page)).toBe(4);
   });
 
-  base.test('Auto-cleanup -- new track with < 2 points is removed on exit', async () => {
+  base('Auto-cleanup -- new track with < 2 points is removed on exit', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 1);
     await page.keyboard.press('Escape');
@@ -54,7 +64,7 @@ base.describe('Desktop Track Editor', () => {
     expect(await getTrackCount(page)).toBe(0);
   });
 
-  base.test('Track appears in track list with correct name', async () => {
+  base('Track appears in track list with correct name', async () => {
     await drawTrackAndFinish(page, 3);
 
     await expect(page.locator('#track-panel.visible')).toBeVisible();
@@ -63,7 +73,7 @@ base.describe('Desktop Track Editor', () => {
     expect(info.isActive).toBe(true);
   });
 
-  base.test('Select vs Edit -- clicking tree row selects, rail edit enters edit mode', async () => {
+  base('Select vs Edit -- clicking tree row selects, rail edit enters edit mode', async () => {
     await drawTrackAndFinish(page, 3, { startX: 300, startY: 200 });
     await drawTrackAndFinish(page, 3, { startX: 300, startY: 400 });
 
@@ -89,7 +99,7 @@ base.describe('Desktop Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  base.test('Undo (Ctrl+Z) removes last point', async () => {
+  base('Undo (Ctrl+Z) removes last point', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 4);
     expect(await getActiveTrackPointCount(page)).toBe(4);
@@ -105,7 +115,7 @@ base.describe('Desktop Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  base.test('Undo button removes last point', async () => {
+  base('Undo button removes last point', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 3);
     const beforeUndo = await getActiveTrackPointCount(page);
@@ -135,10 +145,48 @@ base.describe('Desktop Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  base.test('Delete track -- confirm removes it', async () => {
+  base('Redo via Meta+Y restores the most recently undone point add', async () => {
+    await clickDrawBtn(page);
+    await addPoints(page, 4);
+    expect(await getActiveTrackPointCount(page)).toBe(4);
+
+    await page.keyboard.press('Meta+z');
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(150);
+    expect(await getActiveTrackPointCount(page)).toBe(2);
+
+    await expect(page.locator('#redo-btn')).toBeVisible();
+    await expect(page.locator('#redo-btn')).toBeEnabled();
+    await page.keyboard.press('Meta+y');
+    await page.waitForTimeout(150);
+
+    expect(await getActiveTrackPointCount(page)).toBe(3);
+    await page.keyboard.press('Escape');
+  });
+
+  base('Redo via Meta+Shift+Z restores the most recently undone point add', async () => {
+    await clickDrawBtn(page);
+    await addPoints(page, 3);
+    const beforeUndo = await getActiveTrackCoords(page);
+
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(100);
+    expect(await getActiveTrackPointCount(page)).toBe(2);
+
+    await page.keyboard.press('Meta+Shift+z');
+    await page.waitForTimeout(150);
+
+    const afterRedo = await getActiveTrackCoords(page);
+    expect(afterRedo).toHaveLength(3);
+    expectLngLatClose(afterRedo[2], beforeUndo[2]);
+    await page.keyboard.press('Escape');
+  });
+
+  base('Delete track -- confirm removes it', async () => {
     await drawTrackAndFinish(page, 3);
     expect(await getTrackCount(page)).toBe(1);
 
+    /** @param {import('@playwright/test').Dialog} dialog */
     const handler = dialog => dialog.accept();
     page.on('dialog', handler);
     await deleteActiveTrackViaMenu(page);
@@ -148,9 +196,10 @@ base.describe('Desktop Track Editor', () => {
     expect(await getTrackCount(page)).toBe(0);
   });
 
-  base.test('Delete track -- cancel leaves track intact', async () => {
+  base('Delete track -- cancel leaves track intact', async () => {
     await drawTrackAndFinish(page, 3);
 
+    /** @param {import('@playwright/test').Dialog} dialog */
     const handler = dialog => dialog.dismiss();
     page.on('dialog', handler);
     await deleteActiveTrackViaMenu(page);
@@ -160,7 +209,7 @@ base.describe('Desktop Track Editor', () => {
     expect(await getTrackCount(page)).toBe(1);
   });
 
-  base.test('Edit existing track -- add more points', async () => {
+  base('Edit existing track -- add more points', async () => {
     await drawTrackAndFinish(page, 3);
     expect(await getActiveTrackPointCount(page)).toBe(3);
 
@@ -174,7 +223,30 @@ base.describe('Desktop Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  base.test('Toggle edit mode -- clicking draw-btn toggles off', async () => {
+  base('Redo restores a dragged vertex position after undo', async () => {
+    await clickDrawBtn(page);
+    await addPoints(page, 3, { startX: 400, startY: 300, stepX: 80, stepY: 0 });
+
+    const beforeDrag = await getActiveTrackCoords(page);
+    await dragMapPoint(page, { x: 400, y: 300 }, { x: 430, y: 340 });
+    const afterDrag = await getActiveTrackCoords(page);
+
+    expect(afterDrag[0][0]).not.toBe(beforeDrag[0][0]);
+    expect(afterDrag[0][1]).not.toBe(beforeDrag[0][1]);
+
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(150);
+    const afterUndo = await getActiveTrackCoords(page);
+    expectLngLatClose(afterUndo[0], beforeDrag[0]);
+
+    await page.keyboard.press('Meta+y');
+    await page.waitForTimeout(150);
+    const afterRedo = await getActiveTrackCoords(page);
+    expectLngLatClose(afterRedo[0], afterDrag[0]);
+    await page.keyboard.press('Escape');
+  });
+
+  base('Toggle edit mode -- clicking draw-btn toggles off', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 3);
 
@@ -184,7 +256,7 @@ base.describe('Desktop Track Editor', () => {
     await expect(page.locator('#draw-btn.active')).not.toBeVisible();
   });
 
-  base.test('Tracks button toggles track panel visibility', async () => {
+  base('Tracks button toggles track panel visibility', async () => {
     await drawTrackAndFinish(page, 3);
 
     await expect(page.locator('#track-panel.visible')).toBeVisible();
@@ -198,7 +270,7 @@ base.describe('Desktop Track Editor', () => {
     await expect(page.locator('#track-panel.visible')).toBeVisible();
   });
 
-  base.test('Multiple tracks -- creating second track works', async () => {
+  base('Multiple tracks -- creating second track works', async () => {
     await drawTrackAndFinish(page, 3, { startX: 300, startY: 200 });
     await drawTrackAndFinish(page, 4, { startX: 500, startY: 400 });
 
@@ -211,7 +283,7 @@ base.describe('Desktop Track Editor', () => {
     expect(info1.isActive).toBe(true);
   });
 
-  base.test('Delete vertex with Shift+click', async () => {
+  base('Delete vertex with Shift+click', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 4);
     expect(await getActiveTrackPointCount(page)).toBe(4);
@@ -229,7 +301,37 @@ base.describe('Desktop Track Editor', () => {
     await page.keyboard.press('Escape');
   });
 
-  base.test('Stats update when points are added', async () => {
+  base('Redo restores a midpoint insert after undo', async () => {
+    await clickDrawBtn(page);
+    await addPoints(page, 3, { startX: 400, startY: 300, stepX: 80, stepY: 0 });
+    const beforeInsert = await getActiveTrackCoords(page);
+
+    await fireMapMouseEvent(page, 'mousemove', 440, 300);
+    await page.waitForTimeout(100);
+    await fireMapMouseEvent(page, 'mousedown', 440, 300);
+    await page.waitForTimeout(50);
+    await fireMapMouseEvent(page, 'mouseup', 440, 300);
+    await page.waitForTimeout(150);
+
+    const afterInsert = await getActiveTrackCoords(page);
+    expect(afterInsert).toHaveLength(4);
+    expect(afterInsert[1][0]).not.toBe(beforeInsert[1][0]);
+
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(150);
+    const afterUndo = await getActiveTrackCoords(page);
+    expect(afterUndo).toHaveLength(3);
+    expectLngLatClose(afterUndo[1], beforeInsert[1]);
+
+    await page.keyboard.press('Meta+y');
+    await page.waitForTimeout(150);
+    const afterRedo = await getActiveTrackCoords(page);
+    expect(afterRedo).toHaveLength(4);
+    expectLngLatClose(afterRedo[1], afterInsert[1]);
+    await page.keyboard.press('Escape');
+  });
+
+  base('Stats update when points are added', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 2);
 
