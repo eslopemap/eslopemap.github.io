@@ -2,7 +2,8 @@
 // Playwright config for slope.html E2E tests.
 //
 // python3 http.server is used instead of `npx serve` because serve crashed
-// mid-suite (ERR_CONNECTION_REFUSED after a few tests). 
+// mid-suite (ERR_CONNECTION_REFUSED after a few tests). Python's stdlib server
+// is stable across all 36 tests.
 //
 // --use-gl=angle + --use-angle=swiftshader are required for WebGL in headless
 // Chromium (MapLibre GL JS needs a GPU context).
@@ -19,7 +20,7 @@ module.exports = defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:8089',
+    baseURL: 'http://localhost:8089',
     headless: true,
     viewport: { width: 1280, height: 720 },
     launchOptions: {
@@ -30,7 +31,8 @@ module.exports = defineConfig({
     { name: 'chromium', use: { browserName: 'chromium' } },
   ],
   webServer: {
-    command: 'python3 -m http.server 8089 --bind 127.0.0.1',
-    url: 'http://127.0.0.1:8089/app/index.html',
+    command: 'python3 -m http.server 8089',
+    port: 8089,
+    reuseExistingServer: !process.env.CI,
   },
 });

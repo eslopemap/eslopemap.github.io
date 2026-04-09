@@ -1,4 +1,4 @@
-// @ts-nocheck — helpers.js custom fixtures aren't typed
+// @ts-check
 const {
   APP_URL,
   test, expect, drawTrackAndFinish, getTrackCount,

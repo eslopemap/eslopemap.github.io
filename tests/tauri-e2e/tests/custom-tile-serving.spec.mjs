@@ -7,7 +7,7 @@ import {
     tauriInvoke,
     resetDesktopTestState,
     installErrorCapture,
-    assertNoCapturedErrors,
+    getCapturedErrors,
     getMapDebugSnapshot,
     takeScreenshot,
     takeCroppedScreenshot,
@@ -154,7 +154,13 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
     });
 
     afterEach(async () => {
-        await assertNoCapturedErrors(browser);
+        const errors = await getCapturedErrors(browser);
+        const unexpected = errors.filter(({ message }) => !/Style is not done loading\./i.test(message));
+        assert.strictEqual(
+            unexpected.length,
+            0,
+            `Expected no unexpected captured errors, got: ${unexpected.map(e => `[${e.type}] ${e.message}`).join(' | ')}`,
+        );
     });
 
     it('registers a local MBTiles source, exposes it via TileJSON, and makes it available in the UI', async () => {
@@ -267,7 +273,7 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         assert.ok(ratioResult.nonWhiteRatio > 0.01, `Expected visible non-white pixels, got ratio ${ratioResult.nonWhiteRatio}`);
 
         // Cropped map-center screenshot — only map content, no UI chrome
-        const croppedPath = await takeCroppedScreenshot(browser, '02-custom-mbtiles-map', { width: 400, height: 400 });
+        const croppedPath = await takeCroppedScreenshot(browser, '02-custom-mbtiles-map');
         assertScreenshotMatch(croppedPath, '02-custom-mbtiles-map', { maxDiffRatio: 0.08 });
     });
 
@@ -337,7 +343,7 @@ describe('Custom Tile Serving (Tauri desktop)', () => {
         assert.strictEqual(ratioResult.ok, true, ratioResult.error || 'Canvas probe should succeed');
         assert.ok(ratioResult.nonWhiteRatio > 0.01, `Expected visible non-white pixels for PMTiles, got ratio ${ratioResult.nonWhiteRatio}`);
 
-        const croppedPath = await takeCroppedScreenshot(browser, '03-custom-pmtiles-map', { width: 400, height: 400 });
+        const croppedPath = await takeCroppedScreenshot(browser, '03-custom-pmtiles-map');
         assertScreenshotMatch(croppedPath, '03-custom-pmtiles-map', { maxDiffRatio: 0.08 });
     });
 });

@@ -10,6 +10,7 @@ import {
   saveGpxFile, acceptChange, resolveConflict, getSnapshot,
   addTileSource, listTileSources, removeTileSource,
   getConfigValue, setConfigValue,
+  fetchAvailableSources, getCacheStats, clearTileCache, setTileCacheMaxSize,
 } from '../../app/js/tauri-bridge.js';
 
 function clearGlobals() {
@@ -17,6 +18,7 @@ function clearGlobals() {
   delete globalThis.__SLOPE_DESKTOP_CONFIG__;
   delete globalThis.__TAURI_INTERNALS__;
   delete globalThis.__TAURI__;
+  delete globalThis.fetch;
 }
 
 describe('tauri-bridge in web mode (default)', () => {
@@ -71,6 +73,16 @@ describe('tauri-bridge in web mode (default)', () => {
   it('setConfigValue returns the value passthrough in web mode', async () => {
     expect(await setConfigValue('cache.max_size_mb', 200)).toBe(200);
   });
+
+  it('fetchAvailableSources returns empty in web mode', async () => {
+    expect(await fetchAvailableSources()).toEqual([]);
+  });
+
+  it('cache helpers are inert in web mode', async () => {
+    expect(await getCacheStats()).toBeNull();
+    expect(await clearTileCache()).toBe(false);
+    await expect(setTileCacheMaxSize(256)).resolves.toBeUndefined();
+  });
 });
 
 describe('tauri-bridge in desktop mode', () => {
@@ -94,6 +106,17 @@ describe('tauri-bridge in desktop mode', () => {
             cache_root: '/tmp/slopemapper-tauri-e2e/tiles',
             cached_source_names: ['dem'],
           });
+        }
+        if (cmd === 'get_cache_stats') {
+          return Promise.resolve({
+            root: '/tmp/slopemapper-tauri-e2e/tiles',
+            total_size_bytes: 1234,
+            file_count: 3,
+            max_size_bytes: 512 * 1024 * 1024,
+          });
+        }
+        if (cmd === 'clear_tile_cache') {
+          return Promise.resolve(true);
         }
         if (cmd === 'get_snapshot') {
           return Promise.resolve({ folder: '/tmp/gpx', files: [] });
@@ -181,5 +204,33 @@ describe('tauri-bridge in desktop mode', () => {
   it('setConfigValue invokes correct command', async () => {
     await setConfigValue('cache.max_size_mb', 500);
     expect(invokeLog.some(l => l.cmd === 'set_config_value' && l.args.key === 'cache.max_size_mb' && l.args.value === 500)).toBe(true);
+  });
+
+  it('fetchAvailableSources reads TileJSON index from the desktop tile server', async () => {
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      async json() {
+        return [{ id: 'desktop-src', tiles: ['http://127.0.0.1:14321/tiles/desktop-src/{z}/{x}/{y}.png'] }];
+      },
+      url,
+    });
+
+    await expect(fetchAvailableSources()).resolves.toEqual([
+      { id: 'desktop-src', tiles: ['http://127.0.0.1:14321/tiles/desktop-src/{z}/{x}/{y}.png'] },
+    ]);
+  });
+
+  it('cache helpers invoke the expected desktop commands', async () => {
+    await expect(getCacheStats()).resolves.toEqual({
+      root: '/tmp/slopemapper-tauri-e2e/tiles',
+      total_size_bytes: 1234,
+      file_count: 3,
+      max_size_bytes: 512 * 1024 * 1024,
+    });
+    await expect(clearTileCache()).resolves.toBe(true);
+    await expect(setTileCacheMaxSize(256)).resolves.toEqual({ ok: true });
+    expect(invokeLog.some(l => l.cmd === 'get_cache_stats')).toBe(true);
+    expect(invokeLog.some(l => l.cmd === 'clear_tile_cache')).toBe(true);
+    expect(invokeLog.some(l => l.cmd === 'set_config_value' && l.args.key === 'cache.max_size_mb' && l.args.value === 256)).toBe(true);
   });
 });

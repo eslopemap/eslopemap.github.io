@@ -1,7 +1,7 @@
-# Plan: increase functionality coverage and add redo in track editing
+# Plan: increase functionality coverage
 
 **Date:** 2026-04-09  
-**Scope:** use the consolidated 4-suite coverage report to guide new tests toward missing user-visible functionality, with a dedicated follow-up plan for redo support in desktop track editing.
+**Scope:** use the consolidated 4-suite coverage report to guide new tests toward missing user-visible functionality across browser and desktop workflows.
 
 ## Problem summary
 
@@ -154,80 +154,6 @@ Do not chase `main.rs` line coverage directly. Instead:
 - prioritize config validation, tile-source removal semantics, and cache-clear side effects
 - let Tauri e2e continue to prove the top-level desktop integration path
 
-## Redo functionality plan
-
-## Goal
-
-Add a true `redo` operation that reverses `undo` in track editing flows and bind it to both:
-
-- `Ctrl+Y` / `Meta+Y`
-- `Ctrl+Shift+Z` / `Meta+Shift+Z`
-
-## Current state
-
-The editor currently exposes undo behavior in user flows and keyboard handling, but no redo behavior is visible in the inspected track-edit event handling. There is already an `undo-stack.test.mjs`, which suggests the stack abstraction may already support or nearly support redo semantics, but the UI/editor wiring must be verified during implementation.
-
-## Functional requirements
-
-- redo restores the most recently undone edit
-- a new edit after undo clears any redo branch
-- redo works for point creation, point deletion, vertex drag, and insert-between operations
-- redo updates derived state exactly as undo does:
-  - active track geometry
-  - track stats
-  - selected vertex when relevant
-  - undo/redo button enabled state
-- redo shortcuts must not fire while typing in text inputs or textareas
-- redo should behave consistently across `Ctrl` and `Meta` platforms
-
-## Proposed implementation steps
-
-### 1. Audit the current undo stack API
-
-Check whether the existing stack already has a redo buffer or whether it is strictly destructive on pop.
-
-Possible outcomes:
-
-- if redo support already exists in the state layer, wire it into `track-edit.js` and UI controls
-- if not, extend the stack abstraction first and keep editor code thin
-
-### 2. Add editor command wiring
-
-In `track-edit.js`:
-
-- add a `redo` action symmetrical to `popUndo()`
-- bind keyboard shortcuts for:
-  - `Ctrl+Y` / `Meta+Y`
-  - `Ctrl+Shift+Z` / `Meta+Shift+Z`
-- ensure shortcut guards match the existing delete/undo focus protections
-
-### 3. Add visible UI affordance
-
-If the app already has an undo button, add a neighboring redo button with matching enable/disable semantics. If UI work is deferred, the keyboard path can land first, but the plan should treat the button as the expected end state because discoverability matters.
-
-### 4. Add tests before or with implementation
-
-#### Unit tests
-
-Extend `tests/unit/undo-stack.test.mjs` to cover:
-
-- undo followed by redo restores previous snapshot
-- new edit after undo clears redo history
-- repeated redo stops cleanly at stack boundary
-
-#### Browser e2e tests
-
-Extend `tests/e2e/track-desktop.spec.js` to cover:
-
-- add points, undo twice, redo once via `Meta+Y`
-- add points, undo once, redo via `Meta+Shift+Z`
-- drag a vertex, undo, redo, verify geometry returns to dragged position
-- insert a midpoint vertex, undo, redo, verify point count and coordinates restore
-
-### 5. Consider persistence semantics explicitly
-
-Redo history should almost certainly be session-local and **not** persisted across reload. Document and test that expectation if the implementation touches persistence or reset paths.
-
 ## Milestones
 
 ### Milestone A — close explicit desktop behavioral gaps
@@ -247,7 +173,7 @@ Deliver at least two high-value tree or selection operation workflows with real 
 
 ### Milestone D — ship redo
 
-Deliver redo stack support, keyboard bindings, optional button support, and unit plus e2e coverage.
+Deliver redo through the dedicated plan in `plans/20260409-PLAN-REDO-TRACK-EDITING.md` after the surrounding editing coverage groundwork is in place.
 
 ## Success criteria
 

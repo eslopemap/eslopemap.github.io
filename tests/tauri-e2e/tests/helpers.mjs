@@ -2,9 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import assert from 'assert';
+import { PNG } from 'pngjs';
+import pixelmatch from 'pixelmatch';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCREENSHOTS_DIR = path.resolve(__dirname, '../screenshots');
+const SCREENSHOTS_DIR = path.resolve(__dirname, '../screenshots'); // Actual 
+const SNAPSHOTS_DIR = path.resolve(__dirname, '../snapshots');  // Expected
 
 // ---------------------------------------------------------------------------
 // App bootstrap — WKWebView content world considerations
@@ -197,6 +200,95 @@ export async function waitForError(browser, pattern, timeout = 30000) {
         },
         { timeout, timeoutMsg: `No captured error matching ${pattern} within ${timeout}ms` }
     );
+}
+
+// ---------------------------------------------------------------------------
+// Screenshot comparison
+// ---------------------------------------------------------------------------
+
+/**
+ * Take a screenshot cropped to a centered rectangle.
+ * Avoids UI chrome (panels, buttons, controls) affecting baselines.
+ * @param {object} browser — WebDriverIO browser
+ * @param {string} name — file name stem (no extension)
+ * @param {object} [opts]
+ * @param {number} [opts.width=400] — crop width
+ * @param {number} [opts.height=400] — crop height
+ * @returns {Promise<string>} path to the cropped PNG
+ */
+export async function takeCroppedScreenshot(browser, name, opts = {}) {
+    fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+    const screenshotPath = path.join(SCREENSHOTS_DIR, `${name}.png`);
+    const selector = opts.selector ?? '#map canvas';
+    const fallbackSelector = opts.fallbackSelector ?? '#map';
+    let element = await browser.$(selector);
+
+    if (!await element.isExisting()) {
+        element = await browser.$(fallbackSelector);
+    }
+    if (!await element.isExisting()) {
+        throw new Error(`Screenshot target not found: ${selector} or ${fallbackSelector}`);
+    }
+
+    await element.saveScreenshot(screenshotPath);
+    if (!fs.existsSync(screenshotPath)) {
+        throw new Error(`Screenshot not created: ${screenshotPath}`);
+    }
+    return screenshotPath;
+}
+
+/**
+ * Compare a screenshot against a versioned baseline.
+ * If the baseline does not exist (first run), it is created automatically.
+ *
+ * @param {string} actualPath — path to the actual screenshot PNG
+ * @param {string} baselineName — baseline file stem (no extension)
+ * @param {object} [opts]
+ * @param {number} [opts.maxDiffRatio=0.05] — max fraction of different pixels
+ * @param {boolean} [opts.update=false] — force-update the baseline
+ */
+export function assertScreenshotMatch(actualPath, baselineName, opts = {}) {
+    const maxRatio = opts.maxDiffRatio ?? 0.05;
+    fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+
+    const baselinePath = path.join(SNAPSHOTS_DIR, `${baselineName}.png`);
+    const update = opts.update || process.env.UPDATE_SNAPSHOTS === '1';
+
+    if (!fs.existsSync(baselinePath) || update) {
+        fs.copyFileSync(actualPath, baselinePath);
+        console.log(`[snapshot] ${update ? 'updated' : 'created'} baseline: ${baselinePath}`);
+        return;
+    }
+
+    const actual = PNG.sync.read(fs.readFileSync(actualPath));
+    const expected = PNG.sync.read(fs.readFileSync(baselinePath));
+
+    if (actual.width !== expected.width || actual.height !== expected.height) {
+        // Size mismatch — regenerate baseline
+        console.warn(`[snapshot] size mismatch for ${baselineName}: actual=${actual.width}x${actual.height} expected=${expected.width}x${expected.height}, regenerating`);
+        fs.copyFileSync(actualPath, baselinePath);
+        return;
+    }
+
+    const diff = new PNG({ width: actual.width, height: actual.height });
+    const numDiff = pixelmatch(
+        actual.data, expected.data, diff.data,
+        actual.width, actual.height,
+        { threshold: 0.1 },
+    );
+    const ratio = numDiff / (actual.width * actual.height);
+
+    if (ratio > maxRatio) {
+        const diffPath = path.join(SCREENSHOTS_DIR, `${baselineName}-diff.png`);
+        fs.writeFileSync(diffPath, PNG.sync.write(diff));
+        assert.fail(
+            `Screenshot "${baselineName}" differs by ${(ratio * 100).toFixed(1)}% ` +
+            `(${numDiff} pixels, threshold ${(maxRatio * 100).toFixed(0)}%). ` +
+            `Diff saved to ${diffPath}. ` +
+            `Run with UPDATE_SNAPSHOTS=1 to accept the new baseline.`
+        );
+    }
+    console.log(`[snapshot] ${baselineName}: ${(ratio * 100).toFixed(2)}% diff (ok, max ${(maxRatio * 100).toFixed(0)}%)`);
 }
 
 /** Capture current MapLibre style/debug state from the page. */

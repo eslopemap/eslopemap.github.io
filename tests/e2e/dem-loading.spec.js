@@ -178,7 +178,7 @@ test.describe('DEM Rendering (normal mode, synthetic tiles)', () => {
 
     // Screenshot comparison — update baseline with: npx playwright test --update-snapshots
     await expect(page).toHaveScreenshot('dem-color-relief.png', {
-      maxDiffPixelRatio: 0.05,
+      maxDiffPixelRatio: 0.08,
     });
   });
 

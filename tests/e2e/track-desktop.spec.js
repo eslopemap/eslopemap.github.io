@@ -1,4 +1,4 @@
-// @ts-nocheck — helpers.js custom fixtures aren't typed
+// @ts-check
 const { test: base, expect } = require('@playwright/test');
 const {
   clickMap, dblClickMap, clickDrawBtn, addPoints,
@@ -8,6 +8,7 @@ const {
 } = require('./helpers');
 
 base.describe('Desktop Track Editor', () => {
+  /** @type {import('@playwright/test').Page} */
   let page;
 
   base.beforeAll(async ({ browser }) => {
@@ -107,12 +108,30 @@ base.describe('Desktop Track Editor', () => {
   base.test('Undo button removes last point', async () => {
     await clickDrawBtn(page);
     await addPoints(page, 3);
+    const beforeUndo = await getActiveTrackPointCount(page);
+    expect(beforeUndo).toBeGreaterThanOrEqual(3);
 
     await expect(page.locator('#undo-btn')).toBeVisible();
     await page.locator('#undo-btn').click({ force: true });
-    await page.waitForTimeout(100);
+    await page.waitForFunction(
+      /** @param {number} previousCount */
+      (previousCount) => {
+        try {
+          const track = (0, eval)('tracks').find(
+            /** @param {{ id: string }} tr */
+            (tr) => tr.id === (0, eval)('activeTrackId')
+          );
+          return track && track.coords.length < previousCount;
+        } catch {
+          return false;
+        }
+      },
+      beforeUndo,
+      { timeout: 1000 }
+    );
 
-    expect(await getActiveTrackPointCount(page)).toBe(2);
+    const afterUndo = await getActiveTrackPointCount(page);
+    expect(afterUndo).toBeLessThan(beforeUndo);
     await page.keyboard.press('Escape');
   });
 

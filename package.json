@@ -13,7 +13,11 @@
     "test:e2e:coverage": "E2E_COVERAGE=1 npx playwright test && node scripts/merge-e2e-coverage.mjs",
     "test:headed": "npx playwright test --headed",
     "test:debug": "npx playwright test --debug",
-    "test:tauri-e2e": "(cd src-tauri && cargo build --features webdriver) && cd tests/tauri-e2e && npm test"
+    "test:tauri-e2e": "(cd src-tauri && cargo build --features webdriver) && cd tests/tauri-e2e && npm test",
+    "test:tauri-e2e:coverage": "node scripts/run-tauri-e2e-coverage.mjs",
+    "test:rust:coverage": "(cd src-tauri && cargo llvm-cov --lcov --output-path ../coverage/rust-lcov.info)",
+    "coverage:report:full": "node scripts/build-full-coverage-report.mjs",
+    "test:coverage:full": "npm run test:coverage && npm run test:e2e:coverage && npm run test:rust:coverage && npm run test:tauri-e2e:coverage && npm run coverage:report:full"
   },
   "repository": {
     "type": "git",

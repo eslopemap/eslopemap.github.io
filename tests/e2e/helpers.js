@@ -54,8 +54,23 @@ const test = base.extend({
 });
 
 async function resetState(page) {
-  await page.evaluate(() => (0, eval)('resetForTest')());
-  await page.waitForTimeout(50);
+  await page.evaluate(() => {
+    localStorage.clear();
+    (0, eval)('resetForTest')();
+  });
+  await page.waitForFunction(
+    () => {
+      try {
+        return (0, eval)('tracks').length === 0
+          && !(0, eval)('activeTrackId')
+          && !(0, eval)('editingTrackId');
+      } catch {
+        return false;
+      }
+    },
+    { timeout: MAP_READY_TIMEOUT_MS }
+  );
+  await page.waitForTimeout(100);
 }
 
 async function loadMapPage(page) {

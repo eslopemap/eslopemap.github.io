@@ -8,7 +8,7 @@ export default {
       provider: 'v8',
       include: ['app/js/**/*.js'],
       exclude: ['app/vendor/**'],
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json'],
       reportsDirectory: 'coverage',
     },
   },
