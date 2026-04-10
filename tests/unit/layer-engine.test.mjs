@@ -487,6 +487,19 @@ describe('layer-engine style basemaps', () => {
     expect(state.layerOrder).toEqual(['osm', '_hillshade', '_analysis', '_contours']);
   });
 
+  it('inserts newly added overlays before anchored system layers', async () => {
+    const { syncLayerOrder } = await import('../../app/js/layer-engine.js');
+    const state = {
+      basemapStack: ['osm'],
+      activeOverlays: ['openskimap'],
+      layerOrder: ['osm', '_hillshade', '_analysis', '_contours'],
+    };
+
+    syncLayerOrder(state);
+
+    expect(state.layerOrder).toEqual(['osm', 'openskimap', '_hillshade', '_analysis', '_contours']);
+  });
+
   it('updates opacity for already-loaded style-backed basemap layers', async () => {
     ({ applyLayerOpacity, setBasemap } = await import('../../app/js/layer-engine.js'));
     const map = createMapMock();

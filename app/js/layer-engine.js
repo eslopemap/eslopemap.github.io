@@ -308,17 +308,15 @@ export function syncLayerOrder(state) {
   const allActive = new Set([...basemaps, ...overlays, ...systemLayers]);
 
   const current = (state.layerOrder || []).filter(id => allActive.has(id));
+  const currentNonSystem = current.filter(id => !systemLayers.includes(id));
   // Add any active layers not yet in order
   for (const id of state.basemapStack || []) {
-    if (!current.includes(id)) current.push(id);
+    if (!currentNonSystem.includes(id)) currentNonSystem.push(id);
   }
   for (const id of state.activeOverlays) {
-    if (!current.includes(id)) current.push(id);
+    if (!currentNonSystem.includes(id)) currentNonSystem.push(id);
   }
-  for (const id of systemLayers) {
-    if (!current.includes(id)) current.push(id);
-  }
-  state.layerOrder = current;
+  state.layerOrder = [...currentNonSystem, ...systemLayers];
 }
 
 /**
