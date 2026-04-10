@@ -1510,12 +1510,11 @@ export function onFileBatchImported(fileName, createdTracks, importedWaypoints) 
     if (n.children?.length) treeState.expandedNodeIds.add(n.id);
   });
 
-  // Waypoints go at workspace root
   const waypoints = _deps.getWaypoints();
   for (const wp of importedWaypoints || []) {
     const persisted = waypoints.find(w => w.name === wp.name && w.coords?.[0] === wp.coords?.[0]);
     if (persisted) {
-      workspace.children.push(createWaypointNode(wp.name, {
+      fileNode.children.push(createWaypointNode(wp.name, {
         desc: wp.desc, cmt: wp.comment, sym: wp.sym,
         coords: wp.coords, _waypointId: persisted.id,
       }));

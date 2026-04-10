@@ -199,6 +199,12 @@ base.describe('Track Import', () => {
     expect(wptCount).toBe(2);
     const wptName = await evalInScope(page, 'waypoints[0].name');
     expect(wptName).toBe('Summit');
+
+    await expect(page.locator('.tree-row').filter({ hasText: 'wpt' }).first()).toBeVisible();
+    const waypointDepths = await page.locator('.tree-row').filter({ hasText: /Summit|Hut/ }).evaluateAll(rows => rows.map(row => row.style.paddingLeft));
+    expect(waypointDepths.length).toBe(2);
+    expect(new Set(waypointDepths).size).toBe(1);
+    expect(waypointDepths[0]).toBe('24px');
   });
 
   base.test('GPX with waypoints only (no tracks) -- waypoints imported', async () => {
