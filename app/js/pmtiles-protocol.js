@@ -6,6 +6,7 @@
 // hasn't been processed yet.
 
 let _protocol = null;
+let _protocolInitPromise = null;
 
 /**
  * Initialize the PMTiles protocol and register it with MapLibre.
@@ -15,13 +16,21 @@ let _protocol = null;
  */
 export async function initPmtilesProtocol(maplibregl) {
   if (_protocol) return;
-  try {
-    const { Protocol } = await import('pmtiles');
-    _protocol = new Protocol();
-    maplibregl.addProtocol('pmtiles', _protocol.tile);
-  } catch (e) {
-    console.warn('[pmtiles] Failed to load pmtiles library:', e.message);
-  }
+  if (_protocolInitPromise) return _protocolInitPromise;
+  _protocolInitPromise = (async () => {
+    try {
+      const { Protocol } = await import('pmtiles');
+      _protocol = new Protocol();
+      maplibregl.addProtocol('pmtiles', _protocol.tile);
+    } catch (e) {
+      console.warn('[pmtiles] Failed to load pmtiles library:', e.message);
+    } finally {
+      if (!_protocol) {
+        _protocolInitPromise = null;
+      }
+    }
+  })();
+  return _protocolInitPromise;
 }
 
 /**
@@ -31,4 +40,5 @@ export function removePmtilesProtocol(maplibregl) {
   if (!_protocol) return;
   maplibregl.removeProtocol('pmtiles');
   _protocol = null;
+  _protocolInitPromise = null;
 }

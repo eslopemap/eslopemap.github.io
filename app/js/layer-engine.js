@@ -100,6 +100,69 @@ function setScaledNativeOpacityForLayer(map, layerId, layer, opacity) {
   }
 }
 
+function getAuthoredLayerOpacity(layer) {
+  for (const property of getOpacityPaintProperties(layer?.type)) {
+    const value = layer?.paint?.[property];
+    if (typeof value === 'number') return value;
+    if (
+      Array.isArray(value)
+      && value[0] === '*'
+      && typeof value[1] === 'number'
+    ) {
+      return value[1];
+    }
+    if (
+      Array.isArray(value)
+      && value[0] === '*'
+      && typeof value[2] === 'number'
+    ) {
+      return value[2];
+    }
+  }
+  return 1;
+}
+
+function getCatalogDefaultOpacity(catalogId) {
+  const entry = getCatalogEntry(catalogId);
+  if (!entry?.layers?.length) return 1;
+  for (const layer of entry.layers) {
+    const opacity = getAuthoredLayerOpacity(layer);
+    if (opacity != null) return opacity;
+  }
+  return 1;
+}
+
+function ensureLayerStateDefaults(state, catalogId) {
+  const entry = getCatalogEntry(catalogId);
+  if (!entry) return;
+
+  if (entry.category === 'basemap') {
+    const defaultOpacity = getCatalogDefaultOpacity(catalogId);
+    if (defaultOpacity !== 1 && state.basemapOpacities?.[catalogId] == null) {
+      state.basemapOpacities = {
+        ...(state.basemapOpacities || {}),
+        [catalogId]: defaultOpacity,
+      };
+    }
+    if (state.layerSettings?.[catalogId]?.hidden) {
+      state.layerSettings = {
+        ...(state.layerSettings || {}),
+        [catalogId]: { ...(state.layerSettings?.[catalogId] || {}), hidden: false },
+      };
+    }
+    return;
+  }
+
+  const nextSettings = { ...(state.layerSettings || {}) };
+  const current = nextSettings[catalogId] || {};
+  const next = { ...current, hidden: false };
+  if (current.opacity == null) {
+    next.opacity = getCatalogDefaultOpacity(catalogId);
+  }
+  nextSettings[catalogId] = next;
+  state.layerSettings = nextSettings;
+}
+
 // ── Basemap ─────────────────────────────────────────────────────────
 
 /**
@@ -118,16 +181,9 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
   const effectiveIds = requestedIds.length >= 1 ? requestedIds : ['none'];
   state.basemapStack = requestedIds;
 
-  // Ensure visibility in layerSettings so it shows up if it was previously hidden
-  const settings = { ...(state.layerSettings || {}) };
-  let settingsChanged = false;
   for (const id of effectiveIds) {
-    if (settings[id]?.hidden) {
-      settings[id] = { ...settings[id], hidden: false };
-      settingsChanged = true;
-    }
+    ensureLayerStateDefaults(state, id);
   }
-  if (settingsChanged) state.layerSettings = settings;
 
   for (const id of effectiveIds) {
     if (typeof map.__ensureBasemapStyle === 'function') {
@@ -199,13 +255,9 @@ export function setOverlay(map, state, catalogId, visible) {
   const overlays = new Set(state.activeOverlays);
   if (visible) {
     overlays.add(catalogId);
+    ensureLayerStateDefaults(state, catalogId);
     // On-demand: create sources/layers if not yet on the map
     ensureCatalogEntry(map, catalogId);
-    
-    // Force visibility to false in layerSettings so it shows up!
-    const settings = { ...(state.layerSettings || {}) };
-    settings[catalogId] = { ...(settings[catalogId] || {}), hidden: false };
-    state.layerSettings = settings;
   } else {
     overlays.delete(catalogId);
   }
@@ -506,47 +558,4 @@ export function renameBookmark(state, bookmarkId, newName) {
   const bm = bookmarks.find(b => b.id === bookmarkId);
   if (bm) bm.name = newName;
   state.bookmarks = bookmarks;
-}
-
-// ── Migration ───────────────────────────────────────────────────────
-
-/** Map old per-overlay boolean state keys to catalog IDs */
-const LEGACY_OVERLAY_MAP = {
-  showOpenSkiMap: 'openskimap',
-  showSwisstopoSki: 'swisstopo-ski',
-  showSwisstopoSlope: 'swisstopo-slope',
-  showIgnSki: 'ign-ski',
-  showIgnSlopes: 'ign-slopes',
-};
-
-/**
- * Migrate legacy persisted settings (per-overlay booleans) into the
- * new activeOverlays array format. Returns true if migration occurred.
- */
-export function migrateSettings(settings) {
-  if (!settings) return false;
-  let migrated = false;
-
-  // Legacy overlay booleans → activeOverlays array
-  if (!settings.activeOverlays) {
-    const overlays = [];
-    for (const [key, catalogId] of Object.entries(LEGACY_OVERLAY_MAP)) {
-      if (settings[key]) overlays.push(catalogId);
-      delete settings[key];
-    }
-    settings.activeOverlays = overlays;
-    settings.layerOrder = [...overlays];
-    settings.layerSettings = {};
-    settings.bookmarks = settings.bookmarks || [];
-    migrated = true;
-  }
-
-  // Legacy single basemap → basemapStack
-  if (!settings.basemapStack && settings.basemap) {
-    settings.basemapStack = [settings.basemap];
-    settings.basemapOpacities = {};
-    migrated = true;
-  }
-
-  return migrated;
 }

@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let applyLayerOpacity;
 let setBasemap;
+let setBasemapStack;
+let setLayerVisible;
+let setOverlay;
 
 function createMapMock() {
   const layers = new Map([
@@ -207,6 +210,39 @@ describe('user source registry', () => {
     expect(registry.getOverlays().length).toBe(builtInCount + 1);
   });
 
+  it('exposes built-in PMTiles raster basemap and overlay entries', () => {
+    const bugianen = registry.getCatalogEntry('pubmap-bugianen');
+    const alpsDetailedSlopes = registry.getCatalogEntry('pubmap-eslo-walps');
+
+    expect(bugianen).toBeTruthy();
+    expect(bugianen.category).toBe('basemap');
+    expect(bugianen.sources['pubmap-bugianen']).toMatchObject({
+      type: 'raster',
+      url: 'pmtiles://https://pubmap.montagne.top/Bugianen.pmtiles',
+      tileSize: 256,
+    });
+    expect(bugianen.layers[0]).toMatchObject({
+      id: 'basemap-pubmap-bugianen',
+      type: 'raster',
+      source: 'pubmap-bugianen',
+    });
+
+    expect(alpsDetailedSlopes).toBeTruthy();
+    expect(alpsDetailedSlopes.category).toBe('overlay');
+    expect(alpsDetailedSlopes.sources['pubmap-eslo-walps']).toMatchObject({
+      type: 'raster',
+      url: 'pmtiles://https://pubmap.montagne.top/AlpsW_eslo.pmtiles',
+      tileSize: 256,
+      attribution: 'https://github.com/eslopemap/eslope',
+    });
+    expect(alpsDetailedSlopes.layers[0]).toMatchObject({
+      id: 'overlay-pubmap-eslo-walps',
+      type: 'raster',
+      source: 'pubmap-eslo-walps',
+    });
+    expect(alpsDetailedSlopes.layers[0].paint['raster-opacity']).toEqual(expect.any(Array));
+  });
+
   it('buildCatalogEntryFromTileJson creates valid entry for mbtiles', async () => {
     const { buildCatalogEntryFromTileJson } = await import('../../app/js/tauri-bridge.js');
     const tj = {
@@ -335,7 +371,7 @@ describe('layer-engine style basemaps', () => {
   });
 
   it('preserves an empty requested basemap stack in state', async () => {
-    const { setBasemapStack } = await import('../../app/js/layer-engine.js');
+    ({ setBasemapStack } = await import('../../app/js/layer-engine.js'));
     const map = createMapMock();
     const state = {
       basemapStack: ['osm'],
@@ -349,6 +385,72 @@ describe('layer-engine style basemaps', () => {
 
     expect(state.basemapStack).toEqual([]);
     expect(map.getLayer('basemap-osm')?.layout.visibility).toBe('none');
+  });
+
+  it('seeds default overlay opacity from catalog-authored paint when adding an overlay', async () => {
+    ({ setOverlay } = await import('../../app/js/layer-engine.js'));
+    const map = createMapMock();
+    const state = {
+      basemapStack: ['osm'],
+      basemapOpacity: 1,
+      basemapOpacities: {},
+      activeOverlays: [],
+      layerOrder: [],
+      layerSettings: {},
+    };
+
+    setOverlay(map, state, 'pubmap-eslo-walps', true);
+
+    expect(state.layerSettings['pubmap-eslo-walps']).toMatchObject({
+      hidden: false,
+      opacity: 0.55,
+    });
+    expect(map.getLayer('overlay-pubmap-eslo-walps')?.layout.visibility).toBe('visible');
+  });
+
+  it('does not seed a redundant basemap opacity override when catalog default is fully opaque', async () => {
+    ({ setBasemapStack } = await import('../../app/js/layer-engine.js'));
+    const map = createMapMock();
+    const state = {
+      basemapStack: ['osm'],
+      basemapOpacity: 1,
+      basemapOpacities: {},
+      activeOverlays: [],
+      layerOrder: [],
+      layerSettings: {},
+    };
+
+    await setBasemapStack(map, state, ['osm', 'pubmap-bugianen']);
+
+    expect(state.basemapOpacities['pubmap-bugianen']).toBeUndefined();
+    expect(map.getLayer('basemap-pubmap-bugianen')?.paint['raster-opacity']).toEqual(expect.any(Array));
+  });
+
+  it('restores visibility state when a hidden overlay is re-added', async () => {
+    ({ setLayerVisible, setOverlay } = await import('../../app/js/layer-engine.js'));
+    const map = createMapMock();
+    const state = {
+      basemapStack: ['osm'],
+      basemapOpacity: 1,
+      basemapOpacities: {},
+      activeOverlays: [],
+      layerOrder: [],
+      layerSettings: {},
+    };
+
+    setOverlay(map, state, 'pubmap-eslo-walps', true);
+    setLayerVisible(map, state, 'pubmap-eslo-walps', false);
+
+    expect(state.layerSettings['pubmap-eslo-walps'].hidden).toBe(true);
+    expect(map.getLayer('overlay-pubmap-eslo-walps')?.layout.visibility).toBe('none');
+
+    setOverlay(map, state, 'pubmap-eslo-walps', true);
+
+    expect(state.layerSettings['pubmap-eslo-walps']).toMatchObject({
+      hidden: false,
+      opacity: 0.55,
+    });
+    expect(map.getLayer('overlay-pubmap-eslo-walps')?.layout.visibility).toBe('visible');
   });
 
   it('syncLayerOrder includes basemapStack and activeOverlays', async () => {

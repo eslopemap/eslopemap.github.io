@@ -251,7 +251,7 @@ const demContourSource = new mlcontour.DemSource({
   worker: true
 });
 demContourSource.setupMaplibre(maplibregl);
-initPmtilesProtocol(maplibregl);
+const pmtilesProtocolReady = initPmtilesProtocol(maplibregl);
 
 function buildContourSourceDefinition() {
   return {
@@ -607,12 +607,13 @@ map.__ensureBasemapStyle = async (catalogId) => {
   await styleReady;
 };
 
-map.on('style.load', () => {
+map.on('style.load', async () => {
   const primaryBasemapId = state.basemapStack?.[0] || 'none';
   const entry = getCatalogEntry(primaryBasemapId);
   if (entry?.styleUrl) {
     map.__nativeBasemapLayerIds.set(entry.id, (map.getStyle()?.layers || []).map(layer => layer.id));
   }
+  await pmtilesProtocolReady;
   ensureAppRuntimeLayers(map);
   tracksState.rehydrateTrackLayers();
   setGlobalStatePropertySafe(map, 'basemapOpacity', state.basemapOpacity);

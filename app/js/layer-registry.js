@@ -210,6 +210,29 @@ export const LAYER_CATALOG = [
       }
     ]
   },
+  {
+    id: 'pubmap-bugianen',
+    label: 'Bugianen (Italy)',
+    category: 'basemap',
+    region: null,
+    defaultView: null,
+    sources: {
+      'pubmap-bugianen': {
+        type: 'raster',
+        url: 'pmtiles://https://pubmap.montagne.top/Bugianen.pmtiles',
+        tileSize: 256,
+        attribution: '<a href="https://tartamillo.wordpress.com/bugianen/">Maki</a>'
+      }
+    },
+    layers: [
+      {
+        id: 'basemap-pubmap-bugianen',
+        type: 'raster',
+        source: 'pubmap-bugianen',
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      }
+    ]
+  },
 
   // ── Overlays ──────────────────────────────────────────────────────
   {
@@ -367,6 +390,29 @@ export const LAYER_CATALOG = [
         type: 'raster',
         source: 'ign-slopes',
         paint: { 'raster-opacity': basemapOpacityExpr(0.7) }
+      }
+    ]
+  },
+  {
+    id: 'pubmap-eslo-walps',
+    label: 'Alps Detailed Slopes',
+    category: 'overlay',
+    region: null,
+    defaultView: null,
+    sources: {
+      'pubmap-eslo-walps': {
+        type: 'raster',
+        url: 'pmtiles://https://pubmap.montagne.top/AlpsW_eslo.pmtiles',
+        tileSize: 256,
+        attribution: 'https://github.com/eslopemap/eslope'
+      }
+    },
+    layers: [
+      {
+        id: 'overlay-pubmap-eslo-walps',
+        type: 'raster',
+        source: 'pubmap-eslo-walps',
+        paint: { 'raster-opacity': basemapOpacityExpr(0.55) }
       }
     ]
   },
