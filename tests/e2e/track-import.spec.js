@@ -94,6 +94,20 @@ base.describe('Track Import', () => {
     expect(info.pointCount).toBe(3);
   });
 
+  base.test('Single-track import uses the track name for the file row and selecting that file activates the track', async () => {
+    await importFile(page, 'test.gpx', SIMPLE_GPX);
+    await page.waitForTimeout(300);
+
+    const fileRow = page.locator('.tree-row').filter({ hasText: 'Test Track' }).first();
+    await expect(fileRow).toBeVisible();
+    await fileRow.click();
+    await page.waitForTimeout(100);
+
+    const info = await getTrackInfo(page, 0);
+    expect(info.name).toBe('Test Track');
+    expect(info.isActive).toBe(true);
+  });
+
   base.test('GPX import -- route element', async () => {
     await importFile(page, 'route.gpx', ROUTE_GPX);
     await page.waitForTimeout(300);

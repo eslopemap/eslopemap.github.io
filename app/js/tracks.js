@@ -8,7 +8,7 @@ import { queryLoadedElevationAtLngLat } from './dem.js';
 import { initTrackEdit, getEditState, isTrackEditing, enterEditMode, exitEditMode, startNewTrack, resetMobileFriendlyMode } from './track-edit.js';
 import { initIO, importFileContent } from './io.js';
 import { saveTracks, loadTracks, saveWaypoints, loadWaypoints } from './persist.js';
-import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onFileBatchImported, openInfoEditor, findNodeForTrackId } from './gpx-tree.js';
+import { initGpxTree, renderGpxTree, rebuildTree, onTrackCreated, onTrackDeleted, onFileBatchImported, openInfoEditor, findNodeForTrackId, getPrimarySelectionNode } from './gpx-tree.js';
 import { buildSelectionSpan, densifyTrackSpan, simplifyTrackSpan, splitTrackSpan, mergeTrackSpans, convertRouteToTrack, simplifyForDisplay } from './track-ops.js';
 
 let map, state;
@@ -1253,12 +1253,12 @@ export function initTracks(mapRef, stateRef, updateProfile) {
     createTrack,
     getActiveTrack,
     getTracks: () => tracks,
-    findTrackById: (id) => tracks.find(track => track.id === id),
     getWaypoints: () => waypoints,
     findWaypointById,
     addWaypoints,
     fitToTrack,
     fitToTrackIds,
+    getPrimaryExportNode: () => getPrimarySelectionNode(),
     finishBatchImport,
     onFileBatchImported: (fileName, createdTracks, waypoints) => onFileBatchImported(fileName, createdTracks, waypoints),
   });

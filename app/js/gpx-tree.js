@@ -79,6 +79,10 @@ export function initGpxTree(deps) {
 
 export function getWorkspace() { return workspace; }
 
+export function getPrimarySelectionNode() {
+  return treeState.selectedNodeId ? findNodeById(workspace.children, treeState.selectedNodeId) : null;
+}
+
 export function findNodeForTrackId(trackId, options) {
   const preferFile = options?.preferFile === true;
   let match = null;
@@ -224,6 +228,11 @@ function collectDescendantTrackIds(node) {
 
 function getVisibleRows() {
   return _trackListEl ? [..._trackListEl.querySelectorAll('.tree-row')] : [];
+}
+
+function getSingleDescendantTrackId(node) {
+  const trackIds = collectDescendantTrackIds(node);
+  return trackIds.length === 1 ? trackIds[0] : null;
 }
 
 function selectSingleNode(nodeId) {
@@ -1118,6 +1127,13 @@ function applyInfoEdits(node, inputs) {
       node.name = val;
       // Sync back to track data
       syncNameToTrack(node, val);
+      if (node.type === 'file') {
+        const singleTrackId = getSingleDescendantTrackId(node);
+        if (singleTrackId) {
+          const childTrackNode = findNodeForTrackId(singleTrackId);
+          if (childTrackNode) childTrackNode.name = val;
+        }
+      }
     } else {
       node[field] = val;
     }
@@ -1137,6 +1153,10 @@ function syncNameToTrack(node, name) {
     for (const id of node._trackIds) {
       _deps.renameGroupByTrackId(id, name);
     }
+  }
+  if (node.type === 'file') {
+    const singleTrackId = getSingleDescendantTrackId(node);
+    if (singleTrackId) _deps.renameTrackById(singleTrackId, name);
   }
 }
 
@@ -1316,7 +1336,7 @@ function renderNodeList(nodes, container, depth) {
       }
 
       // Activate the track for the primary selection
-      const primaryId = node._trackId || node._trackIds?.[0];
+      const primaryId = node._trackId || node._trackIds?.[0] || collectDescendantTrackIds(node)[0];
       if (primaryId) _deps.setActiveTrack(primaryId);
       // Fit map to all tracks across all selected nodes
       const allTrackIds = [];

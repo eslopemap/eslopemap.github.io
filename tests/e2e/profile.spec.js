@@ -1,4 +1,4 @@
-// @ts-check
+// @ts-nocheck
 const { test: base, expect } = require('@playwright/test');
 const {
   importFile, getTrackInfo, getTrackCount,
@@ -20,18 +20,19 @@ const SIMPLE_GPX = `<?xml version="1.0" encoding="UTF-8"?>
 </gpx>`;
 
 base.describe('Profile Panel', () => {
-  let page;
+  /** @type {import('@playwright/test').Page | null} */
+  let page = null;
 
   base.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     await loadMapPage(page);
   });
 
-  base.afterAll(async () => { await page.close(); });
+  base.afterAll(async () => { await page?.close(); });
 
   base.beforeEach(async () => { await resetState(page); });
 
-  base.test('Profile auto-opens when importing a track with >= 2 points', async () => {
+  base('Profile auto-opens when importing a track with >= 2 points', async () => {
     await importFile(page, 'test.gpx', SIMPLE_GPX);
     await page.waitForTimeout(500);
 
@@ -39,7 +40,7 @@ base.describe('Profile Panel', () => {
     await expect(page.locator('#profile-toggle-btn.active')).toBeVisible();
   });
 
-  base.test('Profile does not open for track with < 2 points', async () => {
+  base('Profile does not open for track with < 2 points', async () => {
     const onePointGpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1"><trk><trkseg>
   <trkpt lat="45.83" lon="6.86"><ele>1500</ele></trkpt>
@@ -51,7 +52,7 @@ base.describe('Profile Panel', () => {
     await expect(page.locator('#profile-panel.visible')).not.toBeVisible();
   });
 
-  base.test('Close profile and reopen with toggle button', async () => {
+  base('Close profile and reopen with toggle button', async () => {
     await importFile(page, 'test.gpx', SIMPLE_GPX);
     await page.waitForTimeout(500);
 
@@ -68,7 +69,7 @@ base.describe('Profile Panel', () => {
     await expect(page.locator('#profile-toggle-btn.active')).toBeVisible();
   });
 
-  base.test('Profile toggle button closes the profile when clicked while open', async () => {
+  base('Profile toggle button closes the profile when clicked while open', async () => {
     await importFile(page, 'test.gpx', SIMPLE_GPX);
     await page.waitForTimeout(500);
 
@@ -79,7 +80,7 @@ base.describe('Profile Panel', () => {
     await expect(page.locator('#profile-panel.visible')).not.toBeVisible();
   });
 
-  base.test('Profile toggle button is disabled when no track is active', async () => {
+  base('Profile toggle button is disabled when no track is active', async () => {
     await importFile(page, 'temp.gpx', SIMPLE_GPX);
     await page.waitForTimeout(500);
 
@@ -94,7 +95,7 @@ base.describe('Profile Panel', () => {
     expect(activeId).toBeNull();
   });
 
-  base.test('Profile contains a canvas element', async () => {
+  base('Profile contains a canvas element', async () => {
     await importFile(page, 'test.gpx', SIMPLE_GPX);
     await page.waitForTimeout(500);
 

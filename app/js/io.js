@@ -499,6 +499,9 @@ ${pts}
 }
 
 function exportActiveGPX() {
+  const selectedNode = tracksFns.getPrimaryExportNode?.();
+  if (selectedNode && exportNodeGPX(selectedNode)) return;
+
   const t = tracksFns.getActiveTrack();
   if (!t || !t.coords.length) return;
   const payload = {

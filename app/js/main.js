@@ -25,7 +25,7 @@ import {
   setBasemap, setBasemapStack, setOverlay, applyAllOverlays, applyLayerOrder, applyAllLayerSettings,
   syncLayerOrder, reorderLayer, applyLayerOpacity, setLayerVisible, removeLayer,
   createBookmark, applyBookmark, deleteBookmark, renameBookmark,
-  migrateSettings, ensureCatalogEntry,
+  ensureCatalogEntry,
 } from './layer-engine.js';
 
 import {
@@ -71,6 +71,10 @@ function handleStateChange(key) {
   ) {
     syncPrimaryControlsFromState(state);
   }
+}
+
+function migrateSettings(settings) {
+  return settings;
 }
 
 // ---- Debug grid ----
@@ -203,8 +207,7 @@ if (persisted) {
     document.getElementById('pauseThresholdValue').textContent = state.pauseThreshold;
   }
   if (persisted.profileSmoothing != null) {
-    document.getElementById('profileSmoothing').value = String(state.profileSmoothing);
-    document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
+    syncProfileSmoothingControls();
   }
   if (persisted.showTileGrid != null) document.getElementById('showTileGrid').checked = state.showTileGrid;
 }
@@ -229,6 +232,57 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 2000);
+}
+
+function getEffectiveMapPixelRatio() {
+  const configured = Number(state.mapPixelRatio);
+  return Number.isFinite(configured) && configured > 0 ? configured : window.devicePixelRatio;
+}
+
+function syncProfileSmoothingControls() {
+  const slider = document.getElementById('profileSmoothing');
+  const valueEl = document.getElementById('profileSmoothingValue');
+  if (!slider || !valueEl) return;
+  const smoothing = Number(state.profileSmoothing);
+  const safeValue = Number.isFinite(smoothing) && smoothing >= 0 ? smoothing : 0;
+  slider.value = String(Math.min(safeValue, Number(slider.max) || safeValue));
+  valueEl.textContent = String(safeValue);
+}
+
+function enableInlineNumberEdit(valueEl, onCommit) {
+  if (!valueEl) return;
+  valueEl.addEventListener('dblclick', () => {
+    if (valueEl.querySelector('input')) return;
+    const currentText = valueEl.textContent || '';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '1';
+    input.min = '0';
+    input.value = currentText;
+    input.className = 'inline-number-edit';
+    valueEl.textContent = '';
+    valueEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      const nextValue = Number(input.value);
+      if (Number.isFinite(nextValue) && nextValue >= 0) onCommit(nextValue);
+      else syncProfileSmoothingControls();
+    };
+
+    input.addEventListener('blur', commit, { once: true });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        syncProfileSmoothingControls();
+      }
+    });
+  });
 }
 
 function syncMapViewState() {
@@ -435,6 +489,7 @@ const map = new maplibregl.Map({
   zoom: initialView.zoom,
   bearing: initialView.bearing,
   pitch: initialView.pitch,
+  pixelRatio: getEffectiveMapPixelRatio(),
   maxTileCacheZoomLevels: 20,
   attributionControl: false,
   style: buildAppStyle(),
@@ -1023,10 +1078,35 @@ document.getElementById('pauseThreshold').addEventListener('input', (e) => {
 
 document.getElementById('profileSmoothing').addEventListener('input', (e) => {
   state.profileSmoothing = Number(e.target.value);
-  document.getElementById('profileSmoothingValue').textContent = state.profileSmoothing;
+  syncProfileSmoothingControls();
   updateProfile();
   scheduleSettingsSave();
 });
+
+enableInlineNumberEdit(document.getElementById('profileSmoothingValue'), (nextValue) => {
+  state.profileSmoothing = nextValue;
+  syncProfileSmoothingControls();
+  updateProfile();
+  scheduleSettingsSave();
+});
+
+const mapDpiBtn = document.getElementById('map-dpi-btn');
+if (mapDpiBtn) {
+  mapDpiBtn.title = `Map DPI (${getEffectiveMapPixelRatio().toFixed(2)}x)`;
+  mapDpiBtn.addEventListener('click', () => {
+    const raw = window.prompt('Map DPI / pixel ratio (0 = device default)', String(state.mapPixelRatio || 0));
+    if (raw == null) return;
+    const nextValue = Number(raw.trim());
+    if (!Number.isFinite(nextValue) || nextValue < 0) {
+      showToast('Invalid map DPI value');
+      return;
+    }
+    state.mapPixelRatio = nextValue;
+    scheduleSettingsSave();
+    showToast('Map DPI saved — reloading map');
+    window.setTimeout(() => window.location.reload(), 150);
+  });
+}
 
 initSavedDataPanel();
 

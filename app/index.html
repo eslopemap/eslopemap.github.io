@@ -53,8 +53,8 @@
   </div>
   <div id="bar-right">
     <div id="track-tool-row">
-      <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩ ⎌</button>
-      <button id="redo-btn" class="tb-btn" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" style="display:none">↪ ⎌</button>
+      <button id="undo-btn" class="tb-btn" title="Undo (Ctrl+Z)" style="display:none">↩</button>
+      <button id="redo-btn" class="tb-btn" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" style="display:none">↪</button>
       <button id="draw-btn" class="tb-btn" title="New track">&#43;</button>
       <button id="import-url-btn" class="tb-btn" title="Import GPX from URL">🔗</button>
       <button id="open-file-btn" class="tb-btn" title="Open GPX/GeoJSON file">📄</button>
@@ -90,8 +90,8 @@
     </div>
 
     <div class="row">
-      <label for="profileSmoothing"><strong>Profile smoothing</strong>: <span id="profileSmoothingValue">3</span></label><br />
-      <input id="profileSmoothing" type="range" min="0" max="15" step="1" value="3" />
+      <label for="profileSmoothing"><strong>Profile smoothing</strong>: <span id="profileSmoothingValue">20</span></label><br />
+      <input id="profileSmoothing" type="range" min="0" max="100" step="1" value="20" />
     </div>
 
     <div class="row">
@@ -195,6 +195,7 @@
   <div id="cursor-tooltip"></div>
   <div id="mobile-crosshair"></div>
   <div id="draw-crosshair"></div>
+  <button id="map-dpi-btn" class="panel-surface" title="Map DPI">DPI</button>
   <div id="toast"></div>
 
   <div id="profile-panel" class="panel-surface">
