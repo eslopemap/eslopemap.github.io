@@ -5,7 +5,7 @@ export const MAX_STEP_STOPS = 16;
 export const DEM_TERRAIN_SOURCE_ID = 'dem-terrain';
 export const DEM_HD_SOURCE_ID = 'dem-hd';
 export const DEM_MAX_Z = 14;  // could go up to 15
-export const SLOPE_RELIEF_CROSSFADE_Z = 11;
+export const SLOPE_RELIEF_CROSSFADE_Z = 10;
 
 export const TRACK_COLORS = ['#e040fb','#ff5252','#00e676','#ffab00','#2979ff','#00e5ff','#ff6e40','#d500f9'];
 
@@ -51,10 +51,9 @@ export const ANALYSIS_COLOR = {
     2000, '#604E39',
     2500, '#C2AB94',
     3000, '#D9CCBF',
-    4000, '#ECE6DF',
-    5000, '#F6F2EF',
-    6000, '#FFFFFF',
-    8000, '#F5FDFF'
+    4000, '#FFFFFF',
+    6000, '#f78eae',
+    8000, '#d75b8c'
   ]
 };
 
