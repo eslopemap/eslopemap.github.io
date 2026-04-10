@@ -580,7 +580,7 @@ export function initProfile(mapRef, stateRef, tracksStateRef) {
   if (resizeBtn) {
     resizeBtn.addEventListener('click', () => {
       document.getElementById('profile-panel').classList.toggle('expanded');
-      if (chart) chart.resize();
+      if (profileChart) profileChart.resize();
     });
   }
 

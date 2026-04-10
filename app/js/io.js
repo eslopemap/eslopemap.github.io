@@ -615,27 +615,20 @@ export function initIO(deps) {
     // Try directory entries first (webkitGetAsEntry)
     const items = e.dataTransfer.items;
     if (items && items.length) {
-      const entries = Array.from(items)
+      const entries = [];
       for (const item of items) {
         const entry = item.webkitGetAsEntry?.();
         if (entry) entries.push(entry);
       }
-      if (entries.some(en => en.isDirectory)) {
+      if (entries.length) {
         for (const entry of entries) {
           if (entry.isDirectory) {
-            if (isTauri()) {
-              // Tauri: scan folder for tiles in bulk, then recurse for GPX/GeoJSON only
-              const folderPath = entry.fullPath || entry.name;
-              const { scanAndRegisterDesktopTileFolder } = await import('./desktop-tile-sources.js');
-              await scanAndRegisterDesktopTileFolder(folderPath, {
-                refreshUi: typeof window.refreshTileLayers === 'function' ? window.refreshTileLayers : null,
-                logPrefix: '[tile-drop]'
-              });
-              await readDirectoryEntriesGpxOnly(entry);
-            } else {
-              await readDirectoryEntries(entry);
-            }
-          } else if (entry.isFile) await readFileEntry(entry);
+            await readDirectoryEntries(entry);
+          } else if (entry.isFile && FILE_PATTERN.test(entry.name)) {
+            await readFileEntry(entry);
+          } else if (entry.isFile && TILE_PATTERN.test(entry.name)) {
+            await handleTileFileEntry(entry);
+          }
         }
         return;
       }
@@ -839,10 +832,7 @@ async function handleTileFile(name, path) {
 
 /** Tier 3: Read directory entries from drag & drop */
 async function readDirectoryEntries(dirEntry) {
-  const reader = dirEntry.createReader();
-  const entries = await new Promise((resolve) => {
-    reader.readEntries(resolve);
-  });
+  const entries = await readAllDirectoryEntries(dirEntry);
   for (const entry of entries) {
     if (entry.isFile) {
       if (FILE_PATTERN.test(entry.name)) {
@@ -858,10 +848,7 @@ async function readDirectoryEntries(dirEntry) {
 
 /** Read directory entries but only process GPX/GeoJSON files (tiles handled via folder scan) */
 async function readDirectoryEntriesGpxOnly(dirEntry) {
-  const reader = dirEntry.createReader();
-  const entries = await new Promise((resolve) => {
-    reader.readEntries(resolve);
-  });
+  const entries = await readAllDirectoryEntries(dirEntry);
   for (const entry of entries) {
     if (entry.isFile && FILE_PATTERN.test(entry.name)) {
       await readFileEntry(entry);
@@ -869,6 +856,19 @@ async function readDirectoryEntriesGpxOnly(dirEntry) {
       await readDirectoryEntriesGpxOnly(entry);
     }
   }
+}
+
+async function readAllDirectoryEntries(dirEntry) {
+  const reader = dirEntry.createReader();
+  const entries = [];
+  while (true) {
+    const batch = await new Promise((resolve) => {
+      reader.readEntries(resolve);
+    });
+    if (!batch.length) break;
+    entries.push(...batch);
+  }
+  return entries;
 }
 
 function readFileEntry(entry) {

@@ -11,7 +11,7 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
@@ -28,22 +28,65 @@ fn tauri_e2e_tests_enabled() -> bool {
     }
 }
 
+fn insecure_upstream_tls_env_enabled() -> bool {
+    match std::env::var("SLOPE_INSECURE_UPSTREAM_TLS") {
+        Ok(value) => {
+            value == "1"
+                || value.eq_ignore_ascii_case("true")
+                || value.eq_ignore_ascii_case("yes")
+        }
+        Err(_) => false,
+    }
+}
+
+fn insecure_agent() -> Agent {
+    Agent::config_builder()
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .disable_verification(true)
+                .build()
+        )
+        .build()
+        .new_agent()
+}
+
+fn is_tls_unknown_issuer_error(err: &ureq::Error) -> bool {
+    let msg = err.to_string();
+    msg.contains("UnknownIssuer") || msg.contains("invalid peer certificate")
+}
+
+fn log_insecure_tls_retry_once() {
+    static WARN_ONCE: Once = Once::new();
+    WARN_ONCE.call_once(|| {
+        eprintln!(
+            "[tile-cache] retrying upstream DEM fetch without TLS verification in debug mode after certificate validation failure"
+        );
+    });
+}
+
 fn fetch_upstream(url: &str) -> Result<ureq::http::Response<Body>, ureq::Error> {
-    if tauri_e2e_tests_enabled() {
-        let agent: Agent = Agent::config_builder()
-            .tls_config(
-                ureq::tls::TlsConfig::builder()
-                    .disable_verification(true)
-                    .build()
-            )
-            .build()
-            .new_agent();
-        return agent
-            .get(url)
-            .call();
+    if tauri_e2e_tests_enabled() || insecure_upstream_tls_env_enabled() {
+        return insecure_agent().get(url).call();
     }
 
-    ureq::get(url).call()
+    match ureq::get(url).call() {
+        Ok(response) => Ok(response),
+        Err(err) if cfg!(debug_assertions) && is_tls_unknown_issuer_error(&err) => {
+            log_insecure_tls_retry_once();
+            insecure_agent().get(url).call()
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn upstream_error_body(err: &ureq::Error) -> Vec<u8> {
+    if is_tls_unknown_issuer_error(err) {
+        return format!(
+            "upstream TLS error: {err}. In desktop development behind a corporate proxy, you can also set SLOPE_INSECURE_UPSTREAM_TLS=1 before launching Tauri."
+        )
+        .into_bytes();
+    }
+    format!("upstream error: {err}").into_bytes()
 }
 
 /// A tile source backed by a remote URL with a local disk cache.
@@ -174,7 +217,7 @@ impl TileCache {
                 if let Some(status) = extract_status_from_ureq_error(&e) {
                     (status, "text/plain; charset=utf-8", Vec::new())
                 } else {
-                    (502, "text/plain; charset=utf-8", format!("upstream error: {e}").into_bytes())
+                    (502, "text/plain; charset=utf-8", upstream_error_body(&e))
                 }
             }
         }
