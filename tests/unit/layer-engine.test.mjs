@@ -334,6 +334,23 @@ describe('layer-engine style basemaps', () => {
     );
   });
 
+  it('preserves an empty requested basemap stack in state', async () => {
+    const { setBasemapStack } = await import('../../app/js/layer-engine.js');
+    const map = createMapMock();
+    const state = {
+      basemapStack: ['osm'],
+      basemapOpacity: 1,
+      activeOverlays: [],
+      layerOrder: [],
+      layerSettings: {},
+    };
+
+    await setBasemapStack(map, state, []);
+
+    expect(state.basemapStack).toEqual([]);
+    expect(map.getLayer('basemap-osm')?.layout.visibility).toBe('none');
+  });
+
   it('syncLayerOrder includes basemapStack and activeOverlays', async () => {
     const { syncLayerOrder } = await import('../../app/js/layer-engine.js');
     const state = {

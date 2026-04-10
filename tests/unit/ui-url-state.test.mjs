@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 let getDefaultViewState;
 let parseHashParams;
+let syncViewToUrl;
 
 function installCanvasDocumentMock() {
   const context = {
@@ -44,7 +45,7 @@ describe('ui URL state parsing', () => {
     vi.resetModules();
     installCanvasDocumentMock();
     installWindow('');
-    ({ getDefaultViewState, parseHashParams } = await import('../../app/js/ui.js'));
+    ({ getDefaultViewState, parseHashParams, syncViewToUrl } = await import('../../app/js/ui.js'));
   });
 
   afterEach(() => {
@@ -58,10 +59,13 @@ describe('ui URL state parsing', () => {
       center: [6.8652, 45.8326],
       zoom: 12,
       basemapStack: ['osm'],
+      activeOverlays: [],
       mode: 'slope+relief',
       slopeOpacity: 0.45,
       terrain3d: false,
       terrainExaggeration: 1.4,
+      showHillshade: true,
+      showContours: true,
       testMode: false,
       bearing: 0,
       pitch: 0,
@@ -121,5 +125,109 @@ describe('ui URL state parsing', () => {
     expect(parseHashParams()).toEqual({
       basemapStack: ['osm', 'otm'],
     });
+  });
+
+  it('parses visible layers from URL hash', () => {
+    installWindow('#basemap=osm,otm&layers=osm,openskimap,_hillshade');
+
+    expect(parseHashParams()).toEqual({
+      basemapStack: ['osm'],
+      activeOverlays: ['openskimap'],
+      showHillshade: true,
+      showContours: false,
+      mode: '',
+    });
+  });
+
+  it('serializes basemapStack as a comma-separated hash value', () => {
+    const replaceState = vi.fn();
+    installWindow('');
+    window.history.replaceState = replaceState;
+
+    const map = {
+      getCenter() { return { lng: 6.9, lat: 45.8 }; },
+      getZoom() { return 9; },
+      getBearing() { return 12.34; },
+      getPitch() { return 40; },
+    };
+
+    syncViewToUrl(map, {
+      basemapStack: ['osm', 'otm'],
+      mode: 'slope',
+      slopeOpacity: 0.45,
+      terrain3d: false,
+      terrainExaggeration: 1.4,
+    });
+
+    expect(replaceState).toHaveBeenCalledWith(
+      null,
+      '',
+      expect.stringContaining('#lng=6.900000&lat=45.800000&zoom=9.00&basemap=osm%2Cotm')
+    );
+  });
+
+  it('serializes all visible layers into the layers hash value', () => {
+    const replaceState = vi.fn();
+    installWindow('');
+    window.history.replaceState = replaceState;
+
+    const map = {
+      getCenter() { return { lng: 6.9, lat: 45.8 }; },
+      getZoom() { return 9; },
+      getBearing() { return 12.34; },
+      getPitch() { return 40; },
+    };
+
+    syncViewToUrl(map, {
+      basemapStack: ['osm', 'otm'],
+      activeOverlays: ['openskimap', 'swisstopo-ski'],
+      layerSettings: {
+        otm: { hidden: true },
+        'swisstopo-ski': { hidden: true },
+      },
+      showHillshade: true,
+      showContours: false,
+      mode: 'slope',
+      slopeOpacity: 0.45,
+      terrain3d: false,
+      terrainExaggeration: 1.4,
+    });
+
+    expect(replaceState).toHaveBeenCalledWith(
+      null,
+      '',
+      expect.stringContaining('&layers=osm%2Copenskimap%2C_hillshade%2C_analysis&')
+    );
+  });
+
+  it('serializes basemap as none only when the stack is empty', () => {
+    const replaceState = vi.fn();
+    installWindow('');
+    window.history.replaceState = replaceState;
+
+    const map = {
+      getCenter() { return { lng: 6.9, lat: 45.8 }; },
+      getZoom() { return 9; },
+      getBearing() { return 0; },
+      getPitch() { return 0; },
+    };
+
+    syncViewToUrl(map, {
+      basemapStack: [],
+      activeOverlays: [],
+      layerSettings: {},
+      showHillshade: false,
+      showContours: false,
+      mode: '',
+      slopeOpacity: 0.45,
+      terrain3d: false,
+      terrainExaggeration: 1.4,
+    });
+
+    expect(replaceState).toHaveBeenCalledWith(
+      null,
+      '',
+      expect.stringContaining('&basemap=none&')
+    );
   });
 });

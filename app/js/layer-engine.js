@@ -114,14 +114,14 @@ function getBasemapOpacity(state, id) {
  * Stack order: first = bottom, last = top. All below `dem-loader`.
  */
 export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
-  // Ensure we don't accidentally get an empty array if 'none' isn't explicitly removed.
-  if (ids.length === 0) ids = ['none'];
-  state.basemapStack = [...ids];
+  const requestedIds = [...ids].filter(id => id !== 'none') ;
+  const effectiveIds = requestedIds.length >= 1 ? requestedIds : ['none'];
+  state.basemapStack = requestedIds;
 
   // Ensure visibility in layerSettings so it shows up if it was previously hidden
   const settings = { ...(state.layerSettings || {}) };
   let settingsChanged = false;
-  for (const id of ids) {
+  for (const id of effectiveIds) {
     if (settings[id]?.hidden) {
       settings[id] = { ...settings[id], hidden: false };
       settingsChanged = true;
@@ -129,7 +129,7 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
   }
   if (settingsChanged) state.layerSettings = settings;
 
-  for (const id of ids) {
+  for (const id of effectiveIds) {
     if (typeof map.__ensureBasemapStyle === 'function') {
       await map.__ensureBasemapStyle(id);
     }
@@ -142,7 +142,7 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
     Object.entries(state.layerSettings || {}).filter(([, s]) => s.hidden).map(([id]) => id)
   );
   const activeIds = new Set();
-  for (const id of ids) {
+  for (const id of effectiveIds) {
     if (hiddenEntries.has(id)) continue; // respect manually-hidden basemaps
     for (const layerId of getCatalogLayerIdsForMap(map, id)) {
       activeIds.add(layerId);
@@ -155,7 +155,7 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
   }
 
   // Move stack layers below dem-loader in stack order (bottom first)
-  for (const id of ids) {
+  for (const id of effectiveIds) {
     for (const layerId of getCatalogLayerIdsForMap(map, id)) {
       if (map.getLayer(layerId) && map.getLayer('dem-loader')) {
         map.moveLayer(layerId, 'dem-loader');
@@ -170,8 +170,8 @@ export async function setBasemapStack(map, state, ids, flyIfOutside = false) {
   applyLayerOrder(map, state);
 
   // Fly to region of the primary (bottom) basemap if camera is outside
-  if (flyIfOutside && ids.length) {
-    const entry = getCatalogEntry(ids[0]);
+  if (flyIfOutside && requestedIds.length) {
+    const entry = getCatalogEntry(requestedIds[0]);
     if (entry?.defaultView && entry.region) {
       const c = map.getCenter();
       const [w, s, e, n] = entry.region;

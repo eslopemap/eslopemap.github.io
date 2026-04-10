@@ -106,8 +106,8 @@ export function applyModeState(map, state) {
         map.setPaintProperty('analysis', 'color', ANALYSIS_COLOR.slope);
         map.setPaintProperty('analysis', 'opacity',
           ['interpolate', ['linear'], ['zoom'],
-            SLOPE_RELIEF_CROSSFADE_Z - 1, 0,
-            SLOPE_RELIEF_CROSSFADE_Z, state.slopeOpacity
+            SLOPE_RELIEF_CROSSFADE_Z, 0,
+            SLOPE_RELIEF_CROSSFADE_Z + 1, state.slopeOpacity
           ]);
         map.setPaintProperty('analysis', 'blend-mode', blendMode);
       }
@@ -117,8 +117,8 @@ export function applyModeState(map, state) {
       if (showRelief) {
         map.setPaintProperty('analysis-relief', 'opacity',
           ['interpolate', ['linear'], ['zoom'],
-            SLOPE_RELIEF_CROSSFADE_Z - 1, state.slopeOpacity,
-            SLOPE_RELIEF_CROSSFADE_Z, 0
+            SLOPE_RELIEF_CROSSFADE_Z - 1.5, state.slopeOpacity,
+            SLOPE_RELIEF_CROSSFADE_Z - 1, 0
           ]);
         map.setPaintProperty('analysis-relief', 'blend-mode', blendMode);
       }
@@ -189,14 +189,34 @@ export function getDefaultViewState() {
     center: [6.8652, 45.8326],
     zoom: 12,
     basemapStack: ['osm'],
+    activeOverlays: [],
     mode: 'slope+relief',
     slopeOpacity: 0.45,
     terrain3d: false,
     terrainExaggeration: 1.4,
+    showHillshade: true,
+    showContours: true,
     testMode: false,
     bearing: 0,
     pitch: 0,
   };
+}
+
+function getVisibleHashLayers(state) {
+  const settings = state.layerSettings || {};
+  const layers = [];
+
+  for (const id of (state.basemapStack || [])) {
+    if (!settings[id]?.hidden) layers.push(id);
+  }
+  for (const id of (state.activeOverlays || [])) {
+    if (!settings[id]?.hidden) layers.push(id);
+  }
+  if (state.showHillshade) layers.push('_hillshade');
+  if (state.mode && state.mode !== 'none') layers.push('_analysis');
+  if (state.showContours) layers.push('_contours');
+
+  return layers;
 }
 
 export function parseHashParams() {
@@ -210,6 +230,8 @@ export function parseHashParams() {
     const zoomRaw = Number(params.get('zoom'));
     const basemapRaw = (params.get('basemap') || '').trim();
     const basemapParts = basemapRaw ? basemapRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const layersRaw = (params.get('layers') || '').trim();
+    const layerParts = layersRaw ? layersRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
     const modeRaw = (params.get('mode') || '').trim();
     const opacityRaw = Number(params.get('opacity'));
     const terrain3dRaw = parseBooleanParam(params.get('terrain'));
@@ -237,6 +259,30 @@ export function parseHashParams() {
         overrides.basemapStack = validParts;
       }
     }
+    if (params.has('layers')) {
+      const validLayers = layerParts.filter(id => getCatalogEntry(id));
+      const basemapLayers = [];
+      const overlayLayers = [];
+      let analysisVisible = false;
+      let hillshadeVisible = false;
+      let contoursVisible = false;
+
+      for (const id of validLayers) {
+        const entry = getCatalogEntry(id);
+        if (!entry) continue;
+        if (entry.category === 'basemap' && id !== 'none') basemapLayers.push(id);
+        if (entry.category === 'overlay') overlayLayers.push(id);
+        if (id === '_analysis') analysisVisible = true;
+        if (id === '_hillshade') hillshadeVisible = true;
+        if (id === '_contours') contoursVisible = true;
+      }
+
+      overrides.basemapStack = basemapLayers;
+      overrides.activeOverlays = overlayLayers;
+      overrides.showHillshade = hillshadeVisible;
+      overrides.showContours = contoursVisible;
+      if (!analysisVisible) overrides.mode = '';
+    }
     if (params.has('mode') && validModes.has(modeRaw)) overrides.mode = modeRaw;
     if (params.has('opacity') && hasOpacity) overrides.slopeOpacity = opacityRaw;
     if (params.has('terrain') && terrain3dRaw != null) overrides.terrain3d = terrain3dRaw;
@@ -259,12 +305,14 @@ export function syncViewToUrl(map, state) {
   params.set('lng', center.lng.toFixed(6));
   params.set('lat', center.lat.toFixed(6));
   params.set('zoom', zoom.toFixed(2));
-  const stack = state.basemapStack || [];
-  if (stack.length > 0) {
-    params.set('basemap', stack.join(','));
+  const visibleLayers = getVisibleHashLayers(state);
+  const visibleBasemaps = visibleLayers.filter((id) => getCatalogEntry(id)?.category === 'basemap');
+  if (visibleBasemaps.length > 0) {
+    params.set('basemap', visibleBasemaps.join(','));
   } else {
     params.set('basemap', 'none');
   }
+  params.set('layers', visibleLayers.join(','));
   params.set('mode', state.mode);
   params.set('opacity', state.slopeOpacity.toFixed(2));
   params.set('terrain', state.terrain3d ? '1' : '0');

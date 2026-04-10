@@ -18,7 +18,7 @@ The editor currently exposes undo behavior in user flows and keyboard handling, 
 
 - redo restores the most recently undone edit
 - a new edit after undo clears any redo branch
-- redo works for point creation, point deletion, vertex drag, and insert-between operations
+- redo works for anything covered by undo: point creation, point deletion, vertex drag, insert-between operations ; and also track operations.
 - redo updates derived state exactly as undo does:
   - active track geometry
   - track stats
@@ -98,3 +98,7 @@ The effort is successful when:
 - redo history is cleared correctly by fresh edits after undo
 - redo remains session-local and does not create persistence regressions
 - tests protect user-visible editing behavior rather than internal implementation details
+
+Even if incomplete, do not hand back without:
+ - writing a report to ./report/ymd...
+ - Git commit with detailed message.

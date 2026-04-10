@@ -1224,6 +1224,7 @@ function renderLayerOrderPanel() {
           onToggle: (show) => {
             state.showHillshade = show;
             applyHillshadeVisibility(map, state);
+            syncMapViewState();
             scheduleSettingsSave();
           },
           onOpacity: (val) => {
@@ -1241,6 +1242,7 @@ function renderLayerOrderPanel() {
           onToggle: (show) => {
             state.showContours = show;
             applyContourVisibility(map, state);
+            syncMapViewState();
             scheduleSettingsSave();
           },
           onOpacity: () => {},
@@ -1272,6 +1274,7 @@ function renderLayerOrderPanel() {
     visBtn.addEventListener('click', () => {
       setLayerVisible(map, state, catalogId, isHidden);
       renderLayerOrderPanel();
+      syncMapViewState();
       map.triggerRepaint();
       scheduleSettingsSave();
     });
@@ -1298,7 +1301,7 @@ function renderLayerOrderPanel() {
     opacityInput.draggable = false;
     opacityInput.addEventListener('dragstart', (e) => e.preventDefault());
     opacityInput.addEventListener('mousedown', (e) => e.stopPropagation());
-    opacityInput.addEventListener('touchstart', (e) => e.stopPropagation());
+    opacityInput.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     opacityInput.addEventListener('input', () => {
       const val = Number(opacityInput.value);
       if (isBasemap) {
@@ -1328,6 +1331,7 @@ function renderLayerOrderPanel() {
       renderLayerOrderPanel();
       renderAddLayerSelect();
       syncOverlayCheckboxes(state);
+      syncMapViewState();
       map.triggerRepaint();
       scheduleSettingsSave();
     });
@@ -1475,6 +1479,7 @@ document.getElementById('add-layer')?.addEventListener('change', async (e) => {
   syncLayerOrder(state);
   renderLayerOrderPanel();
   renderAddLayerSelect();
+  syncMapViewState();
   map.triggerRepaint();
   scheduleSettingsSave();
 
