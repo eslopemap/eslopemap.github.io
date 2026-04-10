@@ -211,6 +211,31 @@ export const LAYER_CATALOG = [
     ]
   },
   {
+    id: 'ortoEsri',
+    label: 'Satellite (ESRI)',
+    category: 'basemap',
+    region: null,
+    defaultView: null,
+    sources: {
+      ortoEsri: {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        minzoom: 0,
+        maxzoom: 22,
+        attribution: "ESRI &copy; <a href='http://www.esri.com'>ESRI</a>"
+      }
+    },
+    layers: [
+      {
+        id: 'basemap-ortoEsri',
+        type: 'raster',
+        source: 'ortoEsri',
+        paint: { 'raster-opacity': basemapOpacityExpr(1) }
+      }
+    ]
+  },
+  {
     id: 'pubmap-bugianen',
     label: 'Bugianen (Italy)',
     category: 'basemap',
