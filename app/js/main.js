@@ -1356,9 +1356,9 @@ function renderLayerOrderPanel() {
     opacityInput.className = 'layer-order-opacity';
     opacityInput.title = 'Layer opacity';
     opacityInput.draggable = false;
-    opacityInput.addEventListener('dragstart', (e) => e.preventDefault());
+    opacityInput.addEventListener('dragstart', (e) => { e.stopPropagation(); e.preventDefault(); });
     opacityInput.addEventListener('mousedown', (e) => e.stopPropagation());
-    opacityInput.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    opacityInput.addEventListener('touchstart', (e) => { e.stopPropagation(); e.preventDefault(); });
     opacityInput.addEventListener('input', () => {
       const val = Number(opacityInput.value);
       if (isBasemap) {
