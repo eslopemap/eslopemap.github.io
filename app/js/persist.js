@@ -75,7 +75,7 @@ const SETTING_KEYS = [
   'hillshadeMethod', 'terrain3d', 'terrainExaggeration', 'multiplyBlend',
   'showHillshade', 'showContours', 'showTileGrid',
   'activeOverlays', 'layerOrder', 'layerSettings', 'bookmarks',
-  'cursorInfoMode', 'pauseThreshold', 'profileSmoothing', 'mapPixelRatio',
+  'cursorInfoMode', 'pauseThreshold', 'profileSmoothing',
   'viewCenter', 'viewZoom', 'viewBearing', 'viewPitch',
 ];
 

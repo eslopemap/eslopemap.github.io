@@ -234,11 +234,6 @@ function showToast(message) {
   setTimeout(() => toast.classList.remove('visible'), 2000);
 }
 
-function getEffectiveMapPixelRatio() {
-  const configured = Number(state.mapPixelRatio);
-  return Number.isFinite(configured) && configured > 0 ? configured : window.devicePixelRatio;
-}
-
 function syncProfileSmoothingControls() {
   const slider = document.getElementById('profileSmoothing');
   const valueEl = document.getElementById('profileSmoothingValue');
@@ -489,7 +484,6 @@ const map = new maplibregl.Map({
   zoom: initialView.zoom,
   bearing: initialView.bearing,
   pitch: initialView.pitch,
-  pixelRatio: getEffectiveMapPixelRatio(),
   maxTileCacheZoomLevels: 20,
   attributionControl: false,
   style: buildAppStyle(),
@@ -1089,24 +1083,6 @@ enableInlineNumberEdit(document.getElementById('profileSmoothingValue'), (nextVa
   updateProfile();
   scheduleSettingsSave();
 });
-
-const mapDpiBtn = document.getElementById('map-dpi-btn');
-if (mapDpiBtn) {
-  mapDpiBtn.title = `Map DPI (${getEffectiveMapPixelRatio().toFixed(2)}x)`;
-  mapDpiBtn.addEventListener('click', () => {
-    const raw = window.prompt('Map DPI / pixel ratio (0 = device default)', String(state.mapPixelRatio || 0));
-    if (raw == null) return;
-    const nextValue = Number(raw.trim());
-    if (!Number.isFinite(nextValue) || nextValue < 0) {
-      showToast('Invalid map DPI value');
-      return;
-    }
-    state.mapPixelRatio = nextValue;
-    scheduleSettingsSave();
-    showToast('Map DPI saved — reloading map');
-    window.setTimeout(() => window.location.reload(), 150);
-  });
-}
 
 initSavedDataPanel();
 

@@ -35,7 +35,6 @@ export const STATE_DEFAULTS = {
   terrainExaggeration: 1.4,
   pauseThreshold: 5,  // minutes
   profileSmoothing: 20,  // moving-average half-window radius (0 = off)
-  mapPixelRatio: 0,
 };
 
 export const STATE_TEST_MODE = {

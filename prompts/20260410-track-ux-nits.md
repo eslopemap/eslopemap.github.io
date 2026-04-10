@@ -25,3 +25,7 @@ let me also clarify the name stuff:
 - the issue I keep having is that 'Export active GPX' export just the active track, wheras I want it to act at file level.
 
 continue with all git commits and tasks
+
+---
+
+the waypoints of a gpx file are put at the global level on import, instead of under the file. fix and commit
